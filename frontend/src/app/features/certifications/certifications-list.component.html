@@ -1,0 +1,52 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Traçabilité · Qualité</p>
+    <h1 class="pnlf-page-header__title">Certifications</h1>
+    <p class="pnlf-page-header__subtitle">
+      Suivi des labels et certifications de qualité obtenus par les producteurs et les lots.
+    </p>
+  </div>
+  @if (canRequest) {
+    <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
+      {{ showForm() ? 'Annuler' : '+ Demander une certification' }}
+    </button>
+  }
+</div>
+
+@if (showForm()) {
+  <pnlf-card title="Nouvelle demande de certification" style="display:block; margin-bottom:1.5rem;">
+    @if (errorMessage()) {
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
+    }
+    <form [formGroup]="form" (ngSubmit)="submit()" class="cert-form">
+      <pnlf-select-field label="Type de certification" formControlName="type_certification" [options]="types()" [required]="true" />
+      <div></div>
+      <button pnlfButton type="submit" variant="primary" [loading]="saving()">Envoyer la demande</button>
+    </form>
+  </pnlf-card>
+}
+
+@if (loading()) {
+  <p class="text-sm text-muted">Chargement…</p>
+} @else if (items().length === 0) {
+  <pnlf-empty-state icon="shield-check" title="Aucune certification" description="Les demandes et certifications obtenues apparaîtront ici." />
+} @else {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <thead>
+        <tr><th>Type</th><th>N° certificat</th><th>Date demande</th><th>Expiration</th><th>Statut</th></tr>
+      </thead>
+      <tbody>
+        @for (c of items(); track c.id) {
+          <tr>
+            <td>{{ c.type_libelle }}</td>
+            <td class="pnlf-table__muted">{{ c.numero_certificat || '—' }}</td>
+            <td>{{ c.date_demande | date: 'dd/MM/yyyy' }}</td>
+            <td>{{ c.date_expiration ? (c.date_expiration | date: 'dd/MM/yyyy') : '—' }}</td>
+            <td><pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" /></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

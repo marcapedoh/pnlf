@@ -1,0 +1,149 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Tableau de bord</p>
+    <h1 class="pnlf-page-header__title">Bonjour, {{ user()?.prenoms }}</h1>
+    <p class="pnlf-page-header__subtitle">
+      @if (isInstitutional()) {
+        Vue d'ensemble de la filière PFNL sur l'ensemble du territoire national.
+      } @else {
+        Suivi de vos lots et de votre activité sur la plateforme de traçabilité.
+      }
+    </p>
+  </div>
+  <a pnlfButton routerLink="/app/lots" variant="primary">Voir mes lots</a>
+</div>
+
+@if (isInstitutional()) {
+  <div class="dashboard-kpis">
+    <pnlf-kpi-card
+      label="Producteurs actifs"
+      icon="users"
+      tone="green"
+      [value]="stats()?.totaux?.producteurs_actifs ?? 0"
+      [loading]="loading()"
+    />
+    <pnlf-kpi-card
+      label="Lots actifs"
+      icon="package"
+      tone="gold"
+      [value]="stats()?.totaux?.lots_actifs ?? 0"
+      [loading]="loading()"
+    />
+    <pnlf-kpi-card
+      label="Produits référencés"
+      icon="layers"
+      tone="blue"
+      [value]="stats()?.totaux?.produits_referentiel ?? 0"
+      [loading]="loading()"
+    />
+    <pnlf-kpi-card
+      label="Exports disponibles"
+      icon="download"
+      tone="neutral"
+      value="CSV · XLSX · PDF"
+      hint="Rapports & exports"
+    />
+  </div>
+
+  <div class="dashboard-charts">
+    <pnlf-card title="Répartition des lots par statut" subtitle="Vue nationale, tous produits confondus">
+      @if (loading()) {
+        <pnlf-skeleton height="280px" radius="12px" />
+      } @else {
+        <apx-chart
+          [series]="statusChart().series!"
+          [chart]="statusChart().chart!"
+          [xaxis]="statusChart().xaxis!"
+          [plotOptions]="statusChart().plotOptions!"
+          [colors]="statusChart().colors!"
+          [dataLabels]="statusChart().dataLabels!"
+          [grid]="statusChart().grid!"
+          [legend]="statusChart().legend!"
+        />
+      }
+    </pnlf-card>
+
+    <pnlf-card title="Producteurs par province" subtitle="Top 8 provinces les plus actives">
+      @if (loading()) {
+        <pnlf-skeleton height="280px" radius="12px" />
+      } @else {
+        <apx-chart
+          [series]="provinceChart().series!"
+          [chart]="provinceChart().chart!"
+          [xaxis]="provinceChart().xaxis!"
+          [plotOptions]="provinceChart().plotOptions!"
+          [colors]="provinceChart().colors!"
+          [dataLabels]="provinceChart().dataLabels!"
+          [grid]="provinceChart().grid!"
+          [legend]="provinceChart().legend!"
+        />
+      }
+    </pnlf-card>
+  </div>
+} @else {
+  <div class="dashboard-kpis">
+    <pnlf-kpi-card
+      label="Mes lots suivis"
+      icon="package"
+      tone="green"
+      [value]="recentLots().length"
+      [loading]="loading()"
+      hint="Lots récents visibles ci-dessous"
+    />
+    <pnlf-kpi-card
+      label="Mon profil"
+      icon="user-check"
+      tone="blue"
+      [value]="user()?.role ?? ''"
+      hint="Statut du compte : actif"
+    />
+    <pnlf-kpi-card
+      label="Assistance"
+      icon="phone"
+      tone="gold"
+      value="Ministère des Eaux et Forêts"
+      hint="Support technique PNLF-PFNL"
+    />
+  </div>
+}
+
+<pnlf-card title="Lots récents" subtitle="Dernières déclarations enregistrées">
+  <div card-actions>
+    <a routerLink="/app/lots" class="dashboard-see-all">Voir tout →</a>
+  </div>
+
+  @if (loading()) {
+    <div class="pnlf-stack" style="gap: 12px;">
+      @for (i of [1, 2, 3]; track i) {
+        <pnlf-skeleton height="20px" />
+      }
+    </div>
+  } @else if (recentLots().length === 0) {
+    <pnlf-empty-state icon="package" title="Aucun lot enregistré" description="Les lots déclarés apparaîtront ici dès leur création." />
+  } @else {
+    <div class="pnlf-table-wrapper">
+      <table class="pnlf-table">
+        <thead>
+          <tr>
+            <th>Code lot</th>
+            <th>Produit</th>
+            <th>Producteur</th>
+            <th>Quantité</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (lot of recentLots(); track lot.id) {
+            <tr>
+              <td><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
+              <td>{{ lot.produit_nom }}</td>
+              <td>{{ lot.producteur_nom }}</td>
+              <td>{{ lot.quantite }} {{ lot.unite }}</td>
+              <td><pnlf-status-badge [label]="statutLotLabels[lot.statut]" [tone]="lotStatusTone(lot.statut)" /></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</pnlf-card>

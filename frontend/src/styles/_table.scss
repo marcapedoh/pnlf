@@ -1,0 +1,122 @@
+// =============================================================================
+// Table institutionnelle réutilisée par les modules de listing
+// =============================================================================
+
+.pnlf-table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+}
+
+.pnlf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+
+  thead th {
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    background: var(--gray-50);
+    color: var(--text-secondary);
+    font-weight: 700;
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    vertical-align: middle;
+  }
+
+  tbody tr {
+    transition: background-color var(--duration-fast) var(--ease-standard);
+  }
+
+  tbody tr:hover {
+    background: var(--pnlf-green-50);
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+}
+
+.pnlf-table__link {
+  font-weight: 600;
+  color: var(--pnlf-green-700);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.pnlf-table__muted {
+  color: var(--text-muted);
+}
+
+.pnlf-table__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.pnlf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+
+.pnlf-toolbar__filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.pnlf-toolbar__search {
+  min-width: 240px;
+  max-width: 320px;
+}
+
+.pnlf-select {
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-default);
+  background: var(--surface-raised);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+
+  &:focus-visible {
+    border-color: var(--pnlf-green-500);
+  }
+}
+
+.pnlf-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.pnlf-page-header__title {
+  margin-bottom: 4px;
+}
+
+.pnlf-page-header__subtitle {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  max-width: 640px;
+}

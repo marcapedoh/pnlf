@@ -1,0 +1,21 @@
+.app-footer {
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface-raised);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.app-footer__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-footer p {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.app-footer__meta {
+  color: var(--text-secondary);
+  font-weight: 500;
+}

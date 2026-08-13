@@ -1,0 +1,29 @@
+.error-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-8);
+  background: var(--surface-canvas);
+}
+
+.error-page__code {
+  font-family: var(--font-serif);
+  font-size: 5rem;
+  font-weight: 700;
+  color: var(--pnlf-green-700);
+  line-height: 1;
+}
+
+.error-page__title {
+  margin-top: var(--space-4);
+}
+
+.error-page__text {
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-6);
+  color: var(--text-secondary);
+  max-width: 420px;
+}

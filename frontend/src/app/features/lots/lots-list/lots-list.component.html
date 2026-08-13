@@ -1,0 +1,73 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Traçabilité · Lots</p>
+    <h1 class="pnlf-page-header__title">Lots de produits</h1>
+    <p class="pnlf-page-header__subtitle">
+      Suivi de bout en bout des lots, de la collecte à la commercialisation.
+    </p>
+  </div>
+  @if (canCreate) {
+    <a pnlfButton routerLink="/app/lots/nouveau" variant="primary">+ Déclarer un lot</a>
+  }
+</div>
+
+<div class="pnlf-toolbar">
+  <div class="pnlf-toolbar__filters">
+    <input
+      type="search"
+      class="pnlf-select pnlf-toolbar__search"
+      placeholder="Rechercher un code lot, produit…"
+      [ngModel]="search()"
+      (ngModelChange)="onSearchInput($event)"
+    />
+    <select class="pnlf-select" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
+      <option value="">Tous les statuts</option>
+      @for (s of allStatuts; track s) {
+        <option [value]="s">{{ statutLabels[s] }}</option>
+      }
+    </select>
+  </div>
+</div>
+
+@if (loading()) {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <tbody>
+        @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+          <tr><td colspan="6"><pnlf-skeleton height="18px" /></td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+} @else if (items().length === 0) {
+  <pnlf-empty-state icon="package" title="Aucun lot trouvé" description="Ajustez vos filtres ou déclarez un nouveau lot." />
+} @else {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <thead>
+        <tr>
+          <th>Code lot</th>
+          <th>Produit</th>
+          <th>Producteur</th>
+          <th>Date de collecte</th>
+          <th>Quantité</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (lot of items(); track lot.id) {
+          <tr>
+            <td><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
+            <td>{{ lot.produit_nom }}</td>
+            <td>{{ lot.producteur_nom }}</td>
+            <td class="pnlf-table__muted">{{ lot.date_collecte }}</td>
+            <td>{{ lot.quantite }} {{ lot.unite }}</td>
+            <td><pnlf-status-badge [label]="statutLabels[lot.statut]" [tone]="tone(lot.statut)" /></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+}

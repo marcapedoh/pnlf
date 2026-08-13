@@ -1,0 +1,16 @@
+<div class="pnlf-kpi" [class]="'pnlf-kpi--' + tone()">
+  <div class="pnlf-kpi__icon">
+    <pnlf-icon [name]="icon()" [size]="22" />
+  </div>
+  <div class="pnlf-kpi__body">
+    <p class="pnlf-kpi__label">{{ label() }}</p>
+    @if (loading()) {
+      <pnlf-skeleton width="70px" height="26px" />
+    } @else {
+      <p class="pnlf-kpi__value">{{ value() }}</p>
+    }
+    @if (hint()) {
+      <p class="pnlf-kpi__hint">{{ hint() }}</p>
+    }
+  </div>
+</div>

@@ -1,0 +1,9 @@
+@if (loading()) {
+  <pnlf-spinner
+    size="sm"
+    [tone]="variant() === 'outline' || variant() === 'ghost' ? 'brand' : 'inverse'"
+  />
+}
+<span class="pnlf-btn__label" [class.pnlf-btn__label--hidden]="loading()">
+  <ng-content></ng-content>
+</span>

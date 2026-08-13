@@ -1,0 +1,56 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Administration</p>
+    <h1 class="pnlf-page-header__title">Comptes utilisateurs</h1>
+    <p class="pnlf-page-header__subtitle">Gestion des accès à la plateforme selon les 6 profils métiers.</p>
+  </div>
+  <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
+    {{ showForm() ? 'Annuler' : '+ Créer un compte' }}
+  </button>
+</div>
+
+@if (showForm()) {
+  <pnlf-card title="Nouveau compte utilisateur" style="display:block; margin-bottom:1.5rem;">
+    @if (errorMessage()) {
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
+    }
+    <form [formGroup]="form" (ngSubmit)="submit()" class="user-form">
+      <pnlf-text-field label="Nom" formControlName="nom" [required]="true" />
+      <pnlf-text-field label="Prénoms" formControlName="prenoms" [required]="true" />
+      <pnlf-text-field label="E-mail professionnel" type="email" formControlName="email" [required]="true" />
+      <pnlf-text-field label="Téléphone" formControlName="telephone" />
+      <pnlf-select-field label="Rôle / profil" formControlName="role" [options]="roleOptions" [required]="true" />
+      <pnlf-text-field label="Mot de passe temporaire" type="password" formControlName="password" [required]="true" hint="L'utilisateur devra le modifier à sa première connexion." />
+      <div class="user-form__actions">
+        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer le compte</button>
+      </div>
+    </form>
+  </pnlf-card>
+}
+
+@if (loading()) {
+  <p class="text-sm text-muted">Chargement…</p>
+} @else if (items().length === 0) {
+  <pnlf-empty-state icon="lock" title="Aucun utilisateur" />
+} @else {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
+      <tbody>
+        @for (u of items(); track u.id) {
+          <tr>
+            <td>{{ u.prenoms }} {{ u.nom }}</td>
+            <td class="pnlf-table__muted">{{ u.email }}</td>
+            <td>{{ roleLabels[u.role] }}</td>
+            <td><pnlf-status-badge [label]="u.statut" [tone]="u.statut === StatutCompte.ACTIF ? 'success' : 'neutral'" /></td>
+            <td>
+              <button pnlfButton variant="ghost" size="sm" (click)="toggleStatus(u)">
+                {{ u.statut === StatutCompte.ACTIF ? 'Suspendre' : 'Activer' }}
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

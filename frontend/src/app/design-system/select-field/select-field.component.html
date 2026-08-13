@@ -1,0 +1,31 @@
+<div class="pnlf-field" [class.pnlf-field--error]="!!errorMessage()" [class.pnlf-field--disabled]="disabled()">
+  @if (label()) {
+    <label [for]="id" class="pnlf-field__label">
+      {{ label() }}
+      @if (required()) {
+        <span class="pnlf-field__required" aria-hidden="true">*</span>
+      }
+    </label>
+  }
+
+  <div class="pnlf-field__control pnlf-select-control">
+    <select
+      [id]="id"
+      [value]="value()"
+      [disabled]="disabled()"
+      [required]="required()"
+      (change)="handleChange($event)"
+    >
+      <option value="" disabled>{{ placeholder() }}</option>
+      @for (opt of options(); track opt.value) {
+        <option [value]="opt.value">{{ opt.label }}</option>
+      }
+    </select>
+  </div>
+
+  @if (errorMessage()) {
+    <p class="pnlf-field__error" role="alert">{{ errorMessage() }}</p>
+  } @else if (hint()) {
+    <p class="pnlf-field__hint">{{ hint() }}</p>
+  }
+</div>

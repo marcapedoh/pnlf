@@ -1,0 +1,28 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Mon espace</p>
+    <h1 class="pnlf-page-header__title">Notifications</h1>
+    <p class="pnlf-page-header__subtitle">Alertes et informations relatives à votre activité sur la plateforme.</p>
+  </div>
+</div>
+
+<pnlf-card>
+  @if (service.items().length === 0) {
+    <pnlf-empty-state icon="bell" title="Aucune notification" />
+  } @else {
+    <ul class="notif-list">
+      @for (n of service.items(); track n.id) {
+        <li [class.is-unread]="!n.lue">
+          <div>
+            <p class="notif-list__title">{{ n.titre }}</p>
+            <p class="notif-list__body">{{ n.corps }}</p>
+            <p class="notif-list__date">{{ n.created_at | date: 'dd/MM/yyyy HH:mm' }}</p>
+          </div>
+          @if (!n.lue) {
+            <button pnlfButton variant="ghost" size="sm" (click)="markAsRead(n.id)">Marquer comme lue</button>
+          }
+        </li>
+      }
+    </ul>
+  }
+</pnlf-card>

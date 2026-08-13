@@ -1,0 +1,20 @@
+<div class="pnlf-card" [class.pnlf-card--padded]="padded()">
+  @if (title() || subtitle()) {
+    <header class="pnlf-card__header">
+      <div>
+        @if (title()) {
+          <h3 class="pnlf-card__title">{{ title() }}</h3>
+        }
+        @if (subtitle()) {
+          <p class="pnlf-card__subtitle">{{ subtitle() }}</p>
+        }
+      </div>
+      <div class="pnlf-card__actions">
+        <ng-content select="[card-actions]"></ng-content>
+      </div>
+    </header>
+  }
+  <div class="pnlf-card__body">
+    <ng-content></ng-content>
+  </div>
+</div>

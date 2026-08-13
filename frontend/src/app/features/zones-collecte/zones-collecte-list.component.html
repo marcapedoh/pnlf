@@ -1,0 +1,46 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Traçabilité · Référentiel géographique</p>
+    <h1 class="pnlf-page-header__title">Zones de collecte</h1>
+    <p class="pnlf-page-header__subtitle">Aires de collecte référencées pour le rattachement des lots.</p>
+  </div>
+  @if (canManage) {
+    <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
+      {{ showForm() ? 'Annuler' : '+ Nouvelle zone' }}
+    </button>
+  }
+</div>
+
+@if (showForm()) {
+  <pnlf-card title="Créer une zone de collecte" style="display:block; margin-bottom:1.5rem;">
+    @if (errorMessage()) {
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
+    }
+    <form [formGroup]="form" (ngSubmit)="submit()" class="zone-form">
+      <pnlf-text-field label="Code" formControlName="code" [required]="true" />
+      <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" />
+      <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" />
+      <pnlf-text-field label="Description" formControlName="description" />
+      <div class="zone-form__actions">
+        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer</button>
+      </div>
+    </form>
+  </pnlf-card>
+}
+
+@if (loading()) {
+  <p class="text-sm text-muted">Chargement…</p>
+} @else if (items().length === 0) {
+  <pnlf-empty-state icon="map-pin" title="Aucune zone de collecte" />
+} @else {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <thead><tr><th>Code</th><th>Libellé</th><th>Province</th></tr></thead>
+      <tbody>
+        @for (z of items(); track z.id) {
+          <tr><td>{{ z.code }}</td><td>{{ z.libelle }}</td><td>{{ z.province_nom }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

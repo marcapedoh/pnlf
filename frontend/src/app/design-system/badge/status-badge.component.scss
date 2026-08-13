@@ -1,0 +1,43 @@
+.pnlf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.pnlf-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pnlf-badge--success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+.pnlf-badge--warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+.pnlf-badge--danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+.pnlf-badge--info {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+.pnlf-badge--gold {
+  background: var(--pnlf-gold-100);
+  color: var(--pnlf-gold-800);
+}
+.pnlf-badge--neutral {
+  background: var(--gray-150);
+  color: var(--gray-700);
+}

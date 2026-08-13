@@ -1,0 +1,92 @@
+@if (loading()) {
+  <pnlf-skeleton height="260px" radius="16px" />
+} @else if (lot(); as l) {
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Lot {{ l.code_lot }}</p>
+      <h1 class="pnlf-page-header__title">{{ l.produit_nom }}</h1>
+      <div class="lot-detail__badges">
+        <pnlf-status-badge [label]="statutLabels[l.statut]" [tone]="tone(l.statut)" />
+        <span class="text-sm text-muted">Déclaré le {{ l.created_at | date: 'dd/MM/yyyy' }}</span>
+      </div>
+    </div>
+    <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
+  </div>
+
+  <div class="lot-detail__grid">
+    <div class="lot-detail__main">
+      <pnlf-card title="Informations du lot">
+        <dl class="lot-detail__dl">
+          <div><dt>Producteur / collecteur</dt><dd><a class="pnlf-table__link" [routerLink]="['/app/producteurs', l.producteur]">{{ l.producteur_nom }}</a></dd></div>
+          <div><dt>Date de collecte</dt><dd>{{ l.date_collecte }}</dd></div>
+          <div><dt>Quantité</dt><dd>{{ l.quantite }} {{ l.unite }}</dd></div>
+          <div><dt>Qualité</dt><dd>{{ l.qualite_indicateur || '—' }}</dd></div>
+          <div><dt>Prix indicatif</dt><dd>{{ l.prix_indicatif ? (l.prix_indicatif + ' ' + l.devise) : '—' }}</dd></div>
+          <div><dt>Observations</dt><dd>{{ l.observations || '—' }}</dd></div>
+        </dl>
+      </pnlf-card>
+
+      <pnlf-card title="Frise de traçabilité" subtitle="Historique chronologique des mouvements du lot">
+        @if (l.mouvements.length === 0) {
+          <pnlf-empty-state icon="clock" title="Aucun mouvement enregistré" description="Les étapes de collecte, transfert et transformation apparaîtront ici." />
+        } @else {
+          <ol class="lot-timeline">
+            @for (m of l.mouvements; track m.id) {
+              <li class="lot-timeline__item">
+                <span class="lot-timeline__dot"></span>
+                <div class="lot-timeline__content">
+                  <p class="lot-timeline__type">{{ typeMouvementLabels[m.type_mouvement] }}</p>
+                  <p class="lot-timeline__meta">
+                    {{ m.date_mouvement | date: 'dd/MM/yyyy HH:mm' }}
+                    @if (m.lieu_libelle) { · {{ m.lieu_libelle }} }
+                  </p>
+                  @if (m.commentaire) {
+                    <p class="lot-timeline__comment">{{ m.commentaire }}</p>
+                  }
+                </div>
+              </li>
+            }
+          </ol>
+        }
+      </pnlf-card>
+    </div>
+
+    <div class="lot-detail__side">
+      <pnlf-card title="QR code de vérification">
+        @if (l.qr_image_url) {
+          <img [src]="l.qr_image_url" alt="QR code du lot {{ l.code_lot }}" class="lot-detail__qr" />
+        } @else {
+          <pnlf-empty-state icon="camera" title="QR code en cours de génération" />
+        }
+        <div class="lot-detail__qr-actions">
+          <button pnlfButton variant="outline" size="sm" [fullWidth]="true" (click)="downloadQr()">Télécharger le QR</button>
+          <button pnlfButton variant="ghost" size="sm" [fullWidth]="true" (click)="copyVerifyLink(l.uuid_public)">Copier le lien public</button>
+        </div>
+        <p class="lot-detail__qr-hint">
+          Toute personne scannant ce code accède à la fiche d'authenticité publique du lot, sans
+          connexion requise.
+        </p>
+      </pnlf-card>
+
+      @if (canChangeStatus) {
+        <pnlf-card title="Faire évoluer le statut">
+          @if (nextStatusOptions().length === 0) {
+            <p class="text-sm text-muted">Ce lot a atteint son statut final dans le flux standard.</p>
+          } @else {
+            <select class="pnlf-select" style="width:100%; margin-bottom: 0.75rem;" [ngModel]="nextStatut()" (ngModelChange)="nextStatut.set($event)">
+              <option value="" disabled>Choisir le nouveau statut…</option>
+              @for (s of nextStatusOptions(); track s) {
+                <option [value]="s">{{ statutLabels[s] }}</option>
+              }
+            </select>
+            <button pnlfButton variant="primary" size="sm" [fullWidth]="true" [loading]="changingStatus()" [disabled]="!nextStatut()" (click)="changerStatut()">
+              Appliquer le changement
+            </button>
+          }
+        </pnlf-card>
+      }
+    </div>
+  </div>
+} @else {
+  <pnlf-empty-state icon="package" title="Lot introuvable" />
+}

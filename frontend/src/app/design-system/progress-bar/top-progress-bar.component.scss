@@ -1,0 +1,25 @@
+.pnlf-top-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: var(--z-toast);
+  overflow: hidden;
+  background: transparent;
+}
+
+.pnlf-top-progress__bar {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    var(--pnlf-green-500),
+    var(--pnlf-gold-500),
+    var(--pnlf-blue-500)
+  );
+  border-radius: var(--radius-pill);
+  animation: pnlf-progress-indeterminate 1.1s ease-in-out infinite;
+  transform-origin: left center;
+}

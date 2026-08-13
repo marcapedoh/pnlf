@@ -1,0 +1,6 @@
+.pnlf-skeleton {
+  display: block;
+  background: linear-gradient(90deg, var(--gray-150) 25%, var(--gray-100) 37%, var(--gray-150) 63%);
+  background-size: 800px 100%;
+  animation: pnlf-shimmer 1.4s ease infinite;
+}

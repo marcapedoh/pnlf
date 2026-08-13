@@ -1,0 +1,9 @@
+<div class="pnlf-alert" [class]="'pnlf-alert--' + tone()" role="alert">
+  <pnlf-icon [name]="icon()" [size]="18" />
+  <div class="pnlf-alert__content">
+    @if (title()) {
+      <p class="pnlf-alert__title">{{ title() }}</p>
+    }
+    <div class="pnlf-alert__body"><ng-content></ng-content></div>
+  </div>
+</div>

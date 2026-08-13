@@ -1,0 +1,15 @@
+<div class="pnlf-pagination">
+  <p class="pnlf-pagination__summary">
+    @if (total() > 0) {
+      Affichage de <strong>{{ rangeStart() }}</strong> à <strong>{{ rangeEnd() }}</strong> sur
+      <strong>{{ total() }}</strong> résultats
+    } @else {
+      Aucun résultat
+    }
+  </p>
+  <div class="pnlf-pagination__controls">
+    <button type="button" (click)="goTo(page() - 1)" [disabled]="page() <= 1">Précédent</button>
+    <span class="pnlf-pagination__current">Page {{ page() }} / {{ totalPages() }}</span>
+    <button type="button" (click)="goTo(page() + 1)" [disabled]="page() >= totalPages()">Suivant</button>
+  </div>
+</div>

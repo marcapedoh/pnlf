@@ -1,0 +1,37 @@
+@if (ui.mobileMenuOpen()) {
+  <div class="app-sidebar__scrim" (click)="closeMobile()"></div>
+}
+
+<aside
+  class="app-sidebar"
+  [class.app-sidebar--collapsed]="ui.sidebarCollapsed()"
+  [class.app-sidebar--mobile-open]="ui.mobileMenuOpen()"
+>
+  <nav class="app-sidebar__nav pnlf-scrollbar">
+    @for (section of sections(); track section.title) {
+      <div class="app-sidebar__section">
+        <p class="app-sidebar__section-title">{{ section.title }}</p>
+        <ul>
+          @for (item of section.items; track item.route) {
+            <li>
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="is-active"
+                [routerLinkActiveOptions]="{ exact: !!item.exact }"
+                (click)="closeMobile()"
+                class="app-sidebar__link"
+              >
+                <pnlf-icon [name]="item.icon" [size]="19" />
+                <span class="app-sidebar__label">{{ item.label }}</span>
+              </a>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </nav>
+
+  <div class="app-sidebar__footer">
+    <p class="app-sidebar__motto">Union · Travail · Justice</p>
+  </div>
+</aside>

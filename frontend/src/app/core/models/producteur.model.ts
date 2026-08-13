@@ -1,0 +1,72 @@
+export enum StatutProducteur {
+  ACTIF = 'ACTIF',
+  INACTIF = 'INACTIF',
+  EN_VALIDATION = 'EN_VALIDATION',
+  REJETE = 'REJETE',
+}
+
+export enum TypeActeur {
+  PRODUCTEUR = 'PRODUCTEUR',
+  COLLECTEUR = 'COLLECTEUR',
+}
+
+export interface Producteur {
+  id: string;
+  code_producteur: string;
+  nom: string;
+  prenoms: string;
+  date_naissance: string | null;
+  type_acteur: TypeActeur;
+  type_piece_identite: string | null;
+  numero_piece: string | null;
+  telephone: string | null;
+  email: string | null;
+  communaute: string | null;
+  province: string;
+  province_nom: string;
+  departement: string | null;
+  village: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  cooperative: string | null;
+  utilisateur_id: string | null;
+  statut: StatutProducteur;
+  valide_par_id: string | null;
+  valide_at: string | null;
+  notes: string | null;
+  client_uuid: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const STATUT_PRODUCTEUR_LABELS: Record<StatutProducteur, string> = {
+  [StatutProducteur.ACTIF]: 'Actif',
+  [StatutProducteur.INACTIF]: 'Inactif',
+  [StatutProducteur.EN_VALIDATION]: 'En attente de validation',
+  [StatutProducteur.REJETE]: 'Rejeté',
+};
+
+export interface Cooperative {
+  id: string;
+  code: string;
+  nom: string;
+  numero_agrement: string | null;
+  telephone: string | null;
+  email: string | null;
+  adresse: string | null;
+  province: string | null;
+  province_nom: string | null;
+  utilisateur_id: string | null;
+  actif: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CooperativeMembre {
+  cooperative: string;
+  producteur: string;
+  producteur_nom: string;
+  date_adhesion: string;
+  actif: boolean;
+  created_at: string;
+}

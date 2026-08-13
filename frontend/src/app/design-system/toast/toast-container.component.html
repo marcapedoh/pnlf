@@ -1,0 +1,36 @@
+<div class="pnlf-toast-container" aria-live="polite">
+  @for (toast of toasts(); track toast.id) {
+    <div class="pnlf-toast" [class]="'pnlf-toast--' + toast.variant">
+      <svg class="pnlf-toast__icon" viewBox="0 0 24 24" width="20" height="20" fill="none">
+        <path
+          [attr.d]="iconPath(toast.variant)"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <div class="pnlf-toast__body">
+        <p class="pnlf-toast__title">{{ toast.title }}</p>
+        @if (toast.description) {
+          <p class="pnlf-toast__description">{{ toast.description }}</p>
+        }
+      </div>
+      <button
+        type="button"
+        class="pnlf-toast__close"
+        (click)="dismiss(toast.id)"
+        aria-label="Fermer la notification"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+          <path
+            d="M6 6l12 12M18 6L6 18"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </div>
+  }
+</div>

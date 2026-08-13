@@ -1,0 +1,84 @@
+<div class="verify-page">
+  <header class="verify-page__header">
+    <a routerLink="/connexion" class="verify-page__brand">
+      <img src="assets/brand/logo-ministere.jpg" alt="Emblème de la République Gabonaise" />
+      <div>
+        <p class="verify-page__brand-title">PNLF · Vérification d'authenticité</p>
+        <p class="verify-page__brand-subtitle">Ministère des Eaux et Forêts — République Gabonaise</p>
+      </div>
+    </a>
+    <a routerLink="/connexion" class="verify-page__login-link">Accès professionnel →</a>
+  </header>
+
+  <main class="verify-page__main">
+    <div class="verify-page__intro">
+      <p class="text-eyebrow">Service public gratuit</p>
+      <h1 class="verify-page__title">Vérifier l'authenticité d'un produit forestier non ligneux</h1>
+      <p class="verify-page__lede">
+        Scannez le QR code apposé sur l'emballage ou saisissez le code de traçabilité pour
+        consulter l'origine officielle et le parcours du produit.
+      </p>
+    </div>
+
+    <div class="verify-card">
+      <form (ngSubmit)="submit()" class="verify-card__form">
+        <input
+          type="text"
+          class="verify-card__input"
+          placeholder="Coller le code ou le lien du QR (ex : 3f1a2b4c-…)"
+          [ngModel]="code()"
+          (ngModelChange)="code.set($event)"
+          name="code"
+        />
+        <button pnlfButton type="submit" variant="primary" size="lg" [loading]="loading()">Vérifier</button>
+      </form>
+
+      <div class="verify-card__divider"><span>ou</span></div>
+
+      <button pnlfButton type="button" variant="outline" size="md" [fullWidth]="true" (click)="toggleScanner()">
+        {{ scannerActive() ? 'Fermer le scanner' : '📷 Scanner un QR code avec la caméra' }}
+      </button>
+
+      @if (scannerActive()) {
+        <div id="qr-reader" #qrReader class="verify-card__scanner"></div>
+      }
+    </div>
+
+    @if (loading()) {
+      <div class="verify-loading">
+        <pnlf-spinner size="lg" />
+        <p>Vérification en cours…</p>
+      </div>
+    } @else if (result(); as r) {
+      <div class="verify-result verify-result--authentic">
+        <div class="verify-result__seal">✓</div>
+        <h2>Produit authentique</h2>
+        <p class="verify-result__code">{{ r.code_lot }}</p>
+
+        <dl class="verify-result__dl">
+          <div><dt>Produit</dt><dd>{{ r.produit_nom }}</dd></div>
+          <div><dt>Producteur / collecteur</dt><dd>{{ r.producteur_nom }}</dd></div>
+          <div><dt>Province d'origine</dt><dd>{{ r.province_nom }}</dd></div>
+          <div><dt>Date de collecte</dt><dd>{{ r.date_collecte | date: 'dd/MM/yyyy' }}</dd></div>
+          <div><dt>Quantité déclarée</dt><dd>{{ r.quantite }} {{ r.unite }}</dd></div>
+          <div><dt>Statut actuel</dt><dd><pnlf-status-badge [label]="statutLabels[r.statut]" [tone]="tone(r.statut)" /></dd></div>
+          <div><dt>Étapes de traçabilité</dt><dd>{{ r.mouvements_count }} mouvement(s) enregistré(s)</dd></div>
+        </dl>
+
+        <button pnlfButton variant="ghost" size="sm" (click)="reset()">Vérifier un autre produit</button>
+      </div>
+    } @else if (searched() && errorMessage()) {
+      <div class="verify-result verify-result--invalid">
+        <div class="verify-result__seal verify-result__seal--danger">✕</div>
+        <h2>Produit non vérifiable</h2>
+        <pnlf-alert tone="warning">{{ errorMessage() }}</pnlf-alert>
+        <button pnlfButton variant="ghost" size="sm" (click)="reset()">Réessayer</button>
+      </div>
+    }
+  </main>
+
+  <footer class="verify-page__footer">
+    © {{ 2026 }} République Gabonaise — Ministère des Eaux et Forêts. Plateforme Numérique de
+    Traçabilité des PFNL.
+  </footer>
+</div>

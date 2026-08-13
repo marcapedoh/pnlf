@@ -1,0 +1,73 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Traçabilité · Filière</p>
+    <h1 class="pnlf-page-header__title">
+      {{ isEdit ? 'Modifier la fiche' : 'Enregistrer un producteur / collecteur' }}
+    </h1>
+    <p class="pnlf-page-header__subtitle">
+      Ces informations serviront à établir la traçabilité des lots déclarés par cet acteur.
+    </p>
+  </div>
+  <a pnlfButton routerLink="/app/producteurs" variant="ghost">← Retour à la liste</a>
+</div>
+
+<pnlf-card>
+  @if (errorMessage()) {
+    <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;">{{ errorMessage() }}</pnlf-alert>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()" class="producteur-form" novalidate>
+    <div class="producteur-form__grid">
+      <pnlf-text-field label="Nom" formControlName="nom" [required]="true" [errorMessage]="submitted() && form.controls.nom.invalid ? 'Le nom est requis.' : ''" />
+      <pnlf-text-field label="Prénoms" formControlName="prenoms" [required]="true" [errorMessage]="submitted() && form.controls.prenoms.invalid ? 'Les prénoms sont requis.' : ''" />
+
+      <pnlf-select-field label="Type d'acteur" formControlName="type_acteur" [options]="typeActeurOptions" [required]="true" />
+      <pnlf-text-field label="Date de naissance" type="date" formControlName="date_naissance" />
+
+      <pnlf-text-field label="Téléphone" type="tel" formControlName="telephone" placeholder="+241 …" />
+      <pnlf-text-field label="E-mail" type="email" formControlName="email" />
+
+      <pnlf-text-field label="Communauté / Village d'usage" formControlName="communaute" />
+      <pnlf-select-field
+        label="Coopérative (optionnel)"
+        formControlName="cooperative"
+        [options]="cooperatives()"
+        placeholder="Aucune"
+      />
+
+      <pnlf-select-field
+        label="Province"
+        formControlName="province"
+        [options]="provinces()"
+        [required]="true"
+        [errorMessage]="submitted() && form.controls.province.invalid ? 'La province est requise.' : ''"
+      />
+      <pnlf-select-field
+        label="Département"
+        formControlName="departement"
+        [options]="departements()"
+        placeholder="Sélectionner une province d'abord"
+      />
+
+      <pnlf-select-field
+        label="Village"
+        formControlName="village"
+        [options]="villages()"
+        placeholder="Sélectionner un département d'abord"
+      />
+      <div></div>
+
+      <pnlf-text-field label="Latitude" formControlName="latitude" placeholder="ex : -0.5546" hint="Coordonnées GPS relevées sur le terrain" />
+      <pnlf-text-field label="Longitude" formControlName="longitude" placeholder="ex : 11.6642" />
+    </div>
+
+    <pnlf-text-field label="Notes" formControlName="notes" placeholder="Observations complémentaires" />
+
+    <div class="producteur-form__actions">
+      <a pnlfButton routerLink="/app/producteurs" variant="ghost" type="button">Annuler</a>
+      <button pnlfButton type="submit" variant="primary" [loading]="loading()">
+        {{ isEdit ? 'Enregistrer les modifications' : 'Créer la fiche' }}
+      </button>
+    </div>
+  </form>
+</pnlf-card>

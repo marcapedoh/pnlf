@@ -1,0 +1,70 @@
+@if (loading()) {
+  <pnlf-skeleton height="220px" radius="16px" />
+} @else if (producteur(); as p) {
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">{{ p.code_producteur }}</p>
+      <h1 class="pnlf-page-header__title">{{ p.prenoms }} {{ p.nom }}</h1>
+      <div class="producteur-detail__badges">
+        <pnlf-status-badge [label]="statutLabels[p.statut]" [tone]="tone(p.statut)" />
+        <span class="text-sm text-muted">{{ p.type_acteur === 'COLLECTEUR' ? 'Collecteur' : 'Producteur' }}</span>
+      </div>
+    </div>
+    <div class="producteur-detail__actions">
+      @if (canValidate && p.statut === StatutProducteur.EN_VALIDATION) {
+        <button pnlfButton variant="outline" (click)="valider()">Valider la fiche</button>
+        <button pnlfButton variant="ghost" (click)="rejeter()">Rejeter</button>
+      }
+      @if (canManage) {
+        <a pnlfButton [routerLink]="['/app/producteurs', p.id, 'modifier']" variant="primary">Modifier</a>
+      }
+    </div>
+  </div>
+
+  <div class="producteur-detail__grid">
+    <pnlf-card title="Informations personnelles">
+      <dl class="producteur-detail__dl">
+        <div><dt>Téléphone</dt><dd>{{ p.telephone || '—' }}</dd></div>
+        <div><dt>E-mail</dt><dd>{{ p.email || '—' }}</dd></div>
+        <div><dt>Date de naissance</dt><dd>{{ p.date_naissance || '—' }}</dd></div>
+        <div><dt>Communauté</dt><dd>{{ p.communaute || '—' }}</dd></div>
+        <div><dt>Pièce d'identité</dt><dd>{{ p.type_piece_identite || '—' }} {{ p.numero_piece || '' }}</dd></div>
+      </dl>
+    </pnlf-card>
+
+    <pnlf-card title="Localisation">
+      <dl class="producteur-detail__dl">
+        <div><dt>Province</dt><dd>{{ p.province_nom }}</dd></div>
+        <div><dt>Coordonnées GPS</dt><dd>{{ p.latitude ?? '—' }}, {{ p.longitude ?? '—' }}</dd></div>
+        <div><dt>Coopérative</dt><dd>{{ p.cooperative || 'Aucune' }}</dd></div>
+        <div><dt>Enregistré le</dt><dd>{{ p.created_at | date: 'dd/MM/yyyy' }}</dd></div>
+      </dl>
+    </pnlf-card>
+  </div>
+
+  <pnlf-card title="Lots déclarés" subtitle="10 lots les plus récents associés à ce producteur">
+    @if (lots().length === 0) {
+      <pnlf-empty-state icon="package" title="Aucun lot associé" description="Les lots déclarés par ce producteur apparaîtront ici." />
+    } @else {
+      <div class="pnlf-table-wrapper">
+        <table class="pnlf-table">
+          <thead>
+            <tr><th>Code lot</th><th>Produit</th><th>Quantité</th><th>Statut</th></tr>
+          </thead>
+          <tbody>
+            @for (lot of lots(); track lot.id) {
+              <tr>
+                <td><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
+                <td>{{ lot.produit_nom }}</td>
+                <td>{{ lot.quantite }} {{ lot.unite }}</td>
+                <td><pnlf-status-badge [label]="statutLotLabels[lot.statut]" [tone]="lotTone(lot.statut)" /></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </pnlf-card>
+} @else {
+  <pnlf-empty-state icon="users" title="Producteur introuvable" />
+}

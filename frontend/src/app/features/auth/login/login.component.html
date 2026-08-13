@@ -1,0 +1,57 @@
+<app-auth-layout>
+  <div class="login-card">
+    <p class="text-eyebrow">Espace sécurisé</p>
+    <h2 class="login-card__title">Connexion à votre espace</h2>
+    <p class="login-card__subtitle">
+      Accédez à la plateforme selon votre profil : administration, ministère, agent forestier,
+      producteur, coopérative ou acheteur.
+    </p>
+
+    @if (errorMessage()) {
+      <pnlf-alert tone="error" class="login-card__alert">{{ errorMessage() }}</pnlf-alert>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="submit()" class="login-card__form" novalidate>
+      <pnlf-text-field
+        label="Adresse e-mail"
+        type="email"
+        placeholder="prenom.nom@eauxforets.gouv.ga"
+        formControlName="email"
+        [required]="true"
+        autocomplete="username"
+        [errorMessage]="emailError"
+      />
+
+      <pnlf-text-field
+        label="Mot de passe"
+        type="password"
+        placeholder="••••••••"
+        formControlName="password"
+        [required]="true"
+        autocomplete="current-password"
+        [errorMessage]="passwordError"
+      />
+
+      <div class="login-card__row">
+        <label class="login-card__remember">
+          <input type="checkbox" formControlName="remember" />
+          Se souvenir de mon e-mail
+        </label>
+        <a routerLink="/mot-de-passe-oublie" class="login-card__forgot">Mot de passe oublié ?</a>
+      </div>
+
+      <button pnlfButton type="submit" variant="primary" size="lg" [fullWidth]="true" [loading]="loading()">
+        Se connecter
+      </button>
+    </form>
+
+    <p class="login-card__footer">
+      Vous n'avez pas encore de compte ? Rapprochez-vous de votre administration ou du Ministère
+      des Eaux et Forêts pour l'ouverture de votre accès.
+    </p>
+
+    <a routerLink="/verifier" class="login-card__verify-link">
+      Vérifier l'authenticité d'un produit sans se connecter →
+    </a>
+  </div>
+</app-auth-layout>

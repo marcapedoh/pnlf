@@ -1,0 +1,56 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Filière &amp; partenaires</p>
+    <h1 class="pnlf-page-header__title">Annuaire des producteurs et coopératives</h1>
+    <p class="pnlf-page-header__subtitle">
+      Trouvez des partenaires actifs par province pour vos échanges commerciaux.
+    </p>
+  </div>
+</div>
+
+<div class="pnlf-toolbar">
+  <div class="pnlf-toolbar__filters">
+    <select class="pnlf-select" [ngModel]="provinceFilter()" (ngModelChange)="provinceFilter.set($event); onFilterChange()">
+      <option value="">Toutes les provinces</option>
+      @for (p of provinces(); track p.value) {
+        <option [value]="p.value">{{ p.label }}</option>
+      }
+    </select>
+  </div>
+</div>
+
+@if (loading()) {
+  <p class="text-sm text-muted">Chargement…</p>
+} @else {
+  <div class="annuaire-grid">
+    <pnlf-card title="Coopératives" [subtitle]="cooperatives().length + ' résultat(s)'">
+      @if (cooperatives().length === 0) {
+        <pnlf-empty-state icon="building" title="Aucune coopérative" />
+      } @else {
+        <ul class="annuaire-list">
+          @for (c of cooperatives(); track c.id) {
+            <li>
+              <p class="annuaire-list__name">{{ c.nom }}</p>
+              <p class="annuaire-list__meta">{{ c.province_nom || 'Province non renseignée' }} · {{ c.telephone || 'Contact non renseigné' }}</p>
+            </li>
+          }
+        </ul>
+      }
+    </pnlf-card>
+
+    <pnlf-card title="Producteurs &amp; collecteurs" [subtitle]="producteurs().length + ' résultat(s)'">
+      @if (producteurs().length === 0) {
+        <pnlf-empty-state icon="users" title="Aucun producteur" />
+      } @else {
+        <ul class="annuaire-list">
+          @for (p of producteurs(); track p.id) {
+            <li>
+              <p class="annuaire-list__name">{{ p.prenoms }} {{ p.nom }}</p>
+              <p class="annuaire-list__meta">{{ p.province_nom }} · {{ p.telephone || 'Contact non renseigné' }}</p>
+            </li>
+          }
+        </ul>
+      }
+    </pnlf-card>
+  </div>
+}

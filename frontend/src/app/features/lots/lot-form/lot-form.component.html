@@ -1,0 +1,65 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Traçabilité · Lots</p>
+    <h1 class="pnlf-page-header__title">Déclarer un nouveau lot</h1>
+    <p class="pnlf-page-header__subtitle">
+      Chaque lot déclaré reçoit automatiquement un identifiant unique et un QR code de
+      vérification publique.
+    </p>
+  </div>
+  <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
+</div>
+
+<pnlf-card>
+  @if (errorMessage()) {
+    <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;">{{ errorMessage() }}</pnlf-alert>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()" class="lot-form" novalidate>
+    <div class="lot-form__field">
+      <label class="pnlf-field__label">Producteur / collecteur <span class="pnlf-field__required">*</span></label>
+      <div class="lot-form__combo">
+        <input
+          type="text"
+          class="pnlf-select"
+          placeholder="Rechercher par nom, code ou téléphone…"
+          [value]="producteurQuery()"
+          (input)="onProducteurQueryChange($any($event.target).value)"
+        />
+        @if (producteurResults().length > 0) {
+          <ul class="lot-form__combo-results">
+            @for (p of producteurResults(); track p.id) {
+              <li>
+                <button type="button" (click)="selectProducteur(p)">
+                  <strong>{{ p.prenoms }} {{ p.nom }}</strong>
+                  <span>{{ p.code_producteur }} · {{ p.province_nom }}</span>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+      @if (selectedProducteur()) {
+        <p class="lot-form__hint-ok">✓ Producteur sélectionné</p>
+      }
+    </div>
+
+    <div class="producteur-form__grid">
+      <pnlf-select-field label="Produit" formControlName="produit" [options]="produits()" [required]="true" [errorMessage]="submitted() && form.controls.produit.invalid ? 'Veuillez sélectionner un produit.' : ''" />
+      <pnlf-text-field label="Date de collecte" type="date" formControlName="date_collecte" [required]="true" />
+
+      <pnlf-text-field label="Quantité" type="number" formControlName="quantite" [required]="true" [errorMessage]="submitted() && form.controls.quantite.invalid ? 'Veuillez saisir une quantité valide.' : ''" />
+      <pnlf-select-field label="Unité" formControlName="unite" [options]="unites" [required]="true" />
+
+      <pnlf-text-field label="Indicateur de qualité" formControlName="qualite_indicateur" placeholder="ex : Séché, 1er choix…" />
+      <pnlf-text-field label="Prix indicatif (XAF)" type="number" formControlName="prix_indicatif" />
+    </div>
+
+    <pnlf-text-field label="Observations" formControlName="observations" />
+
+    <div class="producteur-form__actions">
+      <a pnlfButton routerLink="/app/lots" variant="ghost" type="button">Annuler</a>
+      <button pnlfButton type="submit" variant="primary" [loading]="loading()">Déclarer le lot</button>
+    </div>
+  </form>
+</pnlf-card>

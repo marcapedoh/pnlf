@@ -1,0 +1,12 @@
+<div class="pnlf-empty">
+  <div class="pnlf-empty__icon">
+    <pnlf-icon [name]="icon()" [size]="28" [strokeWidth]="1.5" />
+  </div>
+  <h4 class="pnlf-empty__title">{{ title() }}</h4>
+  @if (description()) {
+    <p class="pnlf-empty__description">{{ description() }}</p>
+  }
+  <div class="pnlf-empty__actions">
+    <ng-content></ng-content>
+  </div>
+</div>

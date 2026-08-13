@@ -1,0 +1,122 @@
+:host.pnlf-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-base) var(--ease-standard),
+    border-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+  user-select: none;
+
+  &:active:not([disabled]) {
+    transform: translateY(1px);
+  }
+
+  &[disabled] {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+:host.pnlf-btn--sm {
+  font-size: var(--fs-sm);
+  padding: 0.4rem 0.75rem;
+}
+:host.pnlf-btn--md {
+  font-size: var(--fs-base);
+  padding: 0.6rem 1.1rem;
+}
+:host.pnlf-btn--lg {
+  font-size: var(--fs-md);
+  padding: 0.75rem 1.5rem;
+}
+
+:host.pnlf-btn--full {
+  display: flex;
+  width: 100%;
+}
+
+:host.pnlf-btn--primary {
+  background: var(--pnlf-green-700);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-xs);
+
+  &:hover:not([disabled]) {
+    background: var(--pnlf-green-800);
+  }
+  &:focus-visible {
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+:host.pnlf-btn--secondary {
+  background: var(--pnlf-blue-700);
+  color: var(--text-inverse);
+
+  &:hover:not([disabled]) {
+    background: var(--pnlf-blue-800);
+  }
+}
+
+:host.pnlf-btn--gold {
+  background: var(--pnlf-gold-500);
+  color: var(--pnlf-green-900);
+
+  &:hover:not([disabled]) {
+    background: var(--pnlf-gold-600);
+  }
+}
+
+:host.pnlf-btn--outline {
+  background: transparent;
+  color: var(--pnlf-green-700);
+  border-color: var(--border-default);
+
+  &:hover:not([disabled]) {
+    background: var(--pnlf-green-50);
+    border-color: var(--pnlf-green-300);
+  }
+}
+
+:host.pnlf-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+
+  &:hover:not([disabled]) {
+    background: var(--gray-100);
+    color: var(--text-primary);
+  }
+}
+
+:host.pnlf-btn--danger {
+  background: var(--color-danger);
+  color: var(--text-inverse);
+
+  &:hover:not([disabled]) {
+    background: #8f1f1f;
+  }
+}
+
+.pnlf-btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+
+  &--hidden {
+    opacity: 0;
+  }
+}
+
+:host.pnlf-btn--loading {
+  .pnlf-btn__label--hidden {
+    position: absolute;
+  }
+}

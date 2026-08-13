@@ -1,0 +1,42 @@
+:host {
+  display: inline-flex;
+}
+
+.pnlf-spinner {
+  animation: pnlf-spin 0.85s linear infinite;
+
+  &--sm {
+    width: 16px;
+    height: 16px;
+  }
+  &--md {
+    width: 24px;
+    height: 24px;
+  }
+  &--lg {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.pnlf-spinner__track {
+  stroke: currentColor;
+  opacity: 0.15;
+}
+
+.pnlf-spinner__arc {
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-dasharray: 90;
+  stroke-dashoffset: 60;
+}
+
+.pnlf-spinner--brand {
+  color: var(--pnlf-green-600);
+}
+.pnlf-spinner--inverse {
+  color: var(--white);
+}
+.pnlf-spinner--neutral {
+  color: var(--gray-500);
+}

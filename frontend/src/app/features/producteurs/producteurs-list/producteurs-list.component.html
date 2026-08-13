@@ -1,0 +1,104 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Traçabilité · Filière</p>
+    <h1 class="pnlf-page-header__title">Producteurs &amp; collecteurs</h1>
+    <p class="pnlf-page-header__subtitle">
+      Registre national des producteurs et collecteurs de produits forestiers non ligneux.
+    </p>
+  </div>
+  @if (canCreate) {
+    <a pnlfButton routerLink="/app/producteurs/nouveau" variant="primary">
+      + Enregistrer une fiche
+    </a>
+  }
+</div>
+
+<div class="pnlf-toolbar">
+  <div class="pnlf-toolbar__filters">
+    <input
+      type="search"
+      class="pnlf-select pnlf-toolbar__search"
+      placeholder="Rechercher un nom, code, téléphone…"
+      [ngModel]="search()"
+      (ngModelChange)="onSearchInput($event)"
+    />
+
+    <select class="pnlf-select" [ngModel]="provinceFilter()" (ngModelChange)="provinceFilter.set($event); onFilterChange()">
+      <option value="">Toutes les provinces</option>
+      @for (p of provinces(); track p.value) {
+        <option [value]="p.value">{{ p.label }}</option>
+      }
+    </select>
+
+    <select class="pnlf-select" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
+      <option value="">Tous les statuts</option>
+      @for (s of [StatutProducteur.ACTIF, StatutProducteur.EN_VALIDATION, StatutProducteur.REJETE, StatutProducteur.INACTIF]; track s) {
+        <option [value]="s">{{ statutLabels[s] }}</option>
+      }
+    </select>
+  </div>
+</div>
+
+@if (loading()) {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <tbody>
+        @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+          <tr>
+            <td colspan="6"><pnlf-skeleton height="18px" /></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+} @else if (items().length === 0) {
+  <pnlf-empty-state
+    icon="users"
+    title="Aucun producteur trouvé"
+    description="Ajustez vos filtres de recherche ou enregistrez une nouvelle fiche."
+  />
+} @else {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Nom complet</th>
+          <th>Type</th>
+          <th>Province</th>
+          <th>Téléphone</th>
+          <th>Statut</th>
+          @if (canValidate) {
+            <th></th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (p of items(); track p.id) {
+          <tr>
+            <td>
+              <a class="pnlf-table__link" [routerLink]="['/app/producteurs', p.id]">{{ p.code_producteur }}</a>
+            </td>
+            <td>{{ p.prenoms }} {{ p.nom }}</td>
+            <td>{{ p.type_acteur === TypeActeur.COLLECTEUR ? 'Collecteur' : 'Producteur' }}</td>
+            <td>{{ p.province_nom }}</td>
+            <td class="pnlf-table__muted">{{ p.telephone || '—' }}</td>
+            <td><pnlf-status-badge [label]="statutLabels[p.statut]" [tone]="tone(p.statut)" /></td>
+            @if (canValidate) {
+              <td>
+                @if (p.statut === StatutProducteur.EN_VALIDATION) {
+                  <div class="pnlf-table__actions">
+                    <button pnlfButton variant="outline" size="sm" (click)="valider(p)">Valider</button>
+                    <button pnlfButton variant="ghost" size="sm" (click)="rejeter(p)">Rejeter</button>
+                  </div>
+                }
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+}

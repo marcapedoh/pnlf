@@ -1,0 +1,58 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Filière &amp; partenaires</p>
+    <h1 class="pnlf-page-header__title">Coopératives</h1>
+    <p class="pnlf-page-header__subtitle">
+      Organisations collectant et regroupant les productions de leurs membres.
+    </p>
+  </div>
+  @if (canManage) {
+    <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
+      {{ showForm() ? 'Annuler' : '+ Nouvelle coopérative' }}
+    </button>
+  }
+</div>
+
+@if (showForm()) {
+  <pnlf-card title="Créer une coopérative" style="display:block; margin-bottom: 1.5rem;">
+    @if (errorMessage()) {
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
+    }
+    <form [formGroup]="form" (ngSubmit)="submit()" class="coop-form">
+      <pnlf-text-field label="Code" formControlName="code" [required]="true" />
+      <pnlf-text-field label="Nom" formControlName="nom" [required]="true" />
+      <pnlf-text-field label="Numéro d'agrément" formControlName="numero_agrement" />
+      <pnlf-text-field label="Téléphone" formControlName="telephone" />
+      <pnlf-text-field label="E-mail" formControlName="email" />
+      <pnlf-text-field label="Adresse" formControlName="adresse" />
+      <div class="coop-form__actions">
+        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer</button>
+      </div>
+    </form>
+  </pnlf-card>
+}
+
+@if (loading()) {
+  <p class="text-sm text-muted">Chargement…</p>
+} @else if (items().length === 0) {
+  <pnlf-empty-state icon="building" title="Aucune coopérative enregistrée" />
+} @else {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <thead>
+        <tr><th>Code</th><th>Nom</th><th>Province</th><th>Téléphone</th><th>Statut</th></tr>
+      </thead>
+      <tbody>
+        @for (c of items(); track c.id) {
+          <tr>
+            <td>{{ c.code }}</td>
+            <td>{{ c.nom }}</td>
+            <td>{{ c.province_nom || '—' }}</td>
+            <td class="pnlf-table__muted">{{ c.telephone || '—' }}</td>
+            <td><pnlf-status-badge [label]="c.actif ? 'Active' : 'Inactive'" [tone]="c.actif ? 'success' : 'neutral'" /></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

@@ -1,0 +1,70 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Mode terrain</p>
+    <h1 class="pnlf-page-header__title">Synchronisation hors-ligne</h1>
+    <p class="pnlf-page-header__subtitle">
+      Suivi des appareils de collecte et résolution des conflits de synchronisation.
+    </p>
+  </div>
+</div>
+
+<pnlf-card title="Mes appareils enregistrés" style="display:block; margin-bottom:1.5rem;">
+  @if (appareils().length === 0) {
+    <pnlf-empty-state icon="wifi-off" title="Aucun appareil synchronisé pour le moment" />
+  } @else {
+    <div class="pnlf-table-wrapper">
+      <table class="pnlf-table">
+        <thead><tr><th>Appareil</th><th>Identifiant</th><th>Dernière synchro</th></tr></thead>
+        <tbody>
+          @for (a of appareils(); track a.id) {
+            <tr>
+              <td>{{ a.libelle || 'Appareil sans nom' }}</td>
+              <td class="pnlf-table__muted">{{ a.device_id }}</td>
+              <td>{{ a.dernier_sync_at ? (a.dernier_sync_at | date: 'dd/MM/yyyy HH:mm') : 'Jamais synchronisé' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</pnlf-card>
+
+@if (canResoudre) {
+  <pnlf-card title="Conflits de synchronisation à résoudre">
+    @if (loading()) {
+      <p class="text-sm text-muted">Chargement…</p>
+    } @else if (conflits().length === 0) {
+      <pnlf-empty-state icon="check" title="Aucun conflit en attente" description="Toutes les données de terrain sont synchronisées." />
+    } @else {
+      <div class="conflict-list">
+        @for (c of conflits(); track c.id) {
+          <div class="conflict-card">
+            <div class="conflict-card__meta">
+              <span class="conflict-card__entity">{{ c.entite }}</span>
+              <span class="text-xs text-muted">Réf. client : {{ c.client_uuid }}</span>
+              <span class="text-xs text-muted">Détecté le {{ c.created_at | date: 'dd/MM/yyyy HH:mm' }}</span>
+            </div>
+            <div class="conflict-card__payloads">
+              <div>
+                <p class="text-xs text-muted">Version terrain (appareil)</p>
+                <pre>{{ c.payload_client | json }}</pre>
+              </div>
+              <div>
+                <p class="text-xs text-muted">Version serveur actuelle</p>
+                <pre>{{ c.payload_serveur | json }}</pre>
+              </div>
+            </div>
+            <div class="conflict-card__actions">
+              <button pnlfButton variant="outline" size="sm" [loading]="resolvingId() === c.id" (click)="resoudre(c, 'CLIENT')">
+                Conserver la version terrain
+              </button>
+              <button pnlfButton variant="primary" size="sm" [loading]="resolvingId() === c.id" (click)="resoudre(c, 'SERVEUR')">
+                Conserver la version serveur
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </pnlf-card>
+}
