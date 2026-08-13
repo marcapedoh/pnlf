@@ -3,8 +3,10 @@ from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from accounts.audit import request_meta, write_audit
@@ -18,6 +20,7 @@ from accounts.permissions import (
     CanManageZones,
     CanReadGeo,
     CanValidateProducteurs,
+    RolePermission,
     scope_lots_qs,
     scope_mouvements_qs,
     scope_producteurs_qs,
@@ -25,6 +28,7 @@ from accounts.permissions import (
     user_can_access_producteur,
 )
 
+from .db_utils import get_optional_column, set_optional_column, table_exists
 from .models import (
     CategorieProduit,
     Certification,
@@ -32,6 +36,7 @@ from .models import (
     CooperativeMembre,
     Departement,
     Lot,
+    MessagePublic,
     Mouvement,
     Producteur,
     Produit,
@@ -48,16 +53,20 @@ from .serializers import (
     DepartementSerializer,
     LotSerializer,
     LotVerifySerializer,
+    MessagePublicSerializer,
     MouvementSerializer,
     ProducteurSerializer,
     ProduitSerializer,
     ProvinceSerializer,
+    PublicProducteurDetailSerializer,
+    PublicProducteurSerializer,
     TypeCertificationSerializer,
     VillageSerializer,
     ZoneCollecteSerializer,
 )
 from .services import (
     appliquer_mouvement_sur_lot,
+    enregistrer_photo,
     generer_qr_image,
     qr_image_bytes,
     transition_lot_statut,
@@ -125,6 +134,24 @@ class ProduitViewSet(viewsets.ModelViewSet):
             action='UPDATE', table_cible='produits', enregistrement_id=obj.id,
             ip_adresse=ip, user_agent=ua,
         )
+
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def image(self, request, pk=None):
+        """Upload de la photo représentative du produit (référentiel — admin/agent ministère)."""
+        produit = self.get_object()
+        fichier = request.FILES.get('image')
+        if not fichier:
+            raise ValidationError({'image': 'Fichier « image » manquant.'})
+        rel = enregistrer_photo(fichier, 'produits', produit.id)
+        applied = set_optional_column('produits', 'image_path', produit.id, rel)
+        if not applied:
+            raise ValidationError({'image': 'Migration base de données requise (colonne image_path absente).'})
+        ip, ua = request_meta(request)
+        write_audit(
+            utilisateur_id=_user_id(request.user), action='UPDATE_IMAGE', table_cible='produits',
+            enregistrement_id=produit.id, ip_adresse=ip, user_agent=ua,
+        )
+        return Response(ProduitSerializer(produit, context={'request': request}).data)
 
 
 class CooperativeViewSet(viewsets.ModelViewSet):
@@ -284,6 +311,29 @@ class ProducteurViewSet(viewsets.ModelViewSet):
             enregistrement_id=prod.id, ip_adresse=ip, user_agent=ua,
         )
         return Response(ProducteurSerializer(prod).data)
+
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def photo(self, request, pk=None):
+        """Upload de la photo de profil (producteur/collecteur lui-même, agent ou admin)."""
+        prod = self.get_object()
+        user = request.user
+        if user.role == Utilisateur.Role.PRODUCTEUR and prod.utilisateur_id != user.id:
+            raise PermissionDenied('Vous ne pouvez modifier que votre propre photo.')
+        if user.role in (Utilisateur.Role.ACHETEUR, Utilisateur.Role.COOPERATIVE):
+            raise PermissionDenied('Action non autorisée.')
+        fichier = request.FILES.get('photo')
+        if not fichier:
+            raise ValidationError({'photo': 'Fichier « photo » manquant.'})
+        rel = enregistrer_photo(fichier, 'producteurs', prod.id)
+        applied = set_optional_column('producteurs', 'photo_path', prod.id, rel)
+        if not applied:
+            raise ValidationError({'photo': 'Migration base de données requise (colonne photo_path absente).'})
+        ip, ua = request_meta(request)
+        write_audit(
+            utilisateur_id=_user_id(user), action='UPDATE_PHOTO', table_cible='producteurs',
+            enregistrement_id=prod.id, ip_adresse=ip, user_agent=ua,
+        )
+        return Response(ProducteurSerializer(prod, context={'request': request}).data)
 
 
 class LotViewSet(viewsets.ModelViewSet):

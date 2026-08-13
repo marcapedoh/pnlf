@@ -166,6 +166,35 @@ class Producteur(models.Model):
         return f'{self.code_producteur} — {self.prenoms} {self.nom}'
 
 
+class MessagePublic(models.Model):
+    """Message d'un visiteur (annuaire public, sans authentification) vers un producteur."""
+
+    class Statut(models.TextChoices):
+        NOUVEAU = 'NOUVEAU', 'Nouveau'
+        TRAITE = 'TRAITE', 'Traité'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    producteur = models.ForeignKey(
+        Producteur, on_delete=models.DO_NOTHING, db_column='producteur_id', related_name='messages_publics'
+    )
+    nom_visiteur = models.CharField(max_length=150)
+    email_visiteur = models.EmailField()
+    telephone_visiteur = models.CharField(max_length=30, null=True, blank=True)
+    message = models.TextField()
+    ip_adresse = models.CharField(max_length=64, null=True, blank=True)
+    statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.NOUVEAU)
+    created_at = models.DateTimeField()
+    traite_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'messages_publics'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.nom_visiteur} -> {self.producteur_id}'
+
+
 class ZoneCollecte(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=40, unique=True)

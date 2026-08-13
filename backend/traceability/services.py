@@ -96,6 +96,37 @@ def qr_image_bytes(lot: Lot) -> bytes:
     return path.read_bytes()
 
 
+PHOTO_MAX_SIZE_BYTES = 5 * 1024 * 1024
+PHOTO_MAX_DIMENSION = 1200
+
+
+def enregistrer_photo(fichier, sous_dossier: str, entite_id) -> str:
+    """Valide, redimensionne et enregistre une photo (producteur/produit). Retourne le chemin relatif media."""
+    from PIL import Image, UnidentifiedImageError
+
+    if fichier.size > PHOTO_MAX_SIZE_BYTES:
+        raise ValidationError({'photo': 'Image trop volumineuse (5 Mo maximum).'})
+
+    try:
+        image = Image.open(fichier)
+        image.verify()
+        fichier.seek(0)
+        image = Image.open(fichier)
+        image = image.convert('RGB')
+    except (UnidentifiedImageError, OSError):
+        raise ValidationError({'photo': 'Fichier image invalide (JPEG/PNG/WEBP attendu).'})
+
+    image.thumbnail((PHOTO_MAX_DIMENSION, PHOTO_MAX_DIMENSION))
+
+    photo_dir = Path(settings.MEDIA_ROOT) / 'photos' / sous_dossier
+    photo_dir.mkdir(parents=True, exist_ok=True)
+    filename = f'{entite_id}.jpg'
+    filepath = photo_dir / filename
+    image.save(filepath, format='JPEG', quality=85)
+
+    return f'photos/{sous_dossier}/{filename}'
+
+
 def transition_lot_statut(lot: Lot, nouveau_statut: str, *, force: bool = False) -> None:
     """Transition manuelle (validation agent / admin)."""
     if nouveau_statut not in STATUT_ORDRE:
