@@ -100,8 +100,78 @@ PHOTO_MAX_SIZE_BYTES = 5 * 1024 * 1024
 PHOTO_MAX_DIMENSION = 1200
 
 
-def enregistrer_photo(fichier, sous_dossier: str, entite_id) -> str:
-    """Valide, redimensionne et enregistre une photo (producteur/produit). Retourne le chemin relatif media."""
+LOT_MAX_PHOTOS = 2
+
+
+def chemin_photo(sous_dossier: str, entite_id, suffixe: str = '') -> Path:
+    return Path(settings.MEDIA_ROOT) / 'photos' / sous_dossier / f'{entite_id}{suffixe}.jpg'
+
+
+def photo_url(sous_dossier: str, entite_id, request=None, suffixe: str = '') -> str | None:
+    """Résout l'URL d'une photo par convention de nommage (aucune colonne BDD requise)."""
+    if not chemin_photo(sous_dossier, entite_id, suffixe).exists():
+        return None
+    rel = f'photos/{sous_dossier}/{entite_id}{suffixe}.jpg'
+    if request:
+        return request.build_absolute_uri(f'/media/{rel}')
+    return f'/media/{rel}'
+
+
+DOCUMENT_MAX_SIZE_BYTES = 8 * 1024 * 1024
+DOCUMENT_ALLOWED_EXT = {'.pdf', '.jpg', '.jpeg', '.png'}
+
+
+def enregistrer_document(fichier, sous_dossier: str, entite_id) -> str:
+    """Valide et enregistre un document justificatif (PDF/JPEG/PNG). Retourne le chemin relatif media.
+
+    Utilisé pour les pièces jointes administratives (documents d'inscription,
+    justificatifs de certification…). Remplace tout document existant pour la
+    même entité/sous-dossier (un seul document actif à la fois).
+    """
+    if fichier.size > DOCUMENT_MAX_SIZE_BYTES:
+        raise ValidationError({'document': 'Fichier trop volumineux (8 Mo maximum).'})
+    ext = Path(fichier.name or '').suffix.lower()
+    if ext not in DOCUMENT_ALLOWED_EXT:
+        raise ValidationError({'document': 'Formats acceptés : PDF, JPG, PNG.'})
+    doc_dir = Path(settings.MEDIA_ROOT) / 'documents' / sous_dossier
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    # Supprime toute variante d'extension précédente pour éviter les doublons.
+    for old_ext in DOCUMENT_ALLOWED_EXT:
+        old_path = doc_dir / f'{entite_id}{old_ext}'
+        if old_path.exists():
+            old_path.unlink(missing_ok=True)
+    filename = f'{entite_id}{ext}'
+    filepath = doc_dir / filename
+    with open(filepath, 'wb') as out:
+        for chunk in fichier.chunks():
+            out.write(chunk)
+    return f'documents/{sous_dossier}/{filename}'
+
+
+def document_url(document_path: str | None, request=None) -> str | None:
+    """Résout l'URL absolue d'un document déjà enregistré (chemin relatif media)."""
+    if not document_path:
+        return None
+    if document_path.startswith('http://') or document_path.startswith('https://'):
+        return document_path
+    rel = document_path.lstrip('/')
+    if request:
+        return request.build_absolute_uri(f'/media/{rel}')
+    return f'/media/{rel}'
+
+
+def photos_urls_lot(lot_id, request=None) -> list[str]:
+    """Jusqu'à 2 photos illustrant la marchandise d'un lot (suffixes _1 / _2)."""
+    urls = []
+    for i in range(1, LOT_MAX_PHOTOS + 1):
+        url = photo_url('lots', lot_id, request, suffixe=f'_{i}')
+        if url:
+            urls.append(url)
+    return urls
+
+
+def enregistrer_photo(fichier, sous_dossier: str, entite_id, suffixe: str = '') -> str:
+    """Valide, redimensionne et enregistre une photo (producteur/produit/lot). Retourne le chemin relatif media."""
     from PIL import Image, UnidentifiedImageError
 
     if fichier.size > PHOTO_MAX_SIZE_BYTES:
@@ -120,7 +190,7 @@ def enregistrer_photo(fichier, sous_dossier: str, entite_id) -> str:
 
     photo_dir = Path(settings.MEDIA_ROOT) / 'photos' / sous_dossier
     photo_dir.mkdir(parents=True, exist_ok=True)
-    filename = f'{entite_id}.jpg'
+    filename = f'{entite_id}{suffixe}.jpg'
     filepath = photo_dir / filename
     image.save(filepath, format='JPEG', quality=85)
 

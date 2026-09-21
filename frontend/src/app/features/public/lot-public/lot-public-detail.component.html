@@ -1,0 +1,193 @@
+<div class="lot-fiche">
+  <a [routerLink]="lot()?.producteur ? ['/annuaire', lot()!.producteur.id] : ['/annuaire']" class="lot-fiche__back">
+    <pnlf-icon name="arrow-left" [size]="14" /> Retour à la fiche du producteur
+  </a>
+
+  @if (loading()) {
+    <pnlf-skeleton height="460px" />
+  } @else if (notFound() || !lot()) {
+    <div class="lot-fiche__error">
+      <pnlf-icon name="package" [size]="40" />
+      <h1>Lot introuvable</h1>
+      <p>Ce lot n'existe pas, a été retiré ou n'est plus visible publiquement.</p>
+      <a pnlfButton routerLink="/annuaire" variant="primary">Retour à l'annuaire</a>
+    </div>
+  } @else if (lot(); as l) {
+    <div class="lot-fiche__layout">
+      <div class="lot-fiche__main">
+        <section class="gallery">
+          <div class="gallery__stage">
+            @if (l.photos_urls.length) {
+              <img [src]="l.photos_urls[activePhoto()]" [alt]="l.produit_nom" />
+            } @else {
+              <div class="gallery__empty">
+                <pnlf-icon name="camera" [size]="40" />
+                <span>Aucune photo disponible pour ce lot</span>
+              </div>
+            }
+            <pnlf-status-badge
+              class="gallery__status"
+              [label]="l.statut_libelle || statutLabel(l.statut)"
+              [tone]="statutTone(l.statut)"
+            />
+            @if (l.photos_urls.length > 1) {
+              <span class="gallery__counter">{{ activePhoto() + 1 }} / {{ l.photos_urls.length }}</span>
+            }
+          </div>
+          @if (l.photos_urls.length > 1) {
+            <div class="gallery__thumbs" role="list">
+              @for (url of l.photos_urls; track url; let i = $index) {
+                <button
+                  type="button"
+                  class="gallery__thumb"
+                  [class.is-active]="i === activePhoto()"
+                  [attr.aria-label]="'Photo ' + (i + 1)"
+                  (click)="selectPhoto(i)"
+                >
+                  <img [src]="url" [alt]="l.produit_nom + ' — photo ' + (i + 1)" />
+                </button>
+              }
+            </div>
+          }
+        </section>
+
+        @if (l.observations) {
+          <section class="panel">
+            <header class="panel__head">
+              <h2><pnlf-icon name="file-text" [size]="18" /> Description</h2>
+            </header>
+            <p class="panel__prose">{{ l.observations }}</p>
+          </section>
+        }
+
+        @if (l.mouvements?.length) {
+          <section class="panel">
+            <header class="panel__head">
+              <h2><pnlf-icon name="layers" [size]="18" /> Parcours de traçabilité</h2>
+              <p>Étapes enregistrées depuis la collecte.</p>
+            </header>
+            <ol class="trace">
+              @for (m of l.mouvements; track $index; let last = $last) {
+                <li [class.is-last]="last">
+                  <span class="trace__dot" aria-hidden="true"></span>
+                  <div class="trace__body">
+                    <strong>{{ m.type_libelle }}</strong>
+                    <span>
+                      {{ m.date_mouvement | date: 'dd/MM/yyyy' }}
+                      @if (m.lieu_libelle) { · {{ m.lieu_libelle }} }
+                    </span>
+                  </div>
+                </li>
+              }
+            </ol>
+          </section>
+        }
+      </div>
+
+      <aside class="lot-fiche__aside">
+        <section class="offer">
+          <div class="offer__tags">
+            <span class="offer__code">Lot {{ l.code_lot }}</span>
+            <span class="offer__trust">
+              <pnlf-icon name="shield-check" [size]="14" /> Lot tracé ENEF
+            </span>
+          </div>
+          <h1>{{ l.produit_nom }}</h1>
+          <pnlf-status-badge [label]="l.statut_libelle || statutLabel(l.statut)" [tone]="statutTone(l.statut)" />
+
+          @if (l.prix_indicatif) {
+            <p class="offer__price">
+              {{ l.prix_indicatif | number }} {{ l.devise }}
+              <span>/ {{ l.unite }}</span>
+            </p>
+          } @else {
+            <p class="offer__price offer__price--muted">Prix sur demande</p>
+          }
+
+          <ul class="facts">
+            <li>
+              <pnlf-icon name="package" [size]="16" />
+              <div>
+                <span>Quantité</span>
+                <strong>{{ l.quantite }} {{ l.unite }}</strong>
+              </div>
+            </li>
+            @if (l.qualite_indicateur) {
+              <li>
+                <pnlf-icon name="leaf" [size]="16" />
+                <div>
+                  <span>Qualité</span>
+                  <strong>{{ l.qualite_indicateur }}</strong>
+                </div>
+              </li>
+            }
+            <li>
+              <pnlf-icon name="clock" [size]="16" />
+              <div>
+                <span>Collecte</span>
+                <strong>{{ l.date_collecte | date: 'dd/MM/yyyy' }}</strong>
+              </div>
+            </li>
+            @if (l.latitude && l.longitude) {
+              <li>
+                <pnlf-icon name="map-pin" [size]="16" />
+                <div>
+                  <span>Origine</span>
+                  <a [href]="mapsUrl(l.latitude, l.longitude)" target="_blank" rel="noopener" class="facts__map">
+                    Voir sur la carte <pnlf-icon name="external-link" [size]="12" />
+                  </a>
+                </div>
+              </li>
+            }
+          </ul>
+
+          <div class="offer__actions">
+            @if (l.uuid_public) {
+              <a pnlfButton variant="gold" [fullWidth]="true" [routerLink]="['/verifier', l.uuid_public]">
+                Vérifier le QR de traçabilité
+              </a>
+            }
+            <div class="offer__split">
+              <button pnlfButton variant="outline" type="button" [fullWidth]="true" (click)="partager(l)">
+                Partager
+              </button>
+              <button pnlfButton variant="ghost" type="button" [fullWidth]="true" (click)="imprimer()">
+                Imprimer
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="seller">
+          <p class="seller__kicker">Proposé par</p>
+          <div class="seller__row">
+            <div class="seller__avatar">
+              @if (l.producteur.photo_url) {
+                <img [src]="l.producteur.photo_url" [alt]="l.producteur.prenoms + ' ' + l.producteur.nom" />
+              } @else {
+                <span>{{ initials(l.producteur.nom, l.producteur.prenoms) }}</span>
+              }
+            </div>
+            <div class="seller__copy">
+              <p class="seller__name">{{ l.producteur.prenoms }} {{ l.producteur.nom }}</p>
+              <p class="seller__meta">
+                <pnlf-icon name="map-pin" [size]="13" />
+                {{ l.producteur.province_nom }}
+                @if (l.producteur.communaute) { · {{ l.producteur.communaute }} }
+              </p>
+              @if (l.producteur.cooperative_nom) {
+                <p class="seller__coop">
+                  <pnlf-icon name="users" [size]="13" />
+                  {{ l.producteur.cooperative_nom }}
+                </p>
+              }
+            </div>
+          </div>
+          <a pnlfButton variant="primary" [fullWidth]="true" [routerLink]="['/annuaire', l.producteur.id]">
+            Voir la fiche &amp; contacter
+          </a>
+        </section>
+      </aside>
+    </div>
+  }
+</div>

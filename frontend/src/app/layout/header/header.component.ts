@@ -1,12 +1,24 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
+import { interval, startWith } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { PnlfNotification } from '../../core/models/notification.model';
 import { ConnectivityService } from '../../core/network/connectivity.service';
 import { NotificationsService } from '../../core/services/notifications.service';
 import { UiStateService } from '../../core/ui/ui-state.service';
-import { ROLE_SHORT_LABELS } from '../../core/models/user.model';
+import { ROLE_SHORT_LABELS, RoleUtilisateur } from '../../core/models/user.model';
+import { notificationTargetRoute } from '../../core/ui/notification-target.util';
 import { IconComponent } from '../../design-system/icon/icon.component';
+
+const VALIDATOR_ROLES: RoleUtilisateur[] = [
+  RoleUtilisateur.ADMINISTRATEUR,
+  RoleUtilisateur.AGENT_MINISTERE,
+  RoleUtilisateur.AGENT_FORESTIER,
+];
+
+const POLL_INTERVAL_MS = 20_000;
 
 @Component({
   selector: 'app-header',
@@ -35,6 +47,28 @@ export class HeaderComponent {
   readonly userMenuOpen = signal(false);
   readonly notifMenuOpen = signal(false);
 
+  readonly isValidator = computed(() => {
+    const role = this.user()?.role;
+    return !!role && VALIDATOR_ROLES.includes(role);
+  });
+
+  /** Compteur affiché sur la cloche : notifications non lues (les demandes d'inscription restent un bandeau dédié). */
+  readonly badgeCount = computed(() => this.notifications.unreadCount());
+
+  constructor() {
+    interval(POLL_INTERVAL_MS)
+      .pipe(startWith(0), takeUntilDestroyed())
+      .subscribe(() => {
+        this.notifications.refreshUnreadCount().subscribe();
+        if (this.isValidator()) {
+          this.notifications.refreshPendingRegistrations().subscribe();
+        }
+        // Rafraîchit aussi la liste en tâche de fond, pour que le menu déroulant
+        // reflète en temps réel les nouvelles notifications sans action de l'utilisateur.
+        this.notifications.refresh().subscribe();
+      });
+  }
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
     if (!this.elementRef.nativeElement.contains(event.target)) {
@@ -54,6 +88,19 @@ export class HeaderComponent {
     if (this.notifMenuOpen()) {
       this.notifications.refresh().subscribe();
     }
+  }
+
+  markAllRead(): void {
+    this.notifications.markAllAsRead().subscribe();
+  }
+
+  openNotification(n: PnlfNotification): void {
+    if (!n.lue) {
+      this.notifications.markAsRead(n.id).subscribe();
+    }
+    this.notifMenuOpen.set(false);
+    const route = notificationTargetRoute(n);
+    this.router.navigate(route ?? ['/app/notifications']);
   }
 
   logout(): void {

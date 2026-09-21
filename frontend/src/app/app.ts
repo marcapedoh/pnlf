@@ -1,9 +1,11 @@
 import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
+import { CookieConsentComponent } from './design-system/cookie-consent/cookie-consent.component';
+
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, CookieConsentComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })

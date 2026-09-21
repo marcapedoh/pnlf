@@ -1,6 +1,12 @@
+:host {
+  display: block;
+  flex-shrink: 0;
+}
+
 .app-header {
-  position: sticky;
-  top: 0;
+  position: relative;
+  flex-shrink: 0;
+  top: auto;
   z-index: var(--z-header);
   display: flex;
   align-items: center;
@@ -201,6 +207,9 @@
   top: calc(100% + 10px);
   right: 0;
   min-width: 260px;
+  max-height: min(70vh, 520px);
+  display: flex;
+  flex-direction: column;
   background: var(--surface-raised);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
@@ -211,11 +220,51 @@
   transform-origin: top right;
 }
 
+.app-header__dropdown--notif {
+  width: 340px;
+}
+
 .app-header__dropdown-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   font-weight: 700;
   font-size: var(--fs-sm);
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.app-header__dropdown-action {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--color-link);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.app-header__dropdown-pending {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--pnlf-green-800);
+  background: var(--pnlf-gold-50);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+
+  &:hover {
+    background: var(--pnlf-gold-100);
+  }
 }
 
 .app-header__dropdown-empty {
@@ -224,12 +273,27 @@
   color: var(--text-muted);
 }
 
+.app-header__notif-list {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .app-header__notif-list li {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--gray-50);
+  }
 
   &.is-unread {
     background: var(--pnlf-green-50);
+
+    &:hover {
+      background: var(--pnlf-green-100);
+    }
   }
 }
 
@@ -251,6 +315,8 @@
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--color-link);
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-subtle);
 
   &:hover {
     background: var(--gray-50);

@@ -8,12 +8,22 @@ import { LotsService } from '../../core/services/lots.service';
 import { lotStatusTone } from '../../core/ui/status-tone.util';
 import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../design-system/button/button.component';
+import { IconComponent } from '../../design-system/icon/icon.component';
 import { SpinnerComponent } from '../../design-system/spinner/spinner.component';
 import { StatusBadgeComponent } from '../../design-system/badge/status-badge.component';
 
 @Component({
   selector: 'app-verify-public',
-  imports: [RouterLink, FormsModule, DatePipe, AlertBannerComponent, ButtonComponent, SpinnerComponent, StatusBadgeComponent],
+  imports: [
+    FormsModule,
+    DatePipe,
+    RouterLink,
+    AlertBannerComponent,
+    ButtonComponent,
+    SpinnerComponent,
+    StatusBadgeComponent,
+    IconComponent,
+  ],
   templateUrl: './verify-public.component.html',
   styleUrl: './verify-public.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,6 +33,7 @@ export class VerifyPublicComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
 
   @ViewChild('qrReader') qrReaderRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('fileInput') fileInputRef?: ElementRef<HTMLInputElement>;
 
   readonly code = signal('');
   readonly loading = signal(false);
@@ -30,6 +41,8 @@ export class VerifyPublicComponent implements OnDestroy {
   readonly result = signal<LotVerification | null>(null);
   readonly errorMessage = signal('');
   readonly scannerActive = signal(false);
+  readonly fileScanning = signal(false);
+  readonly dragActive = signal(false);
 
   readonly statutLabels = STATUT_LOT_LABELS;
   readonly tone = lotStatusTone;
@@ -118,10 +131,78 @@ export class VerifyPublicComponent implements OnDestroy {
     this.scannerActive.set(false);
   }
 
+  // --- Import d'une photo contenant un QR code (drag & drop ou sélection) ---
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.dragActive.set(true);
+  }
+
+  onDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    this.dragActive.set(false);
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.dragActive.set(false);
+    const file = event.dataTransfer?.files?.[0];
+    if (file) this.scanImageFile(file);
+  }
+
+  openFilePicker(): void {
+    this.fileInputRef?.nativeElement.click();
+  }
+
+  onFileInputChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) this.scanImageFile(file);
+    input.value = '';
+  }
+
+  private async scanImageFile(file: File): Promise<void> {
+    if (!file.type.startsWith('image/')) {
+      this.errorMessage.set('Le fichier sélectionné doit être une image (JPEG, PNG…).');
+      this.searched.set(true);
+      return;
+    }
+    this.fileScanning.set(true);
+    this.errorMessage.set('');
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode');
+      const reader = new Html5Qrcode('qr-reader-file');
+      const decodedText = await reader.scanFile(file, false);
+      reader.clear();
+      this.fileScanning.set(false);
+      this.code.set(decodedText);
+      this.verify(this.extractUuid(decodedText));
+    } catch {
+      this.fileScanning.set(false);
+      this.searched.set(true);
+      this.errorMessage.set(
+        "Aucun QR code détecté sur cette image. Essayez une photo plus nette et bien cadrée, ou saisissez le code manuellement.",
+      );
+    }
+  }
+
   reset(): void {
     this.code.set('');
     this.result.set(null);
     this.searched.set(false);
     this.errorMessage.set('');
+  }
+
+  partager(r: LotVerification): void {
+    const url = `${window.location.origin}/verifier/${r.uuid_public}`;
+    if (navigator.share) {
+      navigator.share({ title: `Lot ${r.code_lot}`, url }).catch(() => {});
+      return;
+    }
+    navigator.clipboard?.writeText(url);
+  }
+
+  imprimer(): void {
+    window.print();
   }
 }

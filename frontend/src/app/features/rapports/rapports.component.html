@@ -3,15 +3,85 @@
     <p class="text-eyebrow">Administration</p>
     <h1 class="pnlf-page-header__title">Rapports &amp; exports</h1>
     <p class="pnlf-page-header__subtitle">
-      Générez des extractions des lots de traçabilité pour vos rapports institutionnels.
+      Journal d'activité de la plateforme par jour, semaine ou mois, avec historique et export institutionnel.
     </p>
   </div>
 </div>
 
 <pnlf-card title="Export des lots de produits" subtitle="Périmètre : ensemble des lots visibles selon votre profil">
   <div class="rapports-actions">
-    <button pnlfButton variant="outline" [loading]="downloading() === 'csv'" (click)="download('csv')">Export CSV</button>
-    <button pnlfButton variant="outline" [loading]="downloading() === 'xlsx'" (click)="download('xlsx')">Export Excel (XLSX)</button>
-    <button pnlfButton variant="outline" [loading]="downloading() === 'pdf'" (click)="download('pdf')">Export PDF</button>
+    <button pnlfButton variant="outline" [loading]="downloading() === 'lots-csv'" (click)="downloadLots('csv')">Export CSV</button>
+    <button pnlfButton variant="outline" [loading]="downloading() === 'lots-xlsx'" (click)="downloadLots('xlsx')">Export Excel (XLSX)</button>
+    <button pnlfButton variant="outline" [loading]="downloading() === 'lots-pdf'" (click)="downloadLots('pdf')">Export PDF</button>
+    @if (pdfReadyUrl(); as href) {
+      <a pnlfButton variant="primary" [href]="href" target="_blank" rel="noopener">Ouvrir le PDF</a>
+    }
   </div>
 </pnlf-card>
+
+<pnlf-card title="Autres exports institutionnels" subtitle="Listes CSV des producteurs et certifications de votre périmètre">
+  <div class="rapports-actions">
+    <button pnlfButton variant="outline" [loading]="downloading() === 'prod-csv'" (click)="downloadProducteurs()">Producteurs (CSV)</button>
+    <button pnlfButton variant="outline" [loading]="downloading() === 'cert-csv'" (click)="downloadCertifications()">Certifications (CSV)</button>
+  </div>
+</pnlf-card>
+
+<pnlf-card title="Journal d'activité" subtitle="Historique des actions (création, validation, connexion, export…)">
+  <div class="journal-tabs">
+    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'jour'" (click)="setGranularite('jour')">Par jour</button>
+    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'semaine'" (click)="setGranularite('semaine')">Par semaine</button>
+    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'mois'" (click)="setGranularite('mois')">Par mois</button>
+  </div>
+
+  @if (loadingPeriodes()) {
+    <p class="text-sm text-muted">Chargement de l'historique…</p>
+  } @else if (periodes().length === 0) {
+    <pnlf-empty-state icon="file-text" title="Aucun journal disponible" description="Les actions des utilisateurs apparaîtront ici au fil de l'utilisation." />
+  } @else {
+    <div class="journal-periodes">
+      @for (p of periodes(); track p.date) {
+        <button type="button" class="journal-periode" [class.is-selected]="selected()?.date === p.date" (click)="openPeriode(p)">
+          <strong>{{ p.libelle }}</strong>
+          <span>{{ p.nb_evenements }} événement{{ p.nb_evenements > 1 ? 's' : '' }} · {{ p.nb_utilisateurs }} utilisateur{{ p.nb_utilisateurs > 1 ? 's' : '' }}</span>
+        </button>
+      }
+    </div>
+  }
+</pnlf-card>
+
+@if (selected(); as p) {
+  <pnlf-card [title]="'Détail — ' + selectedLibelle()" subtitle="Export possible en CSV, Excel et PDF">
+    <div class="rapports-actions" style="margin-bottom: 1rem;">
+      <button pnlfButton variant="outline" [loading]="downloading() === 'journal-csv'" (click)="downloadJournal('csv')">CSV</button>
+      <button pnlfButton variant="outline" [loading]="downloading() === 'journal-xlsx'" (click)="downloadJournal('xlsx')">Excel (XLSX)</button>
+      <button pnlfButton variant="primary" [loading]="downloading() === 'journal-pdf'" (click)="downloadJournal('pdf')">PDF</button>
+      @if (pdfReadyUrl(); as href) {
+        <a pnlfButton variant="primary" [href]="href" target="_blank" rel="noopener">Ouvrir le PDF</a>
+      }
+    </div>
+
+    @if (loadingEvents()) {
+      <p class="text-sm text-muted">Chargement…</p>
+    } @else if (events().length === 0) {
+      <pnlf-empty-state icon="clock" title="Aucun événement sur cette période" />
+    } @else {
+      <div class="pnlf-table-wrapper">
+        <table class="pnlf-table">
+          <thead><tr><th>Date</th><th>Action</th><th>Cible</th><th>Utilisateur</th><th>IP</th></tr></thead>
+          <tbody>
+            @for (e of events(); track e.id) {
+              <tr>
+                <td>{{ e.created_at | date: 'dd/MM/yyyy HH:mm' }}</td>
+                <td>{{ e.action }}</td>
+                <td class="pnlf-table__muted">{{ e.table_cible || '—' }}</td>
+                <td>{{ e.utilisateur }}</td>
+                <td class="pnlf-table__muted">{{ e.ip_adresse || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <pnlf-pagination [page]="eventsPage()" [pageSize]="eventsPageSize" [total]="eventsTotal()" (pageChange)="goToEventsPage($event)" />
+    }
+  </pnlf-card>
+}

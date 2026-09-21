@@ -8,9 +8,22 @@
   </div>
 </div>
 
+@if (isForestier) {
+  <p class="text-sm text-muted" style="margin-bottom: 1rem;">
+    En tant qu’agent forestier, vous consultez les conflits en lecture seule. Seuls l’administrateur et l’agent du ministère peuvent trancher.
+  </p>
+}
+
+<pnlf-card title="Enregistrer cet appareil" subtitle="Utile pour identifier la tablette ou le téléphone utilisé sur le terrain" style="display:block; margin-bottom:1.5rem;">
+  <div class="sync-register">
+    <input class="pnlf-select" placeholder="Nom de l’appareil (ex : Tablette Minkébé)" [ngModel]="deviceLibelle()" (ngModelChange)="deviceLibelle.set($event)" />
+    <button pnlfButton variant="primary" type="button" [loading]="registering()" (click)="enregistrerAppareil()">Enregistrer cet appareil</button>
+  </div>
+</pnlf-card>
+
 <pnlf-card title="Mes appareils enregistrés" style="display:block; margin-bottom:1.5rem;">
   @if (appareils().length === 0) {
-    <pnlf-empty-state icon="wifi-off" title="Aucun appareil synchronisé pour le moment" />
+    <pnlf-empty-state icon="wifi-off" title="Aucun appareil synchronisé pour le moment" description="Enregistrez cet appareil ci-dessus pour le retrouver ici." />
   } @else {
     <div class="pnlf-table-wrapper">
       <table class="pnlf-table">
@@ -29,31 +42,39 @@
   }
 </pnlf-card>
 
-@if (canResoudre) {
-  <pnlf-card title="Conflits de synchronisation à résoudre">
-    @if (loading()) {
-      <p class="text-sm text-muted">Chargement…</p>
-    } @else if (conflits().length === 0) {
-      <pnlf-empty-state icon="check" title="Aucun conflit en attente" description="Toutes les données de terrain sont synchronisées." />
-    } @else {
-      <div class="conflict-list">
-        @for (c of conflits(); track c.id) {
-          <div class="conflict-card">
-            <div class="conflict-card__meta">
-              <span class="conflict-card__entity">{{ c.entite }}</span>
-              <span class="text-xs text-muted">Réf. client : {{ c.client_uuid }}</span>
-              <span class="text-xs text-muted">Détecté le {{ c.created_at | date: 'dd/MM/yyyy HH:mm' }}</span>
+<pnlf-card title="Conflits de synchronisation à résoudre">
+  @if (loading()) {
+    <p class="text-sm text-muted">Chargement…</p>
+  } @else if (conflits().length === 0) {
+    <pnlf-empty-state icon="check" title="Aucun conflit en attente" description="Toutes les données de terrain sont synchronisées." />
+  } @else {
+    <div class="conflict-list">
+      @for (c of conflits(); track c.id) {
+        <div class="conflict-card">
+          <div class="conflict-card__meta">
+            <span class="conflict-card__entity">{{ c.entite }}</span>
+            <span class="text-xs text-muted">Réf. client : {{ c.client_uuid }}</span>
+            <span class="text-xs text-muted">Détecté le {{ c.created_at | date: 'dd/MM/yyyy HH:mm' }}</span>
+          </div>
+          <div class="conflict-card__payloads">
+            <div>
+              <p class="text-xs text-muted">Version terrain (appareil)</p>
+              <dl class="conflict-dl">
+                @for (f of fieldEntries(c.payload_client); track f.key) {
+                  <div><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></div>
+                }
+              </dl>
             </div>
-            <div class="conflict-card__payloads">
-              <div>
-                <p class="text-xs text-muted">Version terrain (appareil)</p>
-                <pre>{{ c.payload_client | json }}</pre>
-              </div>
-              <div>
-                <p class="text-xs text-muted">Version serveur actuelle</p>
-                <pre>{{ c.payload_serveur | json }}</pre>
-              </div>
+            <div>
+              <p class="text-xs text-muted">Version serveur actuelle</p>
+              <dl class="conflict-dl">
+                @for (f of fieldEntries(c.payload_serveur); track f.key) {
+                  <div><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></div>
+                }
+              </dl>
             </div>
+          </div>
+          @if (canResoudre) {
             <div class="conflict-card__actions">
               <button pnlfButton variant="outline" size="sm" [loading]="resolvingId() === c.id" (click)="resoudre(c, 'CLIENT')">
                 Conserver la version terrain
@@ -62,9 +83,9 @@
                 Conserver la version serveur
               </button>
             </div>
-          </div>
-        }
-      </div>
-    }
-  </pnlf-card>
-}
+          }
+        </div>
+      }
+    </div>
+  }
+</pnlf-card>

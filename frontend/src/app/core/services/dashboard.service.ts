@@ -5,6 +5,34 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { DashboardStats } from '../models/dashboard.model';
 
+export type JournalGranularite = 'jour' | 'semaine' | 'mois';
+export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
+
+export interface JournalPeriode {
+  date: string;
+  libelle: string;
+  nb_evenements: number;
+  nb_utilisateurs: number;
+}
+
+export interface JournalEvent {
+  id: number;
+  created_at: string;
+  action: string;
+  table_cible: string | null;
+  enregistrement_id: string | null;
+  ip_adresse: string | null;
+  utilisateur: string;
+}
+
+export interface JournalDetail {
+  granularite: JournalGranularite;
+  date: string;
+  libelle: string;
+  count: number;
+  results: JournalEvent[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class DashboardService {
   constructor(private readonly http: HttpClient) {}
@@ -13,7 +41,61 @@ export class DashboardService {
     return this.http.get<DashboardStats>(`${environment.apiUrl}/dashboard/stats/`, { params });
   }
 
-  exportUrl(format: 'csv' | 'xlsx' | 'pdf'): string {
+  exportUrl(format: ExportFormat): string {
     return `${environment.apiUrl}/exports/lots/?export_format=${format}`;
   }
+
+  journalPeriodes(granularite: JournalGranularite): Observable<{ granularite: string; results: JournalPeriode[] }> {
+    return this.http.get<{ granularite: string; results: JournalPeriode[] }>(
+      `${environment.apiUrl}/rapports/journal/`,
+      { params: { granularite } },
+    );
+  }
+
+  journalDetail(granularite: JournalGranularite, date: string, page = 1, pageSize = 25): Observable<JournalDetail> {
+    return this.http.get<JournalDetail>(`${environment.apiUrl}/rapports/journal/detail/`, {
+      params: { granularite, date, page: String(page), page_size: String(pageSize) },
+    });
+  }
+
+  journalExportUrl(granularite: JournalGranularite, date: string, format: ExportFormat): string {
+    return `${environment.apiUrl}/exports/journal/?granularite=${granularite}&date=${date}&export_format=${format}`;
+  }
+
+  createLotsPdfTicket(): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${environment.apiUrl}/exports/lots/ticket/`, {});
+  }
+
+  createJournalPdfTicket(granularite: JournalGranularite, date: string): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${environment.apiUrl}/exports/journal/ticket/`, {
+      granularite,
+      date,
+    });
+  }
+
+  aTraiter(): Observable<InboxValidation> {
+    return this.http.get<InboxValidation>(`${environment.apiUrl}/dashboard/a-traiter/`);
+  }
+}
+
+export interface InboxItem {
+  id: string;
+  nom?: string;
+  prenoms?: string;
+  code_producteur?: string;
+  code?: string;
+  titre?: string;
+  type_annonce?: string;
+  type_libelle?: string;
+  producteur_nom?: string;
+  statut?: string;
+  created_at: string;
+}
+
+export interface InboxValidation {
+  producteurs: { count: number; results: InboxItem[] };
+  cooperatives: { count: number; results: InboxItem[] };
+  certifications: { count: number; results: InboxItem[] };
+  offres: { count: number; results: InboxItem[] };
+  acheteurs?: { count: number; results: InboxItem[] };
 }

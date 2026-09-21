@@ -1,0 +1,127 @@
+@if (loading()) {
+  <pnlf-skeleton height="360px" radius="16px" />
+} @else if (offre(); as o) {
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">{{ o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }} · {{ o.produit_nom }}</p>
+      <h1 class="pnlf-page-header__title">{{ o.titre }}</h1>
+      <pnlf-status-badge [label]="statutLabels[o.statut]" [tone]="o.statut === 'OUVERTE' ? 'success' : o.statut === 'EN_VALIDATION' ? 'warning' : o.statut === 'REJETEE' ? 'danger' : 'neutral'" />
+    </div>
+    <div class="offre-detail__actions">
+      @if (canValidate && o.statut === 'EN_VALIDATION') {
+        <button pnlfButton variant="primary" [loading]="acting()" (click)="valider()">Valider &amp; publier</button>
+        <button pnlfButton variant="ghost" [disabled]="acting()" (click)="rejeter()">Rejeter</button>
+      }
+      @if ((isAuteur() || canValidate) && o.statut === 'OUVERTE') {
+        <button pnlfButton variant="ghost" [disabled]="acting()" (click)="cloturer()">Clôturer</button>
+      }
+      <a pnlfButton routerLink="/app/marketplace/offres" variant="ghost">← Retour à la liste</a>
+    </div>
+  </div>
+
+  <div class="offre-detail__grid">
+    <section class="offre-detail__gallery">
+      @if (o.photos_urls?.length) {
+        <div class="offre-detail__main-photo">
+          <img [src]="o.photos_urls![activePhoto()]" [alt]="o.titre" />
+        </div>
+        @if (o.photos_urls!.length > 1) {
+          <div class="offre-detail__thumbs">
+            @for (url of o.photos_urls!; track url; let i = $index) {
+              <button type="button" class="offre-detail__thumb" [class.is-active]="i === activePhoto()" (click)="selectPhoto(i)">
+                <img [src]="url" [alt]="o.titre" />
+              </button>
+            }
+          </div>
+        }
+      } @else {
+        <div class="offre-detail__no-photo">Aucune photo fournie pour cette annonce</div>
+      }
+
+      @if (o.qr_image_url) {
+        <pnlf-card title="QR code de vérification publique" class="offre-detail__qr-card">
+          <img [src]="o.qr_image_url" alt="QR code de l'annonce" class="offre-detail__qr" />
+        </pnlf-card>
+      }
+    </section>
+
+    <section class="offre-detail__info">
+      <pnlf-card title="Détails de l'annonce">
+        <dl class="offre-detail__dl">
+          <div><dt>Publié par</dt><dd>{{ o.auteur_nom || '—' }}</dd></div>
+          <div><dt>Produit</dt><dd>{{ o.produit_nom || '—' }}</dd></div>
+          <div><dt>Province</dt><dd>{{ o.province_nom || 'Non précisée' }}</dd></div>
+          @if (o.quantite) {
+            <div><dt>Quantité</dt><dd>{{ o.quantite }} {{ o.unite }}</dd></div>
+          }
+          @if (o.prix_unitaire) {
+            <div><dt>Prix unitaire indicatif</dt><dd>{{ o.prix_unitaire | number }} {{ o.devise }}</dd></div>
+          }
+          <div><dt>Certification requise</dt><dd>{{ o.certification_requise ? 'Oui' : 'Non' }}</dd></div>
+          <div><dt>Publiée le</dt><dd>{{ o.created_at | date: 'dd/MM/yyyy' }}</dd></div>
+        </dl>
+      </pnlf-card>
+
+      @if (o.description) {
+        <pnlf-card title="Description">
+          <p class="offre-detail__desc">{{ o.description }}</p>
+        </pnlf-card>
+      }
+
+      <pnlf-card title="Échanges liés à cette annonce" subtitle="Les messages restent dans l’historique de l’annonce — ils ne quittent pas la plateforme.">
+        @if (fil().length === 0) {
+          <p class="offre-detail__desc">{{ isAuteur() ? 'Aucun message reçu pour le moment.' : 'Présentez-vous et précisez votre besoin. L’auteur pourra vous répondre ici.' }}</p>
+        } @else {
+          <ul class="offre-thread">
+            @for (m of fil(); track m.id) {
+              <li [class.is-me]="m.expediteur_id === currentUserId">
+                @if (m.piece_type === 'IMAGE' && m.piece_url) {
+                  <a [href]="m.piece_url" target="_blank" rel="noopener"><img [src]="m.piece_url" alt="Image" style="max-width: 220px; border-radius: 8px;" /></a>
+                }
+                @if (m.piece_type === 'AUDIO' && m.piece_url) {
+                  <audio [src]="m.piece_url" controls preload="metadata"></audio>
+                }
+                @if (m.contenu) {
+                  <p>{{ m.contenu }}</p>
+                }
+                <time>{{ m.created_at | date: 'dd/MM/yyyy HH:mm' }}</time>
+              </li>
+            }
+          </ul>
+        }
+        <textarea class="pnlf-select" rows="4" placeholder="Votre message…" [ngModel]="message()" (ngModelChange)="message.set($event)"></textarea>
+        <div class="offre-thread__actions" style="margin-top: 0.75rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <button pnlfButton variant="primary" type="button" [loading]="sending()" [disabled]="!message().trim()" (click)="repondre()">Envoyer</button>
+          @if (conversationId()) {
+            <a pnlfButton variant="ghost" [routerLink]="['/app/messagerie']" [queryParams]="{ conversation: conversationId() }">Ouvrir dans la messagerie</a>
+          }
+        </div>
+      </pnlf-card>
+    </section>
+  </div>
+} @else {
+  <pnlf-empty-state icon="shopping-bag" title="Annonce introuvable" />
+}
+
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'rejeter'"
+  title="Rejeter l’annonce"
+  message="Le motif sera communiqué à l’auteur."
+  confirmLabel="Rejeter"
+  [danger]="true"
+  [inputRequired]="true"
+  inputLabel="Motif du rejet"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'cloturer'"
+  title="Clôturer cette annonce ?"
+  message="Elle ne sera plus visible du public."
+  confirmLabel="Clôturer"
+  [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>

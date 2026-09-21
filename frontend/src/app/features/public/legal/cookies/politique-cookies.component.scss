@@ -1,0 +1,10 @@
+@use '../legal-page' as *;
+
+.legal-consent-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}

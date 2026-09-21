@@ -50,6 +50,8 @@ export class ProducteurFormComponent {
   readonly departements = signal<SelectOption[]>([]);
   readonly villages = signal<SelectOption[]>([]);
   readonly cooperatives = signal<SelectOption[]>([]);
+  readonly locatingGps = signal(false);
+  readonly gpsError = signal('');
 
   readonly typeActeurOptions: SelectOption[] = [
     { value: 'PRODUCTEUR', label: 'Producteur' },
@@ -124,6 +126,29 @@ export class ProducteurFormComponent {
         this.loading.set(false);
       });
     }
+  }
+
+  useCurrentPosition(): void {
+    if (!('geolocation' in navigator)) {
+      this.gpsError.set("La géolocalisation n'est pas disponible sur cet appareil.");
+      return;
+    }
+    this.gpsError.set('');
+    this.locatingGps.set(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        this.form.patchValue({
+          latitude: position.coords.latitude.toFixed(7),
+          longitude: position.coords.longitude.toFixed(7),
+        });
+        this.locatingGps.set(false);
+      },
+      () => {
+        this.gpsError.set('Impossible de récupérer votre position.');
+        this.locatingGps.set(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   }
 
   submit(): void {

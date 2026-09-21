@@ -1,16 +1,10 @@
 <div class="verify-page">
-  <header class="verify-page__header">
-    <a routerLink="/connexion" class="verify-page__brand">
-      <img src="assets/brand/logo-ministere.jpg" alt="Emblème de la République Gabonaise" />
-      <div>
-        <p class="verify-page__brand-title">PNLF · Vérification d'authenticité</p>
-        <p class="verify-page__brand-subtitle">Ministère des Eaux et Forêts — République Gabonaise</p>
-      </div>
+  <div class="verify-page__main">
+    <a routerLink="/" class="verify-page__back">
+      <pnlf-icon name="arrow-left" [size]="16" />
+      Retour à l'accueil
     </a>
-    <a routerLink="/connexion" class="verify-page__login-link">Accès professionnel →</a>
-  </header>
 
-  <main class="verify-page__main">
     <div class="verify-page__intro">
       <p class="text-eyebrow">Service public gratuit</p>
       <h1 class="verify-page__title">Vérifier l'authenticité d'un produit forestier non ligneux</h1>
@@ -22,13 +16,17 @@
 
     <div class="verify-card">
       <form (ngSubmit)="submit()" class="verify-card__form">
+        <label class="sr-only" for="verify-code">Code de traçabilité</label>
         <input
+          id="verify-code"
           type="text"
           class="verify-card__input"
           placeholder="Coller le code ou le lien du QR (ex : 3f1a2b4c-…)"
           [ngModel]="code()"
           (ngModelChange)="code.set($event)"
           name="code"
+          autocomplete="off"
+          enterkeyhint="search"
         />
         <button pnlfButton type="submit" variant="primary" size="lg" [loading]="loading()">Vérifier</button>
       </form>
@@ -36,12 +34,46 @@
       <div class="verify-card__divider"><span>ou</span></div>
 
       <button pnlfButton type="button" variant="outline" size="md" [fullWidth]="true" (click)="toggleScanner()">
-        {{ scannerActive() ? 'Fermer le scanner' : '📷 Scanner un QR code avec la caméra' }}
+        <pnlf-icon name="camera" [size]="16" />
+        {{ scannerActive() ? 'Fermer le scanner' : 'Scanner un QR code avec la caméra' }}
       </button>
 
       @if (scannerActive()) {
         <div id="qr-reader" #qrReader class="verify-card__scanner"></div>
       }
+
+      <div class="verify-card__divider"><span>ou</span></div>
+
+      <div
+        class="verify-dropzone"
+        [class.is-active]="dragActive()"
+        [class.is-busy]="fileScanning()"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave($event)"
+        (drop)="onDrop($event)"
+        (click)="openFilePicker()"
+        role="button"
+        tabindex="0"
+        (keydown.enter)="openFilePicker()"
+        aria-label="Déposer ou importer une photo du QR code"
+      >
+        @if (fileScanning()) {
+          <pnlf-spinner size="md" />
+          <p>Analyse de l'image…</p>
+        } @else {
+          <pnlf-icon name="download" [size]="24" />
+          <p><strong>Glissez-déposez</strong> une photo du QR code ici</p>
+          <p class="verify-dropzone__hint">ou cliquez pour importer une image (JPEG, PNG…)</p>
+        }
+      </div>
+      <input
+        #fileInput
+        type="file"
+        accept="image/*"
+        class="sr-only"
+        (change)="onFileInputChange($event)"
+      />
+      <div id="qr-reader-file" class="verify-card__scanner-hidden"></div>
     </div>
 
     @if (loading()) {
@@ -51,7 +83,7 @@
       </div>
     } @else if (result(); as r) {
       <div class="verify-result verify-result--authentic">
-        <div class="verify-result__seal">✓</div>
+        <div class="verify-result__seal" aria-hidden="true">✓</div>
         <h2>Produit authentique</h2>
         <p class="verify-result__code">{{ r.code_lot }}</p>
 
@@ -61,24 +93,43 @@
           <div><dt>Province d'origine</dt><dd>{{ r.province_nom }}</dd></div>
           <div><dt>Date de collecte</dt><dd>{{ r.date_collecte | date: 'dd/MM/yyyy' }}</dd></div>
           <div><dt>Quantité déclarée</dt><dd>{{ r.quantite }} {{ r.unite }}</dd></div>
-          <div><dt>Statut actuel</dt><dd><pnlf-status-badge [label]="statutLabels[r.statut]" [tone]="tone(r.statut)" /></dd></div>
+          <div><dt>Statut actuel</dt><dd><pnlf-status-badge [label]="r.statut_libelle || statutLabels[r.statut]" [tone]="tone(r.statut)" /></dd></div>
           <div><dt>Étapes de traçabilité</dt><dd>{{ r.mouvements_count }} mouvement(s) enregistré(s)</dd></div>
         </dl>
 
-        <button pnlfButton variant="ghost" size="sm" (click)="reset()">Vérifier un autre produit</button>
+        @if (r.photos_urls?.length) {
+          <div class="verify-photos">
+            @for (url of r.photos_urls; track url) {
+              <img [src]="url" [alt]="'Photo du lot ' + r.code_lot" />
+            }
+          </div>
+        }
+
+        @if (r.mouvements?.length) {
+          <ol class="verify-frise">
+            @for (m of r.mouvements; track $index) {
+              <li>
+                <strong>{{ m.type_libelle }}</strong>
+                <span>{{ m.date_mouvement | date: 'dd/MM/yyyy' }}@if (m.lieu_libelle) { · {{ m.lieu_libelle }} }</span>
+              </li>
+            }
+          </ol>
+        }
+
+        <div class="verify-share">
+          <button pnlfButton type="button" variant="outline" size="sm" (click)="partager(r)">Partager</button>
+          <button pnlfButton type="button" variant="ghost" size="sm" (click)="imprimer()">Imprimer</button>
+        </div>
+
+        <button pnlfButton type="button" variant="ghost" size="sm" (click)="reset()">Vérifier un autre produit</button>
       </div>
     } @else if (searched() && errorMessage()) {
       <div class="verify-result verify-result--invalid">
-        <div class="verify-result__seal verify-result__seal--danger">✕</div>
+        <div class="verify-result__seal verify-result__seal--danger" aria-hidden="true">✕</div>
         <h2>Produit non vérifiable</h2>
         <pnlf-alert tone="warning">{{ errorMessage() }}</pnlf-alert>
-        <button pnlfButton variant="ghost" size="sm" (click)="reset()">Réessayer</button>
+        <button pnlfButton type="button" variant="ghost" size="sm" (click)="reset()">Réessayer</button>
       </div>
     }
-  </main>
-
-  <footer class="verify-page__footer">
-    © {{ 2026 }} République Gabonaise — Ministère des Eaux et Forêts. Plateforme Numérique de
-    Traçabilité des PFNL.
-  </footer>
+  </div>
 </div>

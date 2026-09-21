@@ -6,12 +6,23 @@
       Registre national des producteurs et collecteurs de produits forestiers non ligneux.
     </p>
   </div>
-  @if (canCreate) {
-    <a pnlfButton routerLink="/app/producteurs/nouveau" variant="primary">
-      + Enregistrer une fiche
-    </a>
-  }
+  <div class="pnlf-page-header__actions">
+    <button pnlfButton variant="outline" type="button" [loading]="exportingPdf()" (click)="exporterListePdf()">
+      Exporter la liste (PDF)
+    </button>
+    @if (canCreate) {
+      <a pnlfButton routerLink="/app/producteurs/nouveau" variant="primary">
+        + Enregistrer une fiche
+      </a>
+    }
+  </div>
 </div>
+
+@if (pdfReadyUrl(); as href) {
+  <a class="producteurs-list__pdf-fallback" [href]="href" target="_blank" rel="noopener">
+    Ouvrir le PDF de la liste →
+  </a>
+}
 
 <div class="pnlf-toolbar">
   <div class="pnlf-toolbar__filters">
@@ -56,7 +67,14 @@
     icon="users"
     title="Aucun producteur trouvé"
     description="Ajustez vos filtres de recherche ou enregistrez une nouvelle fiche."
-  />
+  >
+    @if (canCreate) {
+      <a pnlfButton routerLink="/app/producteurs/nouveau" variant="primary">Enregistrer une fiche</a>
+    }
+    @if (search() || provinceFilter() || statutFilter()) {
+      <button pnlfButton type="button" variant="ghost" (click)="search.set(''); provinceFilter.set(''); statutFilter.set(''); onFilterChange()">Réinitialiser les filtres</button>
+    }
+  </pnlf-empty-state>
 } @else {
   <div class="pnlf-table-wrapper">
     <table class="pnlf-table">
@@ -91,6 +109,14 @@
                     <button pnlfButton variant="outline" size="sm" (click)="valider(p)">Valider</button>
                     <button pnlfButton variant="ghost" size="sm" (click)="rejeter(p)">Rejeter</button>
                   </div>
+                } @else if (p.statut === StatutProducteur.ACTIF) {
+                  <div class="pnlf-table__actions">
+                    <button pnlfButton variant="ghost" size="sm" (click)="desactiver(p)">Désactiver</button>
+                  </div>
+                } @else if (p.statut === StatutProducteur.INACTIF) {
+                  <div class="pnlf-table__actions">
+                    <button pnlfButton variant="outline" size="sm" (click)="activer(p)">Réactiver</button>
+                  </div>
                 }
               </td>
             }
@@ -102,3 +128,26 @@
 
   <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
 }
+
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'rejeter'"
+  title="Rejeter la fiche"
+  message="Le motif sera communiqué au demandeur par e-mail et SMS."
+  confirmLabel="Rejeter"
+  [danger]="true"
+  [inputRequired]="true"
+  inputLabel="Motif du rejet"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'desactiver'"
+  title="Désactiver cette fiche ?"
+  message="Elle disparaîtra de l’annuaire public."
+  confirmLabel="Désactiver"
+  [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>

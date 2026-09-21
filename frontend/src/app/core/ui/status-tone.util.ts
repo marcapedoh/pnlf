@@ -1,7 +1,7 @@
 import { BadgeTone } from '../../design-system/badge/status-badge.component';
 import { StatutCertification } from '../models/certification.model';
 import { StatutLot } from '../models/lot.model';
-import { StatutProducteur } from '../models/producteur.model';
+import { StatutCooperative, StatutProducteur } from '../models/producteur.model';
 
 export function lotStatusTone(statut: StatutLot): BadgeTone {
   switch (statut) {
@@ -27,6 +27,19 @@ export function producteurStatusTone(statut: StatutProducteur): BadgeTone {
     case StatutProducteur.EN_VALIDATION:
       return 'warning';
     case StatutProducteur.REJETE:
+      return 'danger';
+    default:
+      return 'neutral';
+  }
+}
+
+export function cooperativeStatusTone(statut: StatutCooperative): BadgeTone {
+  switch (statut) {
+    case StatutCooperative.ACTIF:
+      return 'success';
+    case StatutCooperative.EN_VALIDATION:
+      return 'warning';
+    case StatutCooperative.REJETE:
       return 'danger';
     default:
       return 'neutral';

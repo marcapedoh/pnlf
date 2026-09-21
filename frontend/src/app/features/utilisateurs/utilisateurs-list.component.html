@@ -28,29 +28,93 @@
   </pnlf-card>
 }
 
+<div class="pnlf-toolbar">
+  <div class="pnlf-toolbar__filters">
+    <input
+      type="search"
+      class="pnlf-select pnlf-toolbar__search"
+      placeholder="Rechercher un nom, un e-mail, un téléphone…"
+      [ngModel]="search()"
+      (ngModelChange)="onSearchInput($event)"
+    />
+    <select class="pnlf-select" [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event); onFilterChange()">
+      <option value="">Tous les rôles</option>
+      @for (r of roleOptions; track r.value) {
+        <option [value]="r.value">{{ r.label }}</option>
+      }
+    </select>
+    <select class="pnlf-select" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
+      <option value="">Tous les statuts</option>
+      @for (s of [StatutCompte.ACTIF, StatutCompte.EN_ATTENTE, StatutCompte.SUSPENDU, StatutCompte.INACTIF]; track s) {
+        <option [value]="s">{{ statutLabels[s] }}</option>
+      }
+    </select>
+  </div>
+</div>
+
 @if (loading()) {
-  <p class="text-sm text-muted">Chargement…</p>
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <tbody>
+        @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+          <tr><td colspan="5"><pnlf-skeleton height="18px" /></td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
 } @else if (items().length === 0) {
-  <pnlf-empty-state icon="lock" title="Aucun utilisateur" />
+  <pnlf-empty-state
+    icon="lock"
+    title="Aucun utilisateur"
+    description="Aucun compte ne correspond à vos filtres. Élargissez la recherche ou créez un compte."
+  />
 } @else {
   <div class="pnlf-table-wrapper">
     <table class="pnlf-table">
       <thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
       <tbody>
         @for (u of items(); track u.id) {
-          <tr>
+          <tr class="user-row" (click)="openDetail(u)">
             <td>{{ u.prenoms }} {{ u.nom }}</td>
             <td class="pnlf-table__muted">{{ u.email }}</td>
             <td>{{ roleLabels[u.role] }}</td>
-            <td><pnlf-status-badge [label]="u.statut" [tone]="u.statut === StatutCompte.ACTIF ? 'success' : 'neutral'" /></td>
+            <td><pnlf-status-badge [label]="statutLabels[u.statut]" [tone]="statutTone(u.statut)" /></td>
             <td>
-              <button pnlfButton variant="ghost" size="sm" (click)="toggleStatus(u)">
-                {{ u.statut === StatutCompte.ACTIF ? 'Suspendre' : 'Activer' }}
-              </button>
+              <div class="user-row__actions" (click)="$event.stopPropagation()">
+                <a class="pnlf-table__link" [routerLink]="['/app/utilisateurs', u.id]">Voir la fiche →</a>
+                <button pnlfButton variant="ghost" size="sm" (click)="toggleStatus(u, $event)">
+                  {{ u.statut === StatutCompte.ACTIF ? 'Suspendre' : 'Activer' }}
+                </button>
+                <button
+                  pnlfButton
+                  variant="ghost"
+                  size="sm"
+                  [loading]="resettingId() === u.id"
+                  (click)="resetPassword(u, $event)"
+                >
+                  Réinitialiser MDP
+                </button>
+                <button pnlfButton variant="ghost" size="sm" (click)="askDelete(u, $event)">
+                  Supprimer
+                </button>
+              </div>
             </td>
           </tr>
         }
       </tbody>
     </table>
   </div>
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
 }
+
+<pnlf-confirm-dialog
+  [open]="confirmDeleteOpen()"
+  title="Supprimer cet utilisateur ?"
+  message="Le compte sera désactivé et ne pourra plus se connecter. Cette action est réservée à l’administrateur."
+  confirmLabel="Supprimer"
+  [danger]="true"
+  [loading]="deleting()"
+  (confirmed)="confirmDelete()"
+  (cancelled)="confirmDeleteOpen.set(false); pendingDelete.set(null)"
+/>

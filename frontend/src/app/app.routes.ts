@@ -8,6 +8,105 @@ const R = RoleUtilisateur;
 
 export const routes: Routes = [
   {
+    path: '',
+    loadComponent: () =>
+      import('./layout/public-shell/public-shell.component').then((m) => m.PublicShellComponent),
+    children: [
+      {
+        path: '',
+        pathMatch: 'full',
+        loadComponent: () => import('./features/public/home/home-page.component').then((m) => m.HomePageComponent),
+        title: 'PNLF-PFNL | Traçabilité des PFNL du Gabon',
+      },
+      {
+        path: 'annuaire',
+        loadComponent: () =>
+          import('./features/public/annuaire/annuaire-public.component').then((m) => m.AnnuairePublicComponent),
+        title: 'Annuaire des producteurs — PNLF-PFNL',
+      },
+      {
+        path: 'annuaire/lot/:id',
+        loadComponent: () =>
+          import('./features/public/lot-public/lot-public-detail.component').then(
+            (m) => m.LotPublicDetailComponent,
+          ),
+        title: 'Fiche du lot — PNLF-PFNL',
+      },
+      {
+        path: 'annuaire/:id',
+        loadComponent: () =>
+          import('./features/public/producteur-public/producteur-public-detail.component').then(
+            (m) => m.ProducteurPublicDetailComponent,
+          ),
+        title: 'Fiche producteur — PNLF-PFNL',
+      },
+      {
+        path: 'offres-demandes',
+        loadComponent: () =>
+          import('./features/public/offres/offres-publiques.component').then((m) => m.OffresPubliquesComponent),
+        title: 'Offres & demandes — PNLF-PFNL',
+      },
+      {
+        path: 'offres-demandes/:id',
+        loadComponent: () =>
+          import('./features/public/offres/offre-publique-detail.component').then(
+            (m) => m.OffrePubliqueDetailComponent,
+          ),
+        title: "Fiche d'annonce — PNLF-PFNL",
+      },
+      {
+        path: 'inscription',
+        canActivate: [guestGuard],
+        loadComponent: () =>
+          import('./features/public/inscription/inscription-publique.component').then(
+            (m) => m.InscriptionPubliqueComponent,
+          ),
+        title: 'Inscription — PNLF-PFNL',
+      },
+      {
+        path: 'verifier',
+        loadComponent: () =>
+          import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
+        title: 'Vérifier un produit — PNLF-PFNL',
+      },
+      {
+        path: 'verifier/:uuid',
+        loadComponent: () =>
+          import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
+        title: 'Vérifier un produit — PNLF-PFNL',
+      },
+      {
+        path: 'faq',
+        loadComponent: () => import('./features/public/legal/faq/faq.component').then((m) => m.FaqComponent),
+        title: 'Foire aux questions — PNLF-PFNL',
+      },
+      {
+        path: 'politique-confidentialite',
+        loadComponent: () =>
+          import('./features/public/legal/confidentialite/confidentialite.component').then(
+            (m) => m.ConfidentialiteComponent,
+          ),
+        title: 'Politique de confidentialité — PNLF-PFNL',
+      },
+      {
+        path: 'conditions-utilisation',
+        loadComponent: () =>
+          import('./features/public/legal/conditions-utilisation/conditions-utilisation.component').then(
+            (m) => m.ConditionsUtilisationComponent,
+          ),
+        title: "Conditions d'utilisation — PNLF-PFNL",
+      },
+      {
+        path: 'politique-cookies',
+        loadComponent: () =>
+          import('./features/public/legal/cookies/politique-cookies.component').then(
+            (m) => m.PolitiqueCookiesComponent,
+          ),
+        title: 'Politique de cookies — PNLF-PFNL',
+      },
+    ],
+  },
+  {
     path: 'connexion',
     canActivate: [guestGuard],
     loadComponent: () => import('./features/auth/login/login.component').then((m) => m.LoginComponent),
@@ -41,16 +140,6 @@ export const routes: Routes = [
     title: 'Changer le mot de passe — PNLF-PFNL',
   },
   {
-    path: 'verifier',
-    loadComponent: () => import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
-    title: 'Vérification de traçabilité — PNLF-PFNL',
-  },
-  {
-    path: 'verifier/:uuid',
-    loadComponent: () => import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
-    title: 'Vérification de traçabilité — PNLF-PFNL',
-  },
-  {
     path: 'app',
     canActivate: [authGuard],
     loadComponent: () => import('./layout/shell/shell.component').then((m) => m.ShellComponent),
@@ -62,8 +151,17 @@ export const routes: Routes = [
         title: 'Tableau de bord — PNLF-PFNL',
       },
       {
+        path: 'a-traiter',
+        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
+        loadComponent: () =>
+          import('./features/validation/a-traiter.component').then((m) => m.ATraiterComponent),
+        title: 'À traiter — PNLF-PFNL',
+      },
+      {
         path: 'producteurs',
-        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.COOPERATIVE)],
+        canActivate: [
+          roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.COOPERATIVE, R.PRODUCTEUR),
+        ],
         children: [
           {
             path: '',
@@ -75,6 +173,9 @@ export const routes: Routes = [
           },
           {
             path: 'nouveau',
+            canActivate: [
+              roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.COOPERATIVE),
+            ],
             loadComponent: () =>
               import('./features/producteurs/producteur-form/producteur-form.component').then(
                 (m) => m.ProducteurFormComponent,
@@ -135,15 +236,45 @@ export const routes: Routes = [
       },
       {
         path: 'zones-collecte',
-        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
-        loadComponent: () =>
-          import('./features/zones-collecte/zones-collecte-list.component').then(
-            (m) => m.ZonesCollecteListComponent,
+        canActivate: [
+          roleGuard(
+            R.ADMINISTRATEUR,
+            R.AGENT_MINISTERE,
+            R.AGENT_FORESTIER,
+            R.PRODUCTEUR,
+            R.COOPERATIVE,
           ),
-        title: 'Zones de collecte — PNLF-PFNL',
+        ],
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/zones-collecte/zones-collecte-list.component').then(
+                (m) => m.ZonesCollecteListComponent,
+              ),
+            title: 'Zones de collecte — PNLF-PFNL',
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./features/zones-collecte/zone-collecte-detail/zone-collecte-detail.component').then(
+                (m) => m.ZoneCollecteDetailComponent,
+              ),
+            title: 'Détail de la zone — PNLF-PFNL',
+          },
+        ],
       },
       {
         path: 'certifications',
+        canActivate: [
+          roleGuard(
+            R.ADMINISTRATEUR,
+            R.AGENT_MINISTERE,
+            R.AGENT_FORESTIER,
+            R.PRODUCTEUR,
+            R.COOPERATIVE,
+          ),
+        ],
         loadComponent: () =>
           import('./features/certifications/certifications-list.component').then(
             (m) => m.CertificationsListComponent,
@@ -153,9 +284,22 @@ export const routes: Routes = [
       {
         path: 'cooperatives',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.COOPERATIVE)],
-        loadComponent: () =>
-          import('./features/cooperatives/cooperatives-list.component').then((m) => m.CooperativesListComponent),
-        title: 'Coopératives — PNLF-PFNL',
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/cooperatives/cooperatives-list.component').then((m) => m.CooperativesListComponent),
+            title: 'Coopératives — PNLF-PFNL',
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./features/cooperatives/cooperative-detail/cooperative-detail.component').then(
+                (m) => m.CooperativeDetailComponent,
+              ),
+            title: 'Détail de la coopérative — PNLF-PFNL',
+          },
+        ],
       },
       {
         path: 'marketplace/annuaire',
@@ -164,28 +308,79 @@ export const routes: Routes = [
         title: 'Annuaire de la filière — PNLF-PFNL',
       },
       {
-        path: 'marketplace/offres',
-        canActivate: [roleGuard(R.PRODUCTEUR, R.COOPERATIVE, R.ACHETEUR, R.ADMINISTRATEUR, R.AGENT_MINISTERE)],
+        path: 'messagerie',
+        canActivate: [
+          roleGuard(
+            R.PRODUCTEUR,
+            R.COOPERATIVE,
+            R.ACHETEUR,
+            R.ADMINISTRATEUR,
+            R.AGENT_MINISTERE,
+            R.AGENT_FORESTIER,
+          ),
+        ],
         loadComponent: () =>
-          import('./features/marketplace/offres/offres-list.component').then((m) => m.OffresListComponent),
-        title: 'Offres & demandes — PNLF-PFNL',
+          import('./features/messagerie/messagerie.component').then((m) => m.MessagerieComponent),
+        title: 'Messagerie — PNLF-PFNL',
+      },
+      {
+        path: 'marketplace/offres',
+        canActivate: [
+          roleGuard(
+            R.PRODUCTEUR,
+            R.COOPERATIVE,
+            R.ACHETEUR,
+            R.ADMINISTRATEUR,
+            R.AGENT_MINISTERE,
+            R.AGENT_FORESTIER,
+          ),
+        ],
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/marketplace/offres/offres-list.component').then((m) => m.OffresListComponent),
+            title: 'Offres & demandes — PNLF-PFNL',
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./features/marketplace/offres/offre-detail/offre-detail.component').then(
+                (m) => m.OffreDetailComponent,
+              ),
+            title: "Détail de l'annonce — PNLF-PFNL",
+          },
+        ],
       },
       {
         path: 'utilisateurs',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE)],
-        loadComponent: () =>
-          import('./features/utilisateurs/utilisateurs-list.component').then((m) => m.UtilisateursListComponent),
-        title: 'Comptes utilisateurs — PNLF-PFNL',
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/utilisateurs/utilisateurs-list.component').then((m) => m.UtilisateursListComponent),
+            title: 'Comptes utilisateurs — PNLF-PFNL',
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./features/utilisateurs/utilisateur-detail/utilisateur-detail.component').then(
+                (m) => m.UtilisateurDetailComponent,
+              ),
+            title: 'Fiche utilisateur — PNLF-PFNL',
+          },
+        ],
       },
       {
         path: 'rapports',
-        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE)],
+        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () => import('./features/rapports/rapports.component').then((m) => m.RapportsComponent),
         title: 'Rapports & exports — PNLF-PFNL',
       },
       {
         path: 'synchronisation',
-        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_FORESTIER)],
+        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () =>
           import('./features/synchronisation/synchronisation.component').then((m) => m.SynchronisationComponent),
         title: 'Synchronisation terrain — PNLF-PFNL',
@@ -211,10 +406,11 @@ export const routes: Routes = [
       },
     ],
   },
-  { path: '', pathMatch: 'full', redirectTo: 'connexion' },
   {
-    path: '**',
-    loadComponent: () => import('./features/errors/not-found/not-found.component').then((m) => m.NotFoundComponent),
-    title: 'Page introuvable — PNLF-PFNL',
+    path: 'erreur-400',
+    loadComponent: () =>
+      import('./features/errors/bad-request/bad-request.component').then((m) => m.BadRequestComponent),
+    title: 'Requête invalide — PNLF-PFNL',
   },
+  { path: '**', loadComponent: () => import('./features/errors/not-found/not-found.component').then((m) => m.NotFoundComponent), title: 'Page introuvable — PNLF-PFNL' },
 ];

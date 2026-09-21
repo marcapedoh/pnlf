@@ -2,14 +2,59 @@
   <div>
     <p class="text-eyebrow">Traçabilité · Référentiel géographique</p>
     <h1 class="pnlf-page-header__title">Zones de collecte</h1>
-    <p class="pnlf-page-header__subtitle">Aires de collecte référencées pour le rattachement des lots.</p>
+    <p class="pnlf-page-header__subtitle">Aires de collecte référencées pour le rattachement des lots, avec leurs coordonnées WGS84.</p>
   </div>
   @if (canManage) {
-    <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
-      {{ showForm() ? 'Annuler' : '+ Nouvelle zone' }}
-    </button>
+    <div class="zone-page__actions">
+      <button pnlfButton variant="outline" (click)="showImport.set(!showImport()); showForm.set(false)">
+        {{ showImport() ? 'Annuler' : 'Importer un fichier' }}
+      </button>
+      <a pnlfButton variant="ghost" [href]="modeleUrl" (click)="telechargerModele($event)">Télécharger le modèle CSV</a>
+      <button pnlfButton variant="primary" (click)="showForm.set(!showForm()); showImport.set(false)">
+        {{ showForm() ? 'Annuler' : '+ Nouvelle zone' }}
+      </button>
+    </div>
+  } @else {
+    <p class="text-sm text-muted zone-import__hint" style="margin-bottom: 1rem;">
+      Seules les autorités (admin, ministère, forestier) enrichissent le référentiel national.
+      Vous pouvez toutefois créer une zone au moment de déclarer un lot.
+    </p>
   }
 </div>
+
+@if (showImport()) {
+  <pnlf-card title="Importer des zones depuis un fichier CSV ou XLSX" style="display:block; margin-bottom:1.5rem;">
+    <p class="text-sm text-muted zone-import__hint">
+      Colonnes attendues (en-tête) : <code>code</code>, <code>libelle</code>, <code>province</code> (code ou nom),
+      <code>description</code>, <code>latitude</code>, <code>longitude</code>. Une zone existante (même code) est mise à jour.
+    </p>
+    @if (importError()) {
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ importError() }}</pnlf-alert>
+    }
+    <div class="zone-import__row">
+      <label class="zone-import__file">
+        <input type="file" accept=".csv,.xlsx" (change)="onImportFileSelected($event)" hidden />
+        {{ importFileName() || 'Choisir un fichier…' }}
+      </label>
+      <button pnlfButton variant="primary" [loading]="importing()" (click)="importer()">Lancer l'import</button>
+    </div>
+    @if (importResult(); as res) {
+      <div class="zone-import__result">
+        <p class="text-sm">
+          <strong>{{ res.total_lignes }}</strong> ligne(s) traitée(s) —
+          <strong>{{ res.crees }}</strong> créée(s), <strong>{{ res.mis_a_jour }}</strong> mise(s) à jour.
+        </p>
+        @if (res.erreurs.length) {
+          <ul class="zone-import__errors">
+            @for (e of res.erreurs; track e) {
+              <li>{{ e }}</li>
+            }
+          </ul>
+        }
+      </div>
+    }
+  </pnlf-card>
+}
 
 @if (showForm()) {
   <pnlf-card title="Créer une zone de collecte" style="display:block; margin-bottom:1.5rem;">
@@ -21,6 +66,8 @@
       <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" />
       <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" />
       <pnlf-text-field label="Description" formControlName="description" />
+      <pnlf-text-field label="Latitude (WGS84)" formControlName="latitude" placeholder="ex : -0.5546" />
+      <pnlf-text-field label="Longitude (WGS84)" formControlName="longitude" placeholder="ex : 11.6642" />
       <div class="zone-form__actions">
         <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer</button>
       </div>
@@ -28,19 +75,59 @@
   </pnlf-card>
 }
 
+<div class="pnlf-toolbar">
+  <div class="pnlf-toolbar__filters">
+    <input
+      type="search"
+      class="pnlf-select pnlf-toolbar__search"
+      placeholder="Rechercher un code ou un libellé…"
+      [ngModel]="search()"
+      (ngModelChange)="onSearchInput($event)"
+    />
+  </div>
+</div>
+
 @if (loading()) {
-  <p class="text-sm text-muted">Chargement…</p>
-} @else if (items().length === 0) {
-  <pnlf-empty-state icon="map-pin" title="Aucune zone de collecte" />
-} @else {
   <div class="pnlf-table-wrapper">
     <table class="pnlf-table">
-      <thead><tr><th>Code</th><th>Libellé</th><th>Province</th></tr></thead>
       <tbody>
-        @for (z of items(); track z.id) {
-          <tr><td>{{ z.code }}</td><td>{{ z.libelle }}</td><td>{{ z.province_nom }}</td></tr>
+        @for (i of [1, 2, 3, 4, 5]; track i) {
+          <tr><td colspan="5"><pnlf-skeleton height="18px" /></td></tr>
         }
       </tbody>
     </table>
   </div>
+} @else if (items().length === 0) {
+  <pnlf-empty-state icon="map-pin" title="Aucune zone de collecte" description="Les zones recensées serviront au rattachement des lots. Vous pouvez aussi en créer une au moment de déclarer un lot.">
+    @if (canManage) {
+      <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Créer une zone</button>
+    } @else {
+      <a pnlfButton routerLink="/app/lots/nouveau" variant="outline">Déclarer un lot</a>
+    }
+  </pnlf-empty-state>
+} @else {
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <thead><tr><th>Code</th><th>Libellé</th><th>Province</th><th>Coordonnées GPS</th><th></th></tr></thead>
+      <tbody>
+        @for (z of items(); track z.id) {
+          <tr class="zone-row" (click)="openDetail(z)">
+            <td>{{ z.code }}</td>
+            <td>{{ z.libelle }}</td>
+            <td>{{ z.province_nom }}</td>
+            <td class="pnlf-table__muted">
+              @if (z.latitude && z.longitude) {
+                {{ z.latitude }}, {{ z.longitude }}
+              } @else {
+                —
+              }
+            </td>
+            <td><a class="pnlf-table__link" [routerLink]="['/app/zones-collecte', z.id]" (click)="$event.stopPropagation()">Voir la fiche →</a></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
 }

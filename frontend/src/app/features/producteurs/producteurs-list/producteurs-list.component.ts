@@ -1,10 +1,17 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import {
+  messageFromDownloadError,
+  navigateOpenedTab,
+  openPdfTicketTab,
+  toSameOriginUrl,
+  writePdfLoadingPlaceholder,
+} from '../../../core/http/download-file.util';
 import { unwrapCount, unwrapList } from '../../../core/models/common.model';
 import {
   Producteur,
@@ -22,6 +29,7 @@ import { PaginationComponent } from '../../../design-system/pagination/paginatio
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
 import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
+import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-producteurs-list',
@@ -33,6 +41,7 @@ import { ToastService } from '../../../design-system/toast/toast.service';
     PaginationComponent,
     EmptyStateComponent,
     SkeletonComponent,
+    ConfirmDialogComponent,
   ],
   templateUrl: './producteurs-list.component.html',
   styleUrl: './producteurs-list.component.scss',
@@ -43,13 +52,15 @@ export class ProducteursListComponent {
   private readonly referenceService = inject(ReferenceService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly search$ = new Subject<void>();
 
   readonly items = signal<Producteur[]>([]);
   readonly loading = signal(true);
   readonly page = signal(1);
   readonly total = signal(0);
-  readonly pageSize = 15;
+  readonly pageSize = 10;
 
   readonly search = signal('');
   readonly provinceFilter = signal('');
@@ -65,7 +76,6 @@ export class ProducteursListComponent {
     RoleUtilisateur.ADMINISTRATEUR,
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.AGENT_FORESTIER,
-    RoleUtilisateur.PRODUCTEUR,
     RoleUtilisateur.COOPERATIVE,
   );
   readonly canValidate = this.auth.hasRole(
@@ -73,11 +83,37 @@ export class ProducteursListComponent {
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.AGENT_FORESTIER,
   );
+  readonly isProducteur = this.auth.hasRole(RoleUtilisateur.PRODUCTEUR);
+  readonly dialog = signal<{ kind: 'desactiver' | 'rejeter'; item: Producteur } | null>(null);
+  readonly dialogLoading = signal(false);
+  readonly exportingPdf = signal(false);
+  readonly pdfReadyUrl = signal<string | null>(null);
 
   constructor() {
+    if (this.isProducteur) {
+      this.loading.set(true);
+      this.service.list({ page_size: 1 }).subscribe({
+        next: (res) => {
+          const own = unwrapList(res)[0];
+          if (own) {
+            this.router.navigate(['/app/producteurs', own.id], { replaceUrl: true });
+            return;
+          }
+          this.loading.set(false);
+        },
+        error: () => this.loading.set(false),
+      });
+      return;
+    }
+
     this.referenceService.provinces().subscribe((res) => {
       this.provinces.set(unwrapList(res).map((p) => ({ value: p.id, label: p.nom })));
     });
+
+    const statutInitial = this.route.snapshot.queryParamMap.get('statut');
+    if (statutInitial) {
+      this.statutFilter.set(statutInitial);
+    }
 
     this.search$.pipe(debounceTime(350), takeUntilDestroyed()).subscribe(() => {
       this.page.set(1);
@@ -133,12 +169,65 @@ export class ProducteursListComponent {
   }
 
   rejeter(p: Producteur): void {
-    this.service.rejeter(p.id).subscribe({
+    this.dialog.set({ kind: 'rejeter', item: p });
+  }
+
+  desactiver(p: Producteur): void {
+    this.dialog.set({ kind: 'desactiver', item: p });
+  }
+
+  onDialogConfirm(value: string): void {
+    const d = this.dialog();
+    if (!d) return;
+    this.dialogLoading.set(true);
+    const req$ =
+      d.kind === 'rejeter' ? this.service.rejeter(d.item.id, value.trim()) : this.service.desactiver(d.item.id);
+    req$.subscribe({
       next: () => {
-        this.toast.info('Fiche rejetée', `La fiche de ${p.prenoms} ${p.nom} a été rejetée.`);
+        this.dialogLoading.set(false);
+        this.dialog.set(null);
+        this.toast.success(d.kind === 'rejeter' ? 'Fiche rejetée' : 'Fiche désactivée');
         this.load();
       },
-      error: () => this.toast.error('Échec du rejet'),
+      error: () => {
+        this.dialogLoading.set(false);
+        this.toast.error('Échec de l’opération');
+      },
     });
+  }
+
+  activer(p: Producteur): void {
+    this.service.activer(p.id).subscribe({
+      next: () => {
+        this.toast.success('Fiche réactivée', `${p.prenoms} ${p.nom} est de nouveau actif(ve).`);
+        this.load();
+      },
+      error: () => this.toast.error('Échec de la réactivation'),
+    });
+  }
+
+  exporterListePdf(): void {
+    this.pdfReadyUrl.set(null);
+    const tab = openPdfTicketTab();
+    writePdfLoadingPlaceholder(tab);
+    this.exportingPdf.set(true);
+    this.service
+      .createListePdfTicket({ search: this.search(), province: this.provinceFilter(), statut: this.statutFilter() })
+      .subscribe({
+        next: ({ url }) => {
+          this.exportingPdf.set(false);
+          if (navigateOpenedTab(tab, url)) {
+            this.toast.success('Le PDF s’ouvre dans un nouvel onglet.');
+            return;
+          }
+          this.pdfReadyUrl.set(toSameOriginUrl(url));
+          this.toast.info('Cliquez sur « Ouvrir le PDF » — le navigateur a bloqué la nouvelle fenêtre.');
+        },
+        error: (err: unknown) => {
+          this.exportingPdf.set(false);
+          tab?.close();
+          this.toast.error(messageFromDownloadError(err));
+        },
+      });
   }
 }

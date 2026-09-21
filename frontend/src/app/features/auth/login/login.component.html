@@ -15,7 +15,7 @@
       <pnlf-text-field
         label="Adresse e-mail"
         type="email"
-        placeholder="prenom.nom@eauxforets.gouv.ga"
+        placeholder="prenom.nom@enef.ga"
         formControlName="email"
         [required]="true"
         autocomplete="username"
@@ -46,8 +46,9 @@
     </form>
 
     <p class="login-card__footer">
-      Vous n'avez pas encore de compte ? Rapprochez-vous de votre administration ou du Ministère
-      des Eaux et Forêts pour l'ouverture de votre accès.
+      Vous n’avez pas encore de compte ?
+      <a routerLink="/inscription">Créer un compte (producteur, collecteur, coopérative ou acheteur)</a>.
+      Les agents du ministère et forestiers sont créés par l’administration.
     </p>
 
     <a routerLink="/verifier" class="login-card__verify-link">

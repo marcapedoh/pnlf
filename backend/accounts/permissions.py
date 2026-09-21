@@ -108,9 +108,11 @@ def scope_producteurs_qs(qs, user):
         Utilisateur.Role.ADMINISTRATEUR,
         Utilisateur.Role.AGENT_MINISTERE,
         Utilisateur.Role.AGENT_FORESTIER,
-        Utilisateur.Role.ACHETEUR,
     ):
         return qs
+    if role == Utilisateur.Role.ACHETEUR:
+        # Lecture marché : fiches actives uniquement, pas les dossiers en instruction.
+        return qs.filter(statut='ACTIF')
     if role == Utilisateur.Role.PRODUCTEUR:
         return qs.filter(utilisateur_id=user.id)
     if role == Utilisateur.Role.COOPERATIVE:
@@ -123,40 +125,53 @@ def scope_producteurs_qs(qs, user):
 
 def scope_lots_qs(qs, user):
     """Filtre les lots selon le rôle."""
+    from django.db.models import Q
+
     role = getattr(user, 'role', None)
     if role in (
         Utilisateur.Role.ADMINISTRATEUR,
         Utilisateur.Role.AGENT_MINISTERE,
         Utilisateur.Role.AGENT_FORESTIER,
-        Utilisateur.Role.ACHETEUR,
     ):
         return qs
+    if role == Utilisateur.Role.ACHETEUR:
+        # Un acheteur ne doit voir que des lots réellement disponibles : on masque
+        # les brouillons (non publiés), les lots déjà commercialisés (vendus),
+        # les archives et les annulations, qui n'ont pas d'intérêt commercial.
+        return qs.filter(producteur__statut='ACTIF').exclude(
+            statut__in=['BROUILLON', 'COMMERCIALISE', 'ARCHIVE', 'ANNULE'],
+        )
     if role == Utilisateur.Role.PRODUCTEUR:
         return qs.filter(producteur__utilisateur_id=user.id)
     if role == Utilisateur.Role.COOPERATIVE:
         from traceability.models import Cooperative
 
         coop_ids = Cooperative.objects.filter(utilisateur_id=user.id).values_list('id', flat=True)
-        return qs.filter(cooperative_id__in=coop_ids)
+        return qs.filter(Q(cooperative_id__in=coop_ids) | Q(producteur__cooperative_id__in=coop_ids))
     return qs.none()
 
 
 def scope_mouvements_qs(qs, user):
+    from django.db.models import Q
+
     role = getattr(user, 'role', None)
     if role in (
         Utilisateur.Role.ADMINISTRATEUR,
         Utilisateur.Role.AGENT_MINISTERE,
         Utilisateur.Role.AGENT_FORESTIER,
-        Utilisateur.Role.ACHETEUR,
     ):
         return qs
+    if role == Utilisateur.Role.ACHETEUR:
+        return qs.filter(lot__producteur__statut='ACTIF')
     if role == Utilisateur.Role.PRODUCTEUR:
         return qs.filter(lot__producteur__utilisateur_id=user.id)
     if role == Utilisateur.Role.COOPERATIVE:
         from traceability.models import Cooperative
 
         coop_ids = Cooperative.objects.filter(utilisateur_id=user.id).values_list('id', flat=True)
-        return qs.filter(lot__cooperative_id__in=coop_ids)
+        return qs.filter(
+            Q(lot__cooperative_id__in=coop_ids) | Q(lot__producteur__cooperative_id__in=coop_ids)
+        )
     return qs.none()
 
 
@@ -175,6 +190,17 @@ class CanValidateProducteurs(BasePermission):
             Utilisateur.Role.ADMINISTRATEUR,
             Utilisateur.Role.AGENT_MINISTERE,
             Utilisateur.Role.AGENT_FORESTIER,
+        )
+
+
+class CanValidateCooperatives(BasePermission):
+    """Validation / rejet des demandes d'inscription de coopératives."""
+    def has_permission(self, request, view):
+        if not getattr(request.user, 'is_authenticated', False):
+            return False
+        return request.user.role in (
+            Utilisateur.Role.ADMINISTRATEUR,
+            Utilisateur.Role.AGENT_MINISTERE,
         )
 
 
@@ -200,15 +226,24 @@ class CanManageZones(RolePermission):
         Utilisateur.Role.ADMINISTRATEUR,
         Utilisateur.Role.AGENT_MINISTERE,
         Utilisateur.Role.AGENT_FORESTIER,
+        Utilisateur.Role.PRODUCTEUR,
+        Utilisateur.Role.COOPERATIVE,
     }
 
 
 class CanManageCertifications(RolePermission):
-    read_roles = CanManageLots.read_roles
+    read_roles = {
+        Utilisateur.Role.ADMINISTRATEUR,
+        Utilisateur.Role.AGENT_MINISTERE,
+        Utilisateur.Role.AGENT_FORESTIER,
+        Utilisateur.Role.PRODUCTEUR,
+        Utilisateur.Role.COOPERATIVE,
+    }
     write_roles = {
         Utilisateur.Role.ADMINISTRATEUR,
         Utilisateur.Role.AGENT_MINISTERE,
         Utilisateur.Role.AGENT_FORESTIER,
+        Utilisateur.Role.PRODUCTEUR,
         Utilisateur.Role.COOPERATIVE,
     }
 
@@ -219,13 +254,39 @@ class CanUseMarketplace(RolePermission):
     write_roles = {
         Utilisateur.Role.ADMINISTRATEUR,
         Utilisateur.Role.AGENT_MINISTERE,
+        Utilisateur.Role.AGENT_FORESTIER,
         Utilisateur.Role.PRODUCTEUR,
         Utilisateur.Role.COOPERATIVE,
         Utilisateur.Role.ACHETEUR,
     }
 
 
+class CanValidateCertifications(BasePermission):
+    """Acceptation / refus des demandes — administrateur et agent du ministère."""
+
+    def has_permission(self, request, view):
+        if not getattr(request.user, 'is_authenticated', False):
+            return False
+        return request.user.role in (
+            Utilisateur.Role.ADMINISTRATEUR,
+            Utilisateur.Role.AGENT_MINISTERE,
+        )
+
+
 class CanViewDashboard(BasePermission):
+    def has_permission(self, request, view):
+        if not getattr(request.user, 'is_authenticated', False):
+            return False
+        return request.user.role in (
+            Utilisateur.Role.ADMINISTRATEUR,
+            Utilisateur.Role.AGENT_MINISTERE,
+            Utilisateur.Role.AGENT_FORESTIER,
+        )
+
+
+class CanSyncTerrain(BasePermission):
+    """Push/pull terrain + appareils — admin, ministère, agents forestiers."""
+
     def has_permission(self, request, view):
         if not getattr(request.user, 'is_authenticated', False):
             return False

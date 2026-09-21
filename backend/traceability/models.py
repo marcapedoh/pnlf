@@ -109,6 +109,7 @@ class Cooperative(models.Model):
     )
     utilisateur_id = models.UUIDField(null=True, blank=True)
     actif = models.BooleanField(default=True)
+    statut = models.CharField(max_length=20, default='ACTIF')
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
 
@@ -278,6 +279,8 @@ class Mouvement(models.Model):
 
 
 class CooperativeMembre(models.Model):
+    """Adhésion producteur ↔ coopérative. PK composite SQL, sans colonne id."""
+
     cooperative = models.ForeignKey(
         Cooperative, on_delete=models.DO_NOTHING, db_column='cooperative_id', related_name='membres'
     )
@@ -287,11 +290,11 @@ class CooperativeMembre(models.Model):
     date_adhesion = models.DateField()
     actif = models.BooleanField(default=True)
     created_at = models.DateTimeField()
+    pk = models.CompositePrimaryKey('cooperative', 'producteur')
 
     class Meta:
         managed = False
         db_table = 'cooperative_membres'
-        unique_together = ('cooperative', 'producteur')
 
 
 class TypeCertification(models.Model):
@@ -337,3 +340,35 @@ class Certification(models.Model):
         managed = False
         db_table = 'certifications'
         ordering = ['-date_demande']
+
+
+class DocumentInscription(models.Model):
+    """Document administratif joint à l'inscription (CNI, fiche circuit, agrément Nagoya…).
+
+    Table dans le schéma public (voir database/12_documents_administratifs.sql).
+    """
+
+    class EntiteType(models.TextChoices):
+        PRODUCTEUR = 'PRODUCTEUR', 'Producteur / collecteur'
+        COOPERATIVE = 'COOPERATIVE', 'Coopérative'
+        UTILISATEUR = 'UTILISATEUR', 'Utilisateur'
+
+    class TypeDocument(models.TextChoices):
+        CNI = 'CNI', "Pièce d'identité (CNI)"
+        FICHE_CIRCUIT = 'FICHE_CIRCUIT', 'Fiche circuit'
+        AGREMENT_NAGOYA = 'AGREMENT_NAGOYA', 'Agrément CITES / Nagoya'
+        AUTRE = 'AUTRE', 'Autre document'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    entite_type = models.CharField(max_length=20, choices=EntiteType.choices)
+    entite_id = models.UUIDField()
+    type_document = models.CharField(max_length=30, choices=TypeDocument.choices)
+    chemin = models.TextField()
+    nom_original = models.CharField(max_length=255, null=True, blank=True)
+    depose_par_id = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'documents_inscription'
+        ordering = ['-created_at']

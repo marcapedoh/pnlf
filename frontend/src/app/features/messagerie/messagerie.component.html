@@ -1,0 +1,393 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Filière &amp; partenaires</p>
+    <h1 class="pnlf-page-header__title">Messagerie</h1>
+    <p class="pnlf-page-header__subtitle">
+      @if (supervisionMode()) {
+        Supervision : toutes les discussions sont listées ci-contre. Cliquez sur un fil pour le consulter en lecture seule.
+      } @else {
+        Vos discussions privées (et groupes de votre coopérative). Seuls les participants voient le fil.
+      }
+    </p>
+  </div>
+  <div class="chat-header-actions">
+    @if (isAdmin) {
+      @if (supervisionMode()) {
+        <button pnlfButton variant="outline" type="button" (click)="exitSupervision()">
+          ← Mes discussions
+        </button>
+      } @else {
+        <button pnlfButton variant="outline" type="button" (click)="enterSupervision()">
+          <pnlf-icon name="search" [size]="16" />
+          Superviser les discussions
+        </button>
+      }
+    }
+    @if (!supervisionMode() && canCreateGroupe) {
+      <button pnlfButton variant="outline" type="button" (click)="openGroupe()">
+        <pnlf-icon name="users" [size]="16" />
+        Créer un groupe
+      </button>
+    }
+    @if (!supervisionMode() && canStartAny) {
+      <button pnlfButton variant="primary" type="button" (click)="openNew()">
+        <pnlf-icon name="plus" [size]="16" />
+        Nouvelle discussion
+      </button>
+    }
+  </div>
+</div>
+
+@if (supervisionMode()) {
+  <div class="chat-supervision-banner" role="status">
+    <pnlf-icon name="shield" [size]="18" />
+    <span>Mode supervision administrateur — lecture seule. Les participants ne sont pas notifiés de votre consultation.</span>
+  </div>
+}
+
+<div class="chat-layout">
+  <aside class="chat-inbox">
+    <div class="chat-inbox__search">
+      @if (supervisionMode()) {
+        <pnlf-icon name="search" [size]="16" />
+        <input
+          type="search"
+          placeholder="Rechercher un nom, un sujet, un message…"
+          [ngModel]="supervisionQuery()"
+          (ngModelChange)="onSupervisionSearch($event)"
+          aria-label="Rechercher une discussion à superviser"
+        />
+      } @else {
+        <pnlf-icon name="search" [size]="16" />
+        <input
+          type="search"
+          placeholder="Rechercher une conversation…"
+          [ngModel]="inboxQuery()"
+          (ngModelChange)="onInboxSearch($event)"
+          aria-label="Rechercher dans mes conversations"
+        />
+      }
+    </div>
+
+    @if (loadingList() || supervisionLoading()) {
+      <pnlf-skeleton height="100%" radius="12px" />
+    } @else if (filteredConversations().length === 0) {
+      <pnlf-empty-state
+        icon="message"
+        [title]="supervisionMode() ? 'Aucun résultat' : 'Aucune discussion'"
+        [description]="
+          supervisionMode()
+            ? 'Aucun fil ne correspond à votre recherche.'
+            : 'Ouvrez un fil depuis une fiche, une annonce, ou via « Nouvelle discussion ».'
+        "
+      />
+    } @else {
+      <ul class="chat-inbox__list">
+        @for (c of filteredConversations(); track c.id) {
+          <li>
+            <button
+              type="button"
+              class="chat-inbox__item"
+              [class.is-active]="activeId() === c.id"
+              [class.has-unread]="!supervisionMode() && (c.non_lus || 0) > 0"
+              (click)="select(c.id)"
+            >
+              <span class="chat-avatar" aria-hidden="true">
+                @if (c.interlocuteur_photo_url) {
+                  <img [src]="c.interlocuteur_photo_url" [alt]="''" />
+                } @else {
+                  <span class="chat-avatar__fallback" [class.chat-avatar__fallback--group]="c.est_groupe">
+                    @if (c.est_groupe) {
+                      <pnlf-icon name="users" [size]="16" />
+                    } @else {
+                      {{ initials(c.interlocuteur_nom) }}
+                    }
+                  </span>
+                }
+              </span>
+              <span class="chat-inbox__body">
+                <span class="chat-inbox__top">
+                  <span class="chat-inbox__name">{{ c.interlocuteur_nom }}</span>
+                  @if (c.dernier_at) {
+                    <span class="chat-inbox__date">{{ c.dernier_at | date: 'dd/MM HH:mm' }}</span>
+                  }
+                </span>
+                <span class="chat-inbox__preview">{{ c.dernier_message || c.sujet || 'Nouvelle discussion' }}</span>
+              </span>
+              @if (!supervisionMode() && (c.non_lus || 0) > 0) {
+                <span class="chat-inbox__badge">{{ c.non_lus! > 99 ? '99+' : c.non_lus }}</span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </aside>
+
+  <section class="chat-pane">
+    @if (!activeId()) {
+      <pnlf-empty-state
+        icon="message"
+        title="Sélectionnez une discussion"
+        [description]="
+          supervisionMode()
+            ? 'Le contenu s’affiche ici en lecture seule.'
+            : 'Le fil s’affiche ici. Les nouveaux messages apparaissent automatiquement.'
+        "
+      />
+    } @else {
+      <header class="chat-pane__head">
+        <div class="chat-pane__identity">
+          <span class="chat-avatar chat-avatar--lg" aria-hidden="true">
+            @if (activeConversation()?.interlocuteur_photo_url) {
+              <img [src]="activeConversation()!.interlocuteur_photo_url!" [alt]="''" />
+            } @else {
+              <span class="chat-avatar__fallback" [class.chat-avatar__fallback--group]="activeConversation()?.est_groupe">
+                @if (activeConversation()?.est_groupe) {
+                  <pnlf-icon name="users" [size]="18" />
+                } @else {
+                  {{ initials(activeConversation()?.interlocuteur_nom) }}
+                }
+              </span>
+            }
+          </span>
+          <div>
+            <h2>{{ activeConversation()?.interlocuteur_nom }}</h2>
+            <p>
+              {{ activeConversation()?.sujet }}
+              @if (lectureSeule()) {
+                <span class="chat-pane__readonly"> · Lecture seule</span>
+              }
+            </p>
+          </div>
+        </div>
+        @if (!lectureSeule()) {
+          <button pnlfButton variant="ghost" size="sm" type="button" title="Supprimer la conversation" (click)="askDelete()">
+            <pnlf-icon name="trash" [size]="16" />
+            Supprimer
+          </button>
+        }
+      </header>
+
+      <div class="chat-pane__thread" #thread>
+        @if (loadingThread()) {
+          <pnlf-skeleton height="180px" radius="12px" />
+        } @else {
+          @for (m of messages(); track m.id) {
+            <article class="bubble" [class.bubble--mine]="isMine(m) && !lectureSeule()">
+              @if (!isMine(m) || lectureSeule()) {
+                <span class="bubble__meta-row">
+                  <span class="chat-avatar chat-avatar--sm" aria-hidden="true">
+                    @if (m.expediteur_photo_url) {
+                      <img [src]="m.expediteur_photo_url" [alt]="''" />
+                    } @else {
+                      <span class="chat-avatar__fallback">{{ initials(m.expediteur_nom) }}</span>
+                    }
+                  </span>
+                  @if (m.expediteur_nom) {
+                    <span class="bubble__author">{{ m.expediteur_nom }}</span>
+                  }
+                </span>
+              }
+              @if (m.piece_type === 'IMAGE' && m.piece_url) {
+                <a [href]="m.piece_url" target="_blank" rel="noopener">
+                  <img [src]="m.piece_url" alt="Image envoyée" />
+                </a>
+              }
+              @if (m.piece_type === 'AUDIO' && m.piece_url) {
+                <audio [src]="m.piece_url" controls preload="metadata"></audio>
+              }
+              @if (m.contenu) {
+                <p>{{ m.contenu }}</p>
+              }
+              <div class="bubble__foot">
+                <time>{{ m.created_at | date: 'dd/MM HH:mm' }}</time>
+                @if (!lectureSeule() && isMine(m) && m.statut) {
+                  <span class="msg-ticks" [attr.data-statut]="m.statut" [title]="statutTitle(m.statut)" [attr.aria-label]="statutTitle(m.statut)">
+                    @if (m.statut === 'ENVOYE') {
+                      <pnlf-icon name="check" [size]="14" />
+                    } @else {
+                      <span class="msg-ticks__double">
+                        <pnlf-icon name="check" [size]="14" />
+                        <pnlf-icon name="check" [size]="14" />
+                      </span>
+                    }
+                  </span>
+                }
+              </div>
+            </article>
+          }
+        }
+      </div>
+
+      @if (lectureSeule()) {
+        <p class="chat-composer__readonly">Consultation en lecture seule — vous ne pouvez pas répondre dans ce mode.</p>
+      } @else {
+        <form class="chat-composer" (submit)="$event.preventDefault(); envoyer()">
+          <input #fileInput type="file" accept="image/jpeg,image/png,image/webp" hidden (change)="onFile($event)" />
+          <button type="button" class="chat-composer__icon" title="Joindre une photo" (click)="pickImage()" [disabled]="sending()">
+            <pnlf-icon name="camera" [size]="18" />
+          </button>
+          <button
+            type="button"
+            class="chat-composer__icon"
+            [class.is-recording]="recording()"
+            [title]="recording() ? 'Arrêter l’enregistrement' : 'Message vocal'"
+            (click)="toggleMic()"
+            [disabled]="sending()"
+          >
+            <pnlf-icon name="mic" [size]="18" />
+          </button>
+          <textarea
+            name="draft"
+            rows="2"
+            [ngModel]="draft()"
+            (ngModelChange)="draft.set($event)"
+            placeholder="Votre message…"
+            (keydown.enter)="onEnter($event)"
+          ></textarea>
+          <button pnlfButton type="submit" variant="primary" [loading]="sending()" [disabled]="!draft().trim() && !recording()">
+            Envoyer
+          </button>
+        </form>
+        @if (recording()) {
+          <p class="chat-composer__hint">Enregistrement en cours — cliquez de nouveau sur le micro pour envoyer.</p>
+        }
+      }
+    }
+  </section>
+</div>
+
+@if (showNew()) {
+  <div class="chat-modal" (click)="showNew.set(false)">
+    <pnlf-card title="Nouvelle discussion" (click)="$event.stopPropagation()">
+      <input
+        class="chat-modal__search"
+        type="search"
+        name="contactQuery"
+        placeholder="Rechercher un contact…"
+        [ngModel]="contactQuery()"
+        (ngModelChange)="contactQuery.set($event)"
+      />
+      @if (filteredContacts().length === 0) {
+        <p class="text-sm text-muted">Aucun contact disponible.</p>
+      } @else {
+        <ul class="chat-modal__list">
+          @for (c of filteredContacts(); track c.id) {
+            <li>
+              <button type="button" (click)="startWith(c)">
+                <span class="chat-modal__contact">
+                  <span class="chat-avatar chat-avatar--sm" aria-hidden="true">
+                    @if (c.photo_url) {
+                      <img [src]="c.photo_url" [alt]="''" />
+                    } @else {
+                      <span class="chat-avatar__fallback">{{ initials(c.libelle) }}</span>
+                    }
+                  </span>
+                  <strong>{{ c.libelle }}</strong>
+                </span>
+                <span>{{ roleLabel(c.role) }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+      <button pnlfButton variant="ghost" type="button" (click)="showNew.set(false)">Fermer</button>
+    </pnlf-card>
+  </div>
+}
+
+@if (showGroupe()) {
+  <div class="chat-modal" (click)="showGroupe.set(false)">
+    <pnlf-card title="Créer un groupe coopérative" (click)="$event.stopPropagation()">
+      <p class="chat-modal__intro">
+        Le groupe est réservé aux membres de <strong>votre</strong> coopérative. Seuls les membres sélectionnés verront les messages.
+      </p>
+      @if (loadingGroupe()) {
+        <pnlf-skeleton height="120px" radius="8px" />
+      } @else if (coops().length === 0) {
+        <p class="text-sm text-muted">
+          Aucune coopérative associée à votre compte, ou aucun autre membre n’a encore de compte connecté.
+        </p>
+        <button pnlfButton variant="ghost" type="button" (click)="showGroupe.set(false)">Fermer</button>
+      } @else {
+        <label class="chat-modal__field">
+          <span>1. Coopérative</span>
+          <select class="chat-modal__select" [ngModel]="groupeCoopId()" (ngModelChange)="onCoopChange($event)">
+            <option value="" disabled>Choisir…</option>
+            @for (c of coops(); track c.id) {
+              <option [value]="c.id">{{ c.nom }} ({{ c.membres.length }} membre{{ c.membres.length > 1 ? 's' : '' }})</option>
+            }
+          </select>
+        </label>
+        <label class="chat-modal__field">
+          <span>2. Nom du groupe</span>
+          <input
+            class="chat-modal__search"
+            type="text"
+            [ngModel]="groupeSujet()"
+            (ngModelChange)="groupeSujet.set($event)"
+            placeholder="Ex. Coordination récolte"
+          />
+        </label>
+        @if (selectedCoop(); as coop) {
+          <div class="chat-modal__members-head">
+            <p class="chat-modal__hint">3. Membres ({{ groupeSelected().size }} sélectionné{{ groupeSelected().size > 1 ? 's' : '' }})</p>
+            <div class="chat-modal__members-actions">
+              <button type="button" class="chat-modal__link" (click)="selectAllMembres()">Tout cocher</button>
+              <button type="button" class="chat-modal__link" (click)="clearMembres()">Tout décocher</button>
+            </div>
+          </div>
+          @if (coop.membres.length === 0) {
+            <p class="text-sm text-muted">Aucun autre membre avec un compte actif dans cette coopérative.</p>
+          } @else {
+            <ul class="chat-modal__list chat-modal__list--check">
+              @for (m of coop.membres; track m.id) {
+                <li>
+                  <label class="chat-modal__check">
+                    <input type="checkbox" [checked]="isMembreSelected(m.id)" (change)="toggleMembre(m.id)" />
+                    <span class="chat-avatar chat-avatar--sm" aria-hidden="true">
+                      @if (m.photo_url) {
+                        <img [src]="m.photo_url" [alt]="''" />
+                      } @else {
+                        <span class="chat-avatar__fallback">{{ initials(m.libelle) }}</span>
+                      }
+                    </span>
+                    <span>
+                      <strong>{{ m.libelle }}</strong>
+                      <small>{{ roleLabel(m.role) }}</small>
+                    </span>
+                  </label>
+                </li>
+              }
+            </ul>
+          }
+        }
+        <div class="chat-modal__actions">
+          <button pnlfButton variant="ghost" type="button" (click)="showGroupe.set(false)">Annuler</button>
+          <button
+            pnlfButton
+            variant="primary"
+            type="button"
+            [loading]="creatingGroupe()"
+            [disabled]="!groupeCoopId() || groupeSelected().size === 0"
+            (click)="creerGroupe()"
+          >
+            Créer le groupe
+          </button>
+        </div>
+      }
+    </pnlf-card>
+  </div>
+}
+
+<pnlf-confirm-dialog
+  [open]="confirmDeleteOpen()"
+  title="Supprimer cette conversation ?"
+  message="Elle disparaîtra de votre liste. Les autres participants la conservent."
+  confirmLabel="Supprimer"
+  [danger]="true"
+  [loading]="deleting()"
+  (confirmed)="confirmDelete()"
+  (cancelled)="confirmDeleteOpen.set(false)"
+/>

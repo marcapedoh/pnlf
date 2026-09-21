@@ -63,11 +63,11 @@ class ConversationParticipant(models.Model):
     )
     utilisateur_id = models.UUIDField()
     joined_at = models.DateTimeField()
+    pk = models.CompositePrimaryKey('conversation', 'utilisateur_id')
 
     class Meta:
         managed = False
         db_table = 'conversation_participants'
-        unique_together = ('conversation', 'utilisateur_id')
 
 
 class Message(models.Model):
@@ -84,6 +84,45 @@ class Message(models.Model):
         managed = False
         db_table = 'messages'
         ordering = ['created_at']
+
+
+class ConversationContext(models.Model):
+    conversation = models.OneToOneField(
+        Conversation, on_delete=models.DO_NOTHING, db_column='conversation_id',
+        primary_key=True, related_name='context',
+    )
+    producteur_id = models.UUIDField(null=True, blank=True)
+    cooperative_id = models.UUIDField(null=True, blank=True)
+    est_groupe = models.BooleanField(default=False)
+
+    class Meta:
+        managed = False
+        db_table = 'conversation_context'
+
+
+class ConversationParticipantMeta(models.Model):
+    conversation_id = models.UUIDField()
+    utilisateur_id = models.UUIDField()
+    last_read_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    pk = models.CompositePrimaryKey('conversation_id', 'utilisateur_id')
+
+    class Meta:
+        managed = False
+        db_table = 'conversation_participant_meta'
+
+
+class MessagePiece(models.Model):
+    message = models.OneToOneField(
+        Message, on_delete=models.DO_NOTHING, db_column='message_id',
+        primary_key=True, related_name='piece',
+    )
+    piece_type = models.CharField(max_length=10)
+    piece_path = models.CharField(max_length=400)
+
+    class Meta:
+        managed = False
+        db_table = 'message_pieces'
 
 
 class AppareilSync(models.Model):

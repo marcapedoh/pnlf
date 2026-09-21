@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiListResponse } from '../models/common.model';
 import { Producteur } from '../models/producteur.model';
+import { MessagePublic } from '../models/public.model';
 
 export interface ProducteurQueryParams {
   page?: number;
@@ -14,6 +15,8 @@ export interface ProducteurQueryParams {
   statut?: string;
   type_acteur?: string;
   cooperative?: string;
+  candidats_adhesion?: string;
+  hors_cooperative?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -54,5 +57,43 @@ export class ProducteursService {
 
   rejeter(id: string, motif?: string): Observable<Producteur> {
     return this.http.post<Producteur>(`${this.base}${id}/rejeter/`, { motif });
+  }
+
+  desactiver(id: string): Observable<Producteur> {
+    return this.http.post<Producteur>(`${this.base}${id}/desactiver/`, {});
+  }
+
+  activer(id: string): Observable<Producteur> {
+    return this.http.post<Producteur>(`${this.base}${id}/activer/`, {});
+  }
+
+  uploadPhoto(id: string, file: File): Observable<Producteur> {
+    const form = new FormData();
+    form.append('photo', file);
+    return this.http.post<Producteur>(`${this.base}${id}/photo/`, form);
+  }
+
+  messagesPublics(producteurId: string): Observable<ApiListResponse<MessagePublic>> {
+    return this.http.get<ApiListResponse<MessagePublic>>(`${environment.apiUrl}/messages-publics/`, {
+      params: { producteur: producteurId, page_size: '20' },
+    });
+  }
+
+  marquerMessageTraite(messageId: string): Observable<MessagePublic> {
+    return this.http.post<MessagePublic>(`${environment.apiUrl}/messages-publics/${messageId}/marquer_traite/`, {});
+  }
+
+  createFichePdfTicket(id: string): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.base}${id}/pdf/`, {});
+  }
+
+  createListePdfTicket(params: ProducteurQueryParams = {}): Observable<{ url: string }> {
+    const httpParams: Record<string, string> = {};
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        httpParams[key] = String(value);
+      }
+    });
+    return this.http.post<{ url: string }>(`${this.base}pdf-liste/`, {}, { params: httpParams });
   }
 }

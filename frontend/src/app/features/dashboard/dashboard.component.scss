@@ -23,6 +23,43 @@
   }
 }
 
+.dashboard-kpis--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dash-kpi-link {
+  display: block;
+  color: inherit;
+}
+
+.dash-inbox-banner {
+  margin: 0 0 var(--space-5);
+  a {
+    font-weight: 600;
+    color: var(--color-link);
+  }
+}
+
+.dash-onboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: 1.25rem;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  a {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--color-link);
+  }
+}
+
 .dashboard-see-all {
   font-size: var(--fs-sm);
   font-weight: 600;

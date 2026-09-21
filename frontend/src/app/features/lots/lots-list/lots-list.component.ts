@@ -32,7 +32,7 @@ export class LotsListComponent {
   readonly loading = signal(true);
   readonly page = signal(1);
   readonly total = signal(0);
-  readonly pageSize = 15;
+  readonly pageSize = 10;
 
   readonly search = signal('');
   readonly statutFilter = signal('');

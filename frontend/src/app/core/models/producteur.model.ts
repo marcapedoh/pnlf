@@ -34,6 +34,8 @@ export interface Producteur {
   valide_par_id: string | null;
   valide_at: string | null;
   notes: string | null;
+  visible_public?: boolean;
+  photo_url?: string | null;
   client_uuid: string | null;
   created_at: string;
   updated_at: string;
@@ -44,6 +46,20 @@ export const STATUT_PRODUCTEUR_LABELS: Record<StatutProducteur, string> = {
   [StatutProducteur.INACTIF]: 'Inactif',
   [StatutProducteur.EN_VALIDATION]: 'En attente de validation',
   [StatutProducteur.REJETE]: 'Rejeté',
+};
+
+export enum StatutCooperative {
+  ACTIF = 'ACTIF',
+  INACTIF = 'INACTIF',
+  EN_VALIDATION = 'EN_VALIDATION',
+  REJETE = 'REJETE',
+}
+
+export const STATUT_COOPERATIVE_LABELS: Record<StatutCooperative, string> = {
+  [StatutCooperative.ACTIF]: 'Active',
+  [StatutCooperative.INACTIF]: 'Désactivée',
+  [StatutCooperative.EN_VALIDATION]: 'En attente de validation',
+  [StatutCooperative.REJETE]: 'Rejetée',
 };
 
 export interface Cooperative {
@@ -58,6 +74,8 @@ export interface Cooperative {
   province_nom: string | null;
   utilisateur_id: string | null;
   actif: boolean;
+  statut: StatutCooperative;
+  photo_url?: string | null;
   created_at: string;
   updated_at: string;
 }

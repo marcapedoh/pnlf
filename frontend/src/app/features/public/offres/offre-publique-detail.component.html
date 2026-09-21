@@ -1,0 +1,82 @@
+<div class="offre-pub-detail">
+  <a routerLink="/offres-demandes" class="offre-pub-detail__back">← Retour aux offres et demandes</a>
+
+  @if (loading()) {
+    <pnlf-skeleton height="400px" />
+  } @else if (notFound() || !offre()) {
+    <pnlf-empty-state title="Annonce introuvable" description="Cette offre ou demande n'est plus publiée." />
+  } @else if (offre(); as o) {
+    <div class="offre-pub-detail__grid">
+      <section>
+        @if (o.photos_urls?.length) {
+          <div class="offre-pub-detail__main-photo">
+            <img [src]="o.photos_urls![activePhoto()]" [alt]="o.titre" />
+          </div>
+          @if (o.photos_urls!.length > 1) {
+            <div class="offre-pub-detail__thumbs">
+              @for (url of o.photos_urls!; track url; let i = $index) {
+                <button type="button" class="offre-pub-detail__thumb" [class.is-active]="i === activePhoto()" (click)="selectPhoto(i)">
+                  <img [src]="url" [alt]="o.titre" />
+                </button>
+              }
+            </div>
+          }
+        } @else {
+          <div class="offre-pub-detail__no-photo">Aucune photo fournie</div>
+        }
+        @if (o.qr_image_url) {
+          <pnlf-card title="QR code de vérification">
+            <img [src]="o.qr_image_url" alt="QR code de l'annonce" class="offre-pub-detail__qr" />
+          </pnlf-card>
+        }
+      </section>
+
+      <section>
+        <p class="text-eyebrow">{{ o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }} · {{ o.produit_nom }}</p>
+        <h1>{{ o.titre }}</h1>
+        @if (o.prix_unitaire) {
+          <p class="offre-pub-detail__price">{{ o.prix_unitaire | number }} {{ o.devise }}</p>
+        }
+        <pnlf-card title="Détails">
+          <dl class="offre-pub-detail__dl">
+            <div><dt>Publié par</dt><dd>{{ o.auteur_nom || '—' }}</dd></div>
+            <div><dt>Produit</dt><dd>{{ o.produit_nom || '—' }}</dd></div>
+            <div><dt>Province</dt><dd>{{ o.province_nom || 'Non précisée' }}</dd></div>
+            @if (o.quantite) {
+              <div><dt>Quantité</dt><dd>{{ o.quantite }} {{ o.unite }}</dd></div>
+            }
+            <div><dt>Certification requise</dt><dd>{{ o.certification_requise ? 'Oui' : 'Non' }}</dd></div>
+            <div><dt>Publiée le</dt><dd>{{ o.created_at | date: 'dd/MM/yyyy' }}</dd></div>
+          </dl>
+        </pnlf-card>
+        @if (o.description) {
+          <pnlf-card title="Description">
+            <p>{{ o.description }}</p>
+          </pnlf-card>
+        }
+        <pnlf-card title="Contacter le vendeur / l’acheteur" subtitle="Le message transite par la plateforme. Le téléphone n’est pas affiché publiquement.">
+          @if (sent()) {
+            <p>Votre message a été transmis. L’auteur de l’annonce en sera informé.</p>
+          } @else {
+            <form class="offre-contact" (ngSubmit)="envoyerContact()">
+              <label class="offre-contact__label">Votre nom
+                <input class="pnlf-select" name="nom" placeholder="Nom complet" [ngModel]="contactNom()" (ngModelChange)="contactNom.set($event)" required />
+              </label>
+              <label class="offre-contact__label">Votre e-mail
+                <input class="pnlf-select" name="email" type="email" placeholder="email@exemple.com" [ngModel]="contactEmail()" (ngModelChange)="contactEmail.set($event)" required />
+              </label>
+              <label class="offre-contact__label">Téléphone (optionnel)
+                <input class="pnlf-select" name="tel" type="tel" placeholder="+241 …" [ngModel]="contactTel()" (ngModelChange)="contactTel.set($event)" />
+              </label>
+              <label class="offre-contact__label">Votre message
+                <textarea class="pnlf-select" name="message" rows="4" placeholder="Précisez le produit, la quantité et votre délai…" [ngModel]="contactMessage()" (ngModelChange)="contactMessage.set($event)"></textarea>
+              </label>
+              <input class="hp-field" name="site_web" tabindex="-1" autocomplete="off" aria-hidden="true" [ngModel]="contactHoneypot()" (ngModelChange)="contactHoneypot.set($event)" />
+              <button pnlfButton variant="primary" type="submit" [loading]="sending()">Envoyer le message</button>
+            </form>
+          }
+        </pnlf-card>
+      </section>
+    </div>
+  }
+</div>

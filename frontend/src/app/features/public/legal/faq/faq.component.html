@@ -1,0 +1,70 @@
+<section class="legal-hero">
+  <div class="legal-hero__inner">
+    <p class="legal-hero__eyebrow">République Gabonaise · École Nationale des Eaux et Forêts</p>
+    <h1 class="legal-hero__title">Foire aux questions</h1>
+    <p class="legal-hero__updated">
+      Retrouvez les réponses aux questions les plus fréquentes sur la plateforme PNLF-PFNL.
+    </p>
+  </div>
+</section>
+
+<section class="legal-body">
+  <div class="legal-body__inner">
+    @for (groupe of groupes; track groupe.titre; let gi = $index) {
+      <article class="legal-section faq-group">
+        <h2 class="faq-group__title">{{ groupe.titre }}</h2>
+        @for (item of groupe.items; track item.question; let ii = $index) {
+          <div class="faq-item">
+            <button
+              type="button"
+              class="faq-item__question"
+              [attr.aria-expanded]="isOpen('g' + gi + '-' + ii)"
+              (click)="toggle('g' + gi + '-' + ii)"
+            >
+              <span>{{ item.question }}</span>
+              <pnlf-icon name="chevron-down" [size]="18" />
+            </button>
+            @if (isOpen('g' + gi + '-' + ii)) {
+              <p class="faq-item__answer">{{ item.reponse }}</p>
+            }
+          </div>
+        }
+      </article>
+    }
+
+    <article class="legal-section" id="developpeur">
+      <h2>Support technique &amp; développeur de la plateforme</h2>
+      <p>
+        La plateforme PNLF-PFNL a été conçue et développée par l'ingénieur ci-dessous, qui reste
+        disponible pour toute assistance technique, signalement de bogue ou question relative au
+        fonctionnement du système.
+      </p>
+      <div class="dev-card">
+        <div class="dev-card__avatar" aria-hidden="true">WM</div>
+        <div class="dev-card__body">
+          <p class="dev-card__name">Wadrice MPAMBOU MOUKAGNI</p>
+          <p class="dev-card__role">Ingénieur de conception des systèmes informatiques</p>
+          <div class="dev-card__contacts">
+            <a href="mailto:Wadricempambou@outlook.com">
+              <pnlf-icon name="mail" [size]="16" />
+              Wadricempambou&#64;outlook.com
+            </a>
+            <a href="tel:+24174054315">
+              <pnlf-icon name="phone" [size]="16" />
+              +241 74 05 43 15
+            </a>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="legal-section">
+      <h2>Vous n'avez pas trouvé votre réponse ?</h2>
+      <p>
+        Consultez nos <a routerLink="/conditions-utilisation">conditions d'utilisation</a> et notre
+        <a routerLink="/politique-confidentialite">politique de confidentialité</a>, ou contactez
+        directement le support technique ci-dessus.
+      </p>
+    </article>
+  </div>
+</section>

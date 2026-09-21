@@ -22,10 +22,12 @@ export interface Utilisateur {
   statut: StatutCompte;
   nom: string;
   prenoms: string;
+  photo_url?: string | null;
   doit_changer_mdp: boolean;
   preferences_notif: string;
   derniere_connexion: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export const ROLE_LABELS: Record<RoleUtilisateur, string> = {
@@ -44,4 +46,11 @@ export const ROLE_SHORT_LABELS: Record<RoleUtilisateur, string> = {
   [RoleUtilisateur.PRODUCTEUR]: 'Producteur',
   [RoleUtilisateur.COOPERATIVE]: 'Coopérative',
   [RoleUtilisateur.ACHETEUR]: 'Acheteur',
+};
+
+export const STATUT_COMPTE_LABELS: Record<StatutCompte, string> = {
+  [StatutCompte.ACTIF]: 'Actif',
+  [StatutCompte.INACTIF]: 'Inactif',
+  [StatutCompte.SUSPENDU]: 'Suspendu',
+  [StatutCompte.EN_ATTENTE]: 'En attente de validation',
 };

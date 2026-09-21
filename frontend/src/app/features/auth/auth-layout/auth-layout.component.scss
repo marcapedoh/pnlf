@@ -129,3 +129,15 @@
   width: 100%;
   max-width: 420px;
 }
+
+.auth-layout__back-link {
+  display: inline-block;
+  margin-bottom: var(--space-5);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--pnlf-green-700);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

@@ -3,14 +3,24 @@
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
+# En local, .env.local (PostgreSQL 127.0.0.1) prime sur .env (ex. Render)
+load_dotenv(BASE_DIR / '.env.local', override=True)
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'insecure-dev-key')
 DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '')
+if not SECRET_KEY or SECRET_KEY in ('insecure-dev-key', 'change-me'):
+    if DEBUG:
+        SECRET_KEY = SECRET_KEY or 'insecure-dev-key'
+    else:
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY doit être défini avec une valeur secrète (pas de repli en production).'
+        )
 ALLOWED_HOSTS = [
     h.strip()
     for h in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver').split(',')
@@ -108,6 +118,23 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 PNLF_PUBLIC_VERIFY_URL = os.getenv('PNLF_PUBLIC_VERIFY_URL', 'http://localhost:8000/api/verify/')
+PNLF_FRONTEND_URL = os.getenv('PNLF_FRONTEND_URL', 'http://localhost:4200')
+
+# --- Envoi d'e-mails (inscription, validation, mot de passe) ------------------
+EMAIL_BACKEND = os.getenv('DJANGO_EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('1', 'true', 'yes')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'PNLF-PFNL <no-reply@pnlf.ga>')
+EMAIL_TIMEOUT = 10
+
+# --- Envoi de SMS (Twilio) -----------------------------------------------------
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN', '')
+TWILIO_FROM_NUMBER = os.getenv('TWILIO_FROM_NUMBER', '')
 
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.PnlfAuthBackend',
@@ -134,8 +161,11 @@ REST_FRAMEWORK = {
         'anon': '60/min',
         'user': '300/min',
         'login': '8/min',
+        'contact_public': '5/min',
+        'inscription_public': '5/min',
+        'password_reset': '5/min',
     },
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'config.pagination.StandardResultsPagination',
     'PAGE_SIZE': 25,
 }
 
@@ -158,3 +188,4 @@ CORS_ALLOWED_ORIGINS = [
     ).split(',')
     if o.strip()
 ]
+CORS_EXPOSE_HEADERS = ['Content-Disposition']

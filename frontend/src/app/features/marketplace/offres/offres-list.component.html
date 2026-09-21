@@ -3,7 +3,8 @@
     <p class="text-eyebrow">Filière &amp; partenaires</p>
     <h1 class="pnlf-page-header__title">Offres &amp; demandes</h1>
     <p class="pnlf-page-header__subtitle">
-      Mise en relation entre producteurs, coopératives et acheteurs de produits PFNL.
+      Mise en relation entre producteurs, coopératives et acheteurs de produits PFNL. Chaque annonce est
+      vérifiée par un administrateur avant publication.
     </p>
   </div>
   @if (canPost) {
@@ -26,25 +27,86 @@
       <pnlf-text-field label="Prix unitaire indicatif (XAF)" type="number" formControlName="prix_unitaire" />
       <div></div>
       <pnlf-text-field label="Description" formControlName="description" />
+
+      <div class="offre-form__photos">
+        <label class="pnlf-field__label">Photos (optionnel, {{ photosMax }} maximum)</label>
+        <div class="offre-photos">
+          @for (preview of photoPreviews(); track $index) {
+            <div class="offre-photos__thumb">
+              <img [src]="preview" alt="Photo de l'annonce" />
+              <button type="button" class="offre-photos__remove" (click)="removePhoto($index)" aria-label="Retirer la photo">
+                <pnlf-icon name="x" [size]="14" />
+              </button>
+            </div>
+          }
+          @if (photoPreviews().length < photosMax) {
+            <label class="offre-photos__add">
+              <input type="file" accept="image/*" [multiple]="true" (change)="onPhotosSelected($event)" hidden />
+              <pnlf-icon name="camera" [size]="20" />
+              <span>Ajouter</span>
+            </label>
+          }
+        </div>
+      </div>
+
       <div class="offre-form__actions">
-        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Publier</button>
+        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Soumettre pour validation</button>
       </div>
     </form>
   </pnlf-card>
 }
 
+<div class="pnlf-toolbar">
+  <input
+    type="search"
+    class="pnlf-select pnlf-toolbar__search"
+    placeholder="Rechercher un titre, une description…"
+    [ngModel]="search()"
+    (ngModelChange)="onSearchInput($event)"
+  />
+  <div class="offre-tabs">
+    <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'TOUS'" (click)="setTypeFiltre('TOUS')">Tout type</button>
+    <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'OFFRE'" (click)="setTypeFiltre('OFFRE')">Offres</button>
+    <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'DEMANDE'" (click)="setTypeFiltre('DEMANDE')">Demandes</button>
+  </div>
+  <div class="offre-tabs">
+    <button type="button" class="offre-tab" [class.is-active]="filtre() === 'TOUTES'" (click)="setFiltre('TOUTES')">Tous statuts</button>
+    <button type="button" class="offre-tab" [class.is-active]="filtre() === 'OUVERTE'" (click)="setFiltre('OUVERTE')">Publiées</button>
+    @if (canValidate) {
+      <button type="button" class="offre-tab" [class.is-active]="filtre() === 'EN_VALIDATION'" (click)="setFiltre('EN_VALIDATION')">En attente de validation</button>
+    }
+  </div>
+</div>
+
 @if (loading()) {
-  <p class="text-sm text-muted">Chargement…</p>
+  <div class="offre-grid">
+    @for (i of [1, 2, 3, 4]; track i) {
+      <pnlf-skeleton height="220px" radius="12px" />
+    }
+  </div>
 } @else if (items().length === 0) {
-  <pnlf-empty-state icon="shopping-bag" title="Aucune annonce active" description="Publiez une offre ou une demande pour entrer en relation avec des partenaires." />
+  <pnlf-empty-state
+    icon="shopping-bag"
+    title="Aucune annonce"
+    [description]="canPost ? 'Publiez une offre ou une demande pour entrer en relation avec des partenaires.' : 'Aucune annonce ne correspond à ce filtre pour le moment.'"
+  >
+    @if (canPost) {
+      <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Publier une annonce</button>
+    }
+  </pnlf-empty-state>
 } @else {
   <div class="offre-grid">
     @for (o of items(); track o.id) {
-      <pnlf-card>
+      <pnlf-card class="offre-card" (click)="openDetail(o)">
         <div class="offre-card__header">
           <pnlf-status-badge [label]="o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande'" [tone]="o.type_annonce === 'OFFRE' ? 'success' : 'info'" />
-          <span class="offre-card__date">{{ o.created_at | date }}</span>
+          <span class="offre-card__date">{{ o.created_at | date: 'dd/MM/yyyy' }}</span>
         </div>
+        @if (o.photos_urls?.length) {
+          <div class="offre-card__photo">
+            <img [src]="o.photos_urls![0]" [alt]="o.titre" loading="lazy" />
+          </div>
+        }
         <h3 class="offre-card__title">{{ o.titre }}</h3>
         @if (o.description) {
           <p class="offre-card__desc">{{ o.description }}</p>
@@ -54,10 +116,13 @@
             <span>{{ o.quantite }} {{ o.unite }}</span>
           }
           @if (o.prix_unitaire) {
-            <span>{{ o.prix_unitaire }} {{ o.devise }} / unité</span>
+            <span>{{ o.prix_unitaire | number }} {{ o.devise }} / unité</span>
           }
         </div>
+        <pnlf-status-badge [label]="statutLabels[o.statut]" [tone]="tone(o.statut)" style="margin-top: 0.5rem;" />
       </pnlf-card>
     }
   </div>
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
 }

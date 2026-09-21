@@ -10,6 +10,10 @@ import { AppareilSync, SyncConflict } from '../models/sync.model';
 export class SyncService {
   constructor(private readonly http: HttpClient) {}
 
+  enregistrerAppareil(payload: { device_id: string; libelle?: string }): Observable<AppareilSync> {
+    return this.http.post<AppareilSync>(`${environment.apiUrl}/appareils-sync/`, payload);
+  }
+
   appareils(): Observable<ApiListResponse<AppareilSync>> {
     return this.http.get<ApiListResponse<AppareilSync>>(`${environment.apiUrl}/appareils-sync/`);
   }

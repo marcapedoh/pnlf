@@ -1,0 +1,71 @@
+.pnlf-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-toast);
+  background: var(--surface-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.pnlf-dialog {
+  width: min(480px, 100%);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.pnlf-dialog__title {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  margin: 0 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.pnlf-dialog__message {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-4);
+  line-height: 1.5;
+}
+
+.pnlf-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+
+  small {
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  abbr {
+    color: var(--color-danger);
+    text-decoration: none;
+  }
+}
+
+.pnlf-dialog__textarea {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+  min-height: 88px;
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+.pnlf-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}

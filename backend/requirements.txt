@@ -9,3 +9,5 @@ bcrypt
 qrcode[pil]
 openpyxl
 reportlab
+gunicorn
+twilio

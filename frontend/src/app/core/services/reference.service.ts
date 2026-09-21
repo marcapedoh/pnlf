@@ -53,4 +53,33 @@ export class ReferenceService {
       params: { page_size: '50', ...params },
     });
   }
+
+  zoneCollecte(id: string): Observable<ZoneCollecte> {
+    return this.http.get<ZoneCollecte>(`${environment.apiUrl}/zones-collecte/${id}/`);
+  }
+
+  creerZoneCollecte(payload: Partial<ZoneCollecte>): Observable<ZoneCollecte> {
+    return this.http.post<ZoneCollecte>(`${environment.apiUrl}/zones-collecte/`, payload);
+  }
+
+  modifierZoneCollecte(id: string, payload: Partial<ZoneCollecte>): Observable<ZoneCollecte> {
+    return this.http.patch<ZoneCollecte>(`${environment.apiUrl}/zones-collecte/${id}/`, payload);
+  }
+
+  importerZonesCollecte(fichier: File): Observable<ZoneImportResult> {
+    const form = new FormData();
+    form.append('fichier', fichier);
+    return this.http.post<ZoneImportResult>(`${environment.apiUrl}/zones-collecte/import/`, form);
+  }
+
+  telechargerModeleImport(): Observable<Blob> {
+    return this.http.get(`${environment.apiUrl}/zones-collecte/modele-import/`, { responseType: 'blob' });
+  }
+}
+
+export interface ZoneImportResult {
+  crees: number;
+  mis_a_jour: number;
+  total_lignes: number;
+  erreurs: string[];
 }

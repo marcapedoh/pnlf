@@ -1,3 +1,68 @@
+.producteur-detail__pdf-fallback {
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  font-weight: 600;
+  color: var(--pnlf-green-700);
+}
+
+.producteur-detail__hero {
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.producteur-detail__photo {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--pnlf-green-100);
+  border: 2px solid var(--border-subtle);
+  flex-shrink: 0;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.producteur-detail__initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-serif);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  color: var(--pnlf-green-600);
+}
+
+.producteur-detail__photo-btn {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: var(--space-1);
+  background: rgba(6, 46, 34, 0.75);
+  color: var(--white);
+  font-size: var(--fs-xs);
+  text-align: center;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(6, 46, 34, 0.9);
+  }
+}
+
+.producteur-detail__header {
+  flex: 1;
+  min-width: 0;
+}
+
 .producteur-detail__badges {
   display: flex;
   align-items: center;
@@ -49,5 +114,48 @@
     font-weight: 600;
     color: var(--text-primary);
     text-align: right;
+  }
+}
+
+.producteur-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+
+  li {
+    padding-bottom: var(--space-4);
+    border-bottom: 1px dashed var(--border-subtle);
+
+    &:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+  }
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: baseline;
+    margin-bottom: var(--space-2);
+
+    strong {
+      font-size: var(--fs-sm);
+    }
+
+    span,
+    time {
+      font-size: var(--fs-xs);
+      color: var(--text-muted);
+    }
+  }
+
+  p {
+    margin: 0 0 var(--space-2);
+    font-size: var(--fs-sm);
+    white-space: pre-wrap;
   }
 }

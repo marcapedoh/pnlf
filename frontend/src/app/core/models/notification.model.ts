@@ -9,12 +9,24 @@ export interface PnlfNotification {
   created_at: string;
 }
 
+export type StatutOffreDemande = 'EN_VALIDATION' | 'OUVERTE' | 'REJETEE' | 'CLOTUREE';
+
+export const STATUT_OFFRE_DEMANDE_LABELS: Record<StatutOffreDemande, string> = {
+  EN_VALIDATION: 'En attente de validation',
+  OUVERTE: 'Publiée',
+  REJETEE: 'Rejetée',
+  CLOTUREE: 'Clôturée',
+};
+
 export interface OffreDemande {
   id: string;
   type_annonce: 'OFFRE' | 'DEMANDE';
   auteur_id: string;
+  auteur_nom?: string | null;
   produit_id: string;
+  produit_nom?: string | null;
   province_id: string | null;
+  province_nom?: string | null;
   quantite: number | null;
   unite: string | null;
   prix_unitaire: number | null;
@@ -22,8 +34,11 @@ export interface OffreDemande {
   titre: string;
   description: string | null;
   certification_requise: boolean;
-  statut: 'OUVERTE' | 'CLOTUREE' | 'ANNULEE';
+  statut: StatutOffreDemande;
   expire_at: string | null;
+  uuid_public?: string | null;
+  photos_urls?: string[];
+  qr_image_url?: string | null;
   created_at: string;
   updated_at: string;
 }

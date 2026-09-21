@@ -4,7 +4,7 @@
     <h1 class="pnlf-page-header__title">Déclarer un nouveau lot</h1>
     <p class="pnlf-page-header__subtitle">
       Chaque lot déclaré reçoit automatiquement un identifiant unique et un QR code de
-      vérification publique.
+      vérification publique. Vous pouvez aussi enregistrer un brouillon (photos plus tard).
     </p>
   </div>
   <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
@@ -18,29 +18,35 @@
   <form [formGroup]="form" (ngSubmit)="submit()" class="lot-form" novalidate>
     <div class="lot-form__field">
       <label class="pnlf-field__label">Producteur / collecteur <span class="pnlf-field__required">*</span></label>
-      <div class="lot-form__combo">
-        <input
-          type="text"
-          class="pnlf-select"
-          placeholder="Rechercher par nom, code ou téléphone…"
-          [value]="producteurQuery()"
-          (input)="onProducteurQueryChange($any($event.target).value)"
-        />
-        @if (producteurResults().length > 0) {
-          <ul class="lot-form__combo-results">
-            @for (p of producteurResults(); track p.id) {
-              <li>
-                <button type="button" (click)="selectProducteur(p)">
-                  <strong>{{ p.prenoms }} {{ p.nom }}</strong>
-                  <span>{{ p.code_producteur }} · {{ p.province_nom }}</span>
-                </button>
-              </li>
-            }
-          </ul>
+      @if (isProducteurRole && selectedProducteur()) {
+        <p class="lot-form__hint-ok">
+          ✓ {{ selectedProducteur()!.prenoms }} {{ selectedProducteur()!.nom }} — {{ selectedProducteur()!.code_producteur }}
+        </p>
+      } @else {
+        <div class="lot-form__combo">
+          <input
+            type="text"
+            class="pnlf-select"
+            placeholder="Rechercher par nom, code ou téléphone…"
+            [value]="producteurQuery()"
+            (input)="onProducteurQueryChange($any($event.target).value)"
+          />
+          @if (producteurResults().length > 0) {
+            <ul class="lot-form__combo-results">
+              @for (p of producteurResults(); track p.id) {
+                <li>
+                  <button type="button" (click)="selectProducteur(p)">
+                    <strong>{{ p.prenoms }} {{ p.nom }}</strong>
+                    <span>{{ p.code_producteur }} · {{ p.province_nom }}</span>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+        @if (selectedProducteur()) {
+          <p class="lot-form__hint-ok">✓ Producteur sélectionné</p>
         }
-      </div>
-      @if (selectedProducteur()) {
-        <p class="lot-form__hint-ok">✓ Producteur sélectionné</p>
       }
     </div>
 
@@ -55,10 +61,83 @@
       <pnlf-text-field label="Prix indicatif (XAF)" type="number" formControlName="prix_indicatif" />
     </div>
 
+    <div class="lot-form__field">
+      <pnlf-select-field
+        label="Zone de collecte (lieu de production / récolte)"
+        formControlName="zone_collecte"
+        [options]="zones()"
+        [required]="true"
+        hint="Choisissez une zone déjà recensée, ou créez-en une si elle n'existe pas encore."
+        [errorMessage]="submitted() && form.controls.zone_collecte.invalid ? 'Veuillez indiquer la zone de collecte.' : ''"
+      />
+      @if (nouvelleZone()) {
+        <div class="lot-form__new-zone">
+          <p class="lot-form__hint">Cette zone sera enregistrée dans le référentiel, puis liée au lot.</p>
+          <div class="producteur-form__grid">
+            <pnlf-text-field
+              label="Nom de la nouvelle zone"
+              formControlName="nouvelle_zone_libelle"
+              placeholder="ex : Forêt de Minkébé — secteur nord"
+              [required]="true"
+            />
+            <pnlf-select-field
+              label="Province"
+              formControlName="nouvelle_zone_province"
+              [options]="provinces()"
+              [required]="true"
+            />
+          </div>
+        </div>
+      }
+    </div>
+
     <pnlf-text-field label="Observations" formControlName="observations" />
+
+    <div class="lot-form__field">
+      <div class="lot-form__field-header">
+        <label class="pnlf-field__label">Coordonnées GPS du lieu de production/récolte (WGS84, optionnel)</label>
+        <button type="button" class="lot-form__gps-btn" (click)="useCurrentPosition()" [disabled]="locatingGps()">
+          <pnlf-icon name="map-pin" [size]="14" />
+          {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position actuelle' }}
+        </button>
+      </div>
+      <div class="producteur-form__grid">
+        <pnlf-text-field label="Latitude" formControlName="latitude" placeholder="ex : -0.5546" />
+        <pnlf-text-field label="Longitude" formControlName="longitude" placeholder="ex : 11.6642" />
+      </div>
+      @if (gpsError()) {
+        <p class="lot-form__error">{{ gpsError() }}</p>
+      }
+    </div>
+
+    <div class="lot-form__field">
+      <label class="pnlf-field__label">Photos de la marchandise (optionnel, {{ photosMax }} maximum)</label>
+      <div class="lot-photos">
+        @for (preview of photoPreviews(); track $index) {
+          <div class="lot-photos__thumb">
+            <img [src]="preview" alt="Photo du lot" />
+            <button type="button" class="lot-photos__remove" (click)="removePhoto($index)" aria-label="Retirer la photo">
+              <pnlf-icon name="x" [size]="14" />
+            </button>
+          </div>
+        }
+        @if (photoPreviews().length < photosMax) {
+          <label class="lot-photos__add">
+            <input type="file" accept="image/*" [multiple]="true" (change)="onPhotosSelected($event)" hidden />
+            <pnlf-icon name="camera" [size]="22" />
+            <span>Ajouter</span>
+          </label>
+        }
+      </div>
+      <p class="lot-form__hint">JPEG, PNG ou WEBP — 5 Mo maximum par photo. Visibles dans l'annuaire public.</p>
+      @if (photoError()) {
+        <p class="lot-form__error">{{ photoError() }}</p>
+      }
+    </div>
 
     <div class="producteur-form__actions">
       <a pnlfButton routerLink="/app/lots" variant="ghost" type="button">Annuler</a>
+      <button pnlfButton type="button" variant="outline" [loading]="loading()" (click)="submit(true)">Enregistrer en brouillon</button>
       <button pnlfButton type="submit" variant="primary" [loading]="loading()">Déclarer le lot</button>
     </div>
   </form>

@@ -29,7 +29,27 @@ export class CertificationsService {
     return this.http.post<Certification>(this.base, payload);
   }
 
+  valider(id: string, numeroCertificat?: string): Observable<Certification> {
+    return this.http.post<Certification>(`${this.base}${id}/valider/`, {
+      numero_certificat: numeroCertificat || '',
+    });
+  }
+
+  refuser(id: string, motif?: string): Observable<Certification> {
+    return this.http.post<Certification>(`${this.base}${id}/refuser/`, { motif: motif || '' });
+  }
+
   update(id: string, payload: Partial<Certification>): Observable<Certification> {
     return this.http.patch<Certification>(`${this.base}${id}/`, payload);
+  }
+
+  get(id: string): Observable<Certification> {
+    return this.http.get<Certification>(`${this.base}${id}/`);
+  }
+
+  uploadDocument(id: string, file: File): Observable<Certification> {
+    const form = new FormData();
+    form.append('document', file);
+    return this.http.post<Certification>(`${this.base}${id}/document/`, form);
   }
 }

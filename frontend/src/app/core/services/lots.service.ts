@@ -35,7 +35,7 @@ export class LotsService {
     return this.http.get<Lot>(`${this.base}${id}/`);
   }
 
-  create(payload: Partial<Lot>): Observable<Lot> {
+  create(payload: Partial<Lot> & { brouillon?: boolean }): Observable<Lot> {
     return this.http.post<Lot>(this.base, payload);
   }
 
@@ -49,6 +49,18 @@ export class LotsService {
 
   qrDownloadUrl(id: string): string {
     return `${this.base}${id}/qr/`;
+  }
+
+  uploadPhotos(id: string, files: File[]): Observable<Lot> {
+    const form = new FormData();
+    files.slice(0, 2).forEach((file) => form.append('photos', file));
+    return this.http.post<Lot>(`${this.base}${id}/photos/`, form);
+  }
+
+  deletePhoto(id: string, photoUrl: string): Observable<Lot> {
+    const match = photoUrl.match(/_(\d)\.jpg(?:$|\?)/);
+    const index = match ? match[1] : '1';
+    return this.http.delete<Lot>(`${this.base}${id}/photos/`, { params: { index } });
   }
 
   ajouterMouvement(lotId: string, payload: Partial<Mouvement>): Observable<Mouvement> {

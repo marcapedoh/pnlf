@@ -4,133 +4,132 @@
     <h1 class="pnlf-page-header__title">Bonjour, {{ user()?.prenoms }}</h1>
     <p class="pnlf-page-header__subtitle">
       @if (isInstitutional()) {
-        Vue d'ensemble de la filière PFNL sur l'ensemble du territoire national.
+        Vue d'ensemble de la filière PFNL et file des demandes à traiter.
+      } @else if (isAcheteur) {
+        Consultez les offres, l’annuaire et la messagerie — et vérifiez l’origine des lots.
+      } @else if (isCoop) {
+        Suivi des membres et des lots de votre coopérative.
       } @else {
-        Suivi de vos lots et de votre activité sur la plateforme de traçabilité.
+        En tant que {{ roleLabel() }}, déclarez vos lots et suivez leur traçabilité.
       }
     </p>
   </div>
-  <a pnlfButton routerLink="/app/lots" variant="primary">Voir mes lots</a>
+  @if (canDeclare) {
+    <a pnlfButton routerLink="/app/lots/nouveau" variant="primary">Déclarer un lot</a>
+  } @else {
+    <a pnlfButton routerLink="/app/marketplace/offres" variant="primary">Parcourir les offres</a>
+  }
 </div>
+
+@if (showOnboarding()) {
+  <pnlf-card title="Pour commencer" subtitle="Trois étapes pour utiliser la plateforme" style="display:block; margin-bottom: 1.5rem;">
+    <ol class="dash-onboard">
+      <li>
+        <strong>Compléter ma fiche</strong>
+        <a [routerLink]="myProducteurId() ? ['/app/producteurs', myProducteurId()] : '/app/producteurs'">Ouvrir ma fiche →</a>
+      </li>
+      <li>
+        <strong>Déclarer mon premier lot</strong>
+        <a routerLink="/app/lots/nouveau">Déclarer →</a>
+      </li>
+      <li>
+        <strong>Demander une certification (optionnel)</strong>
+        <a routerLink="/app/certifications">Demander →</a>
+      </li>
+    </ol>
+  </pnlf-card>
+}
 
 @if (isInstitutional()) {
   <div class="dashboard-kpis">
-    <pnlf-kpi-card
-      label="Producteurs actifs"
-      icon="users"
-      tone="green"
-      [value]="stats()?.totaux?.producteurs_actifs ?? 0"
-      [loading]="loading()"
-    />
-    <pnlf-kpi-card
-      label="Lots actifs"
-      icon="package"
-      tone="gold"
-      [value]="stats()?.totaux?.lots_actifs ?? 0"
-      [loading]="loading()"
-    />
-    <pnlf-kpi-card
-      label="Produits référencés"
-      icon="layers"
-      tone="blue"
-      [value]="stats()?.totaux?.produits_referentiel ?? 0"
-      [loading]="loading()"
-    />
-    <pnlf-kpi-card
-      label="Exports disponibles"
-      icon="download"
-      tone="neutral"
-      value="CSV · XLSX · PDF"
-      hint="Rapports & exports"
-    />
+    <pnlf-kpi-card label="Producteurs actifs" icon="users" tone="green" [value]="stats()?.totaux?.producteurs_actifs ?? 0" [loading]="loading()" />
+    <pnlf-kpi-card label="Lots actifs" icon="package" tone="gold" [value]="stats()?.totaux?.lots_actifs ?? 0" [loading]="loading()" />
+    <pnlf-kpi-card label="À traiter" icon="file-text" tone="blue" [value]="inboxTotal()" [loading]="loading()" hint="Inscriptions, coops, certifs, offres" />
+    <a class="dash-kpi-link" routerLink="/app/rapports">
+      <pnlf-kpi-card label="Exports" icon="download" tone="neutral" value="CSV · XLSX · PDF" hint="Rapports & exports" />
+    </a>
   </div>
+
+  @if (inboxTotal() > 0) {
+    <p class="dash-inbox-banner">
+      <a routerLink="/app/a-traiter">{{ inboxTotal() }} demande(s) en attente — ouvrir la file « À traiter » →</a>
+    </p>
+  }
 
   <div class="dashboard-charts">
     <pnlf-card title="Répartition des lots par statut" subtitle="Vue nationale, tous produits confondus">
       @if (loading()) {
         <pnlf-skeleton height="280px" radius="12px" />
       } @else {
-        <apx-chart
-          [series]="statusChart().series!"
-          [chart]="statusChart().chart!"
-          [xaxis]="statusChart().xaxis!"
-          [plotOptions]="statusChart().plotOptions!"
-          [colors]="statusChart().colors!"
-          [dataLabels]="statusChart().dataLabels!"
-          [grid]="statusChart().grid!"
-          [legend]="statusChart().legend!"
-        />
+        <apx-chart [series]="statusChart().series!" [chart]="statusChart().chart!" [xaxis]="statusChart().xaxis!" [plotOptions]="statusChart().plotOptions!" [colors]="statusChart().colors!" [dataLabels]="statusChart().dataLabels!" [grid]="statusChart().grid!" [legend]="statusChart().legend!" />
       }
     </pnlf-card>
-
     <pnlf-card title="Producteurs par province" subtitle="Top 8 provinces les plus actives">
       @if (loading()) {
         <pnlf-skeleton height="280px" radius="12px" />
       } @else {
-        <apx-chart
-          [series]="provinceChart().series!"
-          [chart]="provinceChart().chart!"
-          [xaxis]="provinceChart().xaxis!"
-          [plotOptions]="provinceChart().plotOptions!"
-          [colors]="provinceChart().colors!"
-          [dataLabels]="provinceChart().dataLabels!"
-          [grid]="provinceChart().grid!"
-          [legend]="provinceChart().legend!"
-        />
+        <apx-chart [series]="provinceChart().series!" [chart]="provinceChart().chart!" [xaxis]="provinceChart().xaxis!" [plotOptions]="provinceChart().plotOptions!" [colors]="provinceChart().colors!" [dataLabels]="provinceChart().dataLabels!" [grid]="provinceChart().grid!" [legend]="provinceChart().legend!" />
       }
     </pnlf-card>
   </div>
 } @else {
-  <div class="dashboard-kpis">
-    <pnlf-kpi-card
-      label="Mes lots suivis"
-      icon="package"
-      tone="green"
-      [value]="recentLots().length"
-      [loading]="loading()"
-      hint="Lots récents visibles ci-dessous"
-    />
-    <pnlf-kpi-card
-      label="Mon profil"
-      icon="user-check"
-      tone="blue"
-      [value]="user()?.role ?? ''"
-      hint="Statut du compte : actif"
-    />
-    <pnlf-kpi-card
-      label="Assistance"
-      icon="phone"
-      tone="gold"
-      value="Ministère des Eaux et Forêts"
-      hint="Support technique PNLF-PFNL"
-    />
+  <div class="dashboard-kpis dashboard-kpis--3">
+    <pnlf-kpi-card label="Lots suivis" icon="package" tone="green" [value]="lotsTotal()" [loading]="loading()" hint="Total de votre périmètre" />
+    <pnlf-kpi-card label="Votre profil" icon="user-check" tone="blue" [value]="roleLabel()" hint="Compte actif" />
+    @if (isAcheteur) {
+      <a class="dash-kpi-link" routerLink="/app/messagerie">
+        <pnlf-kpi-card label="Messagerie" icon="message" tone="gold" value="Discuter" hint="Contacter un producteur ou une coopérative" />
+      </a>
+    } @else if (isCoop) {
+      <pnlf-kpi-card label="Membres visibles" icon="users" tone="gold" [value]="myProducteurCount()" hint="Producteurs de votre périmètre" />
+    } @else {
+      <pnlf-kpi-card label="Assistance" icon="phone" tone="gold" value="ENEF" hint="Support technique PNLF-PFNL" />
+    }
   </div>
 }
 
-<pnlf-card title="Lots récents" subtitle="Dernières déclarations enregistrées">
+@if (isAcheteur && offresRecentes().length > 0) {
+  <pnlf-card title="Dernières offres & demandes" subtitle="Annonces publiées de la filière">
+    <div card-actions><a routerLink="/app/marketplace/offres" class="dashboard-see-all">Voir tout →</a></div>
+    <div class="pnlf-table-wrapper">
+      <table class="pnlf-table">
+        <thead><tr><th>Titre</th><th>Produit</th><th>Type</th></tr></thead>
+        <tbody>
+          @for (o of offresRecentes(); track o.id) {
+            <tr>
+              <td><a class="pnlf-table__link" [routerLink]="['/app/marketplace/offres', o.id]">{{ o.titre }}</a></td>
+              <td>{{ o.produit_nom }}</td>
+              <td>{{ o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </pnlf-card>
+}
+
+<pnlf-card title="Lots récents" subtitle="Dernières déclarations de votre périmètre">
   <div card-actions>
     <a routerLink="/app/lots" class="dashboard-see-all">Voir tout →</a>
   </div>
 
   @if (loading()) {
     <div class="pnlf-stack" style="gap: 12px;">
-      @for (i of [1, 2, 3]; track i) {
-        <pnlf-skeleton height="20px" />
-      }
+      @for (i of [1, 2, 3]; track i) { <pnlf-skeleton height="20px" /> }
     </div>
   } @else if (recentLots().length === 0) {
-    <pnlf-empty-state icon="package" title="Aucun lot enregistré" description="Les lots déclarés apparaîtront ici dès leur création." />
+    <pnlf-empty-state icon="package" title="Aucun lot enregistré" [description]="canDeclare ? 'Les lots déclarés apparaîtront ici dès leur création.' : 'Les lots de votre périmètre apparaîtront ici. Vous pouvez aussi parcourir les offres publiées.'">
+      @if (canDeclare) {
+        <a pnlfButton routerLink="/app/lots/nouveau" variant="primary">Déclarer un lot</a>
+      } @else {
+        <a pnlfButton routerLink="/app/marketplace/offres" variant="outline">Parcourir les offres</a>
+      }
+    </pnlf-empty-state>
   } @else {
     <div class="pnlf-table-wrapper">
       <table class="pnlf-table">
         <thead>
-          <tr>
-            <th>Code lot</th>
-            <th>Produit</th>
-            <th>Producteur</th>
-            <th>Quantité</th>
-            <th>Statut</th>
-          </tr>
+          <tr><th>Code lot</th><th>Produit</th><th>Producteur</th><th>Quantité</th><th>Statut</th></tr>
         </thead>
         <tbody>
           @for (lot of recentLots(); track lot.id) {

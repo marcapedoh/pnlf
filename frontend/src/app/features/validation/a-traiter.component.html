@@ -1,0 +1,107 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Administration</p>
+    <h1 class="pnlf-page-header__title">À traiter</h1>
+    <p class="pnlf-page-header__subtitle">
+      Toutes les demandes en attente : inscriptions, coopératives, certifications et annonces.
+    </p>
+  </div>
+</div>
+
+@if (loading()) {
+  <pnlf-skeleton height="280px" radius="16px" />
+} @else if (data(); as d) {
+  @if (total() === 0) {
+    <pnlf-empty-state
+      icon="check"
+      title="Rien en attente"
+      description="Les nouvelles demandes d’inscription, certifications et annonces apparaîtront ici."
+    />
+  } @else {
+    <div class="inbox-grid">
+      <pnlf-card title="Inscriptions producteurs" [subtitle]="d.producteurs.count + ' en attente'">
+        @if (d.producteurs.results.length === 0) {
+          <p class="text-sm text-muted">Aucune fiche à valider.</p>
+        } @else {
+          <ul class="inbox-list">
+            @for (p of d.producteurs.results; track p.id) {
+              <li>
+                <a [routerLink]="['/app/producteurs', p.id]">{{ p.prenoms }} {{ p.nom }}</a>
+                <span>{{ p.code_producteur }} · {{ p.created_at | date: 'dd/MM/yyyy' }}</span>
+              </li>
+            }
+          </ul>
+          <a pnlfButton routerLink="/app/producteurs" [queryParams]="{ statut: 'EN_VALIDATION' }" variant="ghost">Voir toutes →</a>
+        }
+      </pnlf-card>
+
+      <pnlf-card title="Coopératives" [subtitle]="d.cooperatives.count + ' en attente'">
+        @if (d.cooperatives.results.length === 0) {
+          <p class="text-sm text-muted">Aucune coopérative à valider.</p>
+        } @else {
+          <ul class="inbox-list">
+            @for (c of d.cooperatives.results; track c.id) {
+              <li>
+                <a [routerLink]="['/app/cooperatives', c.id]">{{ c.nom }}</a>
+                <span>{{ c.code }} · {{ c.created_at | date: 'dd/MM/yyyy' }}</span>
+              </li>
+            }
+          </ul>
+          <a pnlfButton routerLink="/app/cooperatives" variant="ghost">Voir toutes →</a>
+        }
+      </pnlf-card>
+
+      <pnlf-card title="Certifications" [subtitle]="d.certifications.count + ' en attente'">
+        @if (!canValidateOffresCertifs) {
+          <p class="text-sm text-muted">La validation des certifications est réservée à l’administrateur et à l’agent du ministère.</p>
+        } @else if (d.certifications.results.length === 0) {
+          <p class="text-sm text-muted">Aucune demande à trancher.</p>
+        } @else {
+          <ul class="inbox-list">
+            @for (c of d.certifications.results; track c.id) {
+              <li>
+                <a routerLink="/app/certifications">{{ c.type_libelle }}</a>
+                <span>{{ c.producteur_nom }} · {{ c.created_at | date: 'dd/MM/yyyy' }}</span>
+              </li>
+            }
+          </ul>
+          <a pnlfButton routerLink="/app/certifications" variant="ghost">Traiter →</a>
+        }
+      </pnlf-card>
+
+      <pnlf-card title="Annonces marketplace" [subtitle]="d.offres.count + ' en attente'">
+        @if (!canValidateOffresCertifs) {
+          <p class="text-sm text-muted">La publication des annonces est réservée à l’administrateur et à l’agent du ministère.</p>
+        } @else if (d.offres.results.length === 0) {
+          <p class="text-sm text-muted">Aucune annonce en attente de publication.</p>
+        } @else {
+          <ul class="inbox-list">
+            @for (o of d.offres.results; track o.id) {
+              <li>
+                <a [routerLink]="['/app/marketplace/offres', o.id]">{{ o.titre }}</a>
+                <span>{{ o.type_annonce }} · {{ o.created_at | date: 'dd/MM/yyyy' }}</span>
+              </li>
+            }
+          </ul>
+          <a pnlfButton routerLink="/app/marketplace/offres" variant="ghost">Traiter →</a>
+        }
+      </pnlf-card>
+
+      <pnlf-card title="Inscriptions acheteurs" [subtitle]="(d.acheteurs?.count ?? 0) + ' en attente'">
+        @if (!d.acheteurs?.results?.length) {
+          <p class="text-sm text-muted">Aucun compte acheteur à activer.</p>
+        } @else {
+          <ul class="inbox-list">
+            @for (a of d.acheteurs!.results; track a.id) {
+              <li>
+                <a [routerLink]="['/app/utilisateurs', a.id]">{{ a.prenoms }} {{ a.nom }}</a>
+                <span>{{ a.created_at | date: 'dd/MM/yyyy' }}</span>
+              </li>
+            }
+          </ul>
+          <a pnlfButton routerLink="/app/utilisateurs" [queryParams]="{ role: 'ACHETEUR', statut: 'EN_ATTENTE' }" variant="ghost">Voir tous →</a>
+        }
+      </pnlf-card>
+    </div>
+  }
+}

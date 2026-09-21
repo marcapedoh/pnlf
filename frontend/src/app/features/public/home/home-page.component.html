@@ -1,0 +1,159 @@
+<section class="hero">
+  <div class="hero__inner">
+    <div class="hero__content">
+      <p class="hero__eyebrow">République Gabonaise · Service public numérique</p>
+      <h1 class="hero__title">
+        Traçabilité officielle des Produits Forestiers Non Ligneux
+      </h1>
+      <p class="hero__lede">
+        La plateforme PNLF-PFNL garantit l'origine, la conformité et la traçabilité des PFNL
+        du Gabon — de la forêt à l'acheteur. Consultez l'annuaire des producteurs, vérifiez
+        l'authenticité d'un produit ou accédez à votre espace professionnel.
+      </p>
+      <form class="hero__search" (ngSubmit)="rechercher()">
+        <pnlf-icon name="search" [size]="18" />
+        <input
+          type="search"
+          name="recherche"
+          placeholder="Rechercher un produit (ex : Moabi) ou un producteur…"
+          [(ngModel)]="recherche"
+          aria-label="Rechercher un produit ou un producteur"
+        />
+        <button type="submit" pnlfButton variant="primary" size="md">Rechercher</button>
+      </form>
+
+      <div class="hero-doors">
+        <a routerLink="/inscription" class="hero-door">
+          <strong>Je vends</strong>
+          <span>Producteurs, collecteurs et coopératives : inscrivez-vous pour déclarer vos lots.</span>
+        </a>
+        <a routerLink="/offres-demandes" class="hero-door">
+          <strong>Je cherche</strong>
+          <span>Acheteurs : parcourez les offres validées et contactez les auteurs.</span>
+        </a>
+        <a routerLink="/verifier" class="hero-door">
+          <strong>Je vérifie</strong>
+          <span>Scannez un QR code ou saisissez le code de traçabilité d’un lot.</span>
+        </a>
+      </div>
+    </div>
+    <div class="hero__visual" aria-hidden="true">
+      <div class="hero__badge">
+        <pnlf-icon name="shield-check" [size]="48" />
+        <span>Traçabilité certifiée</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stats-section">
+  <div class="stats-section__inner">
+    <h2 class="stats-section__title">La filière PFNL en chiffres</h2>
+    @if (loading()) {
+      <div class="stats-grid">
+        @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+          <pnlf-skeleton height="100px" />
+        }
+      </div>
+    } @else if (stats(); as s) {
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span class="stat-card__value">{{ s.nb_producteurs_actifs }}</span>
+          <span class="stat-card__label">Producteurs &amp; collecteurs actifs</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__value">{{ s.nb_collecteurs }}</span>
+          <span class="stat-card__label">Collecteurs / récolteurs</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__value">{{ s.nb_lots_traces }}</span>
+          <span class="stat-card__label">Lots tracés</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__value">{{ s.nb_produits }}</span>
+          <span class="stat-card__label">Produits référencés</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__value">{{ s.nb_provinces }}</span>
+          <span class="stat-card__label">Provinces couvertes</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__value">{{ s.nb_cooperatives }}</span>
+          <span class="stat-card__label">Coopératives enregistrées</span>
+        </article>
+      </div>
+    }
+  </div>
+</section>
+
+<section class="steps-section">
+  <div class="steps-section__inner">
+    <h2 class="steps-section__title">Comment ça marche ?</h2>
+    <ol class="steps-list">
+      <li class="step-card">
+        <span class="step-card__num">1</span>
+        <h3>Déclaration &amp; traçabilité</h3>
+        <p>
+          Les producteurs et collecteurs déclarent leurs lots sur la plateforme. Chaque lot reçoit
+          un QR code unique et un historique de mouvements.
+        </p>
+      </li>
+      <li class="step-card">
+        <span class="step-card__num">2</span>
+        <h3>Validation institutionnelle</h3>
+        <p>
+          Les agents du ministère et les agents forestiers valident les fiches et contrôlent la
+          conformité réglementaire (CITES, certifications).
+        </p>
+      </li>
+      <li class="step-card">
+        <span class="step-card__num">3</span>
+        <h3>Mise en relation &amp; vérification</h3>
+        <p>
+          Les acheteurs consultent l'annuaire public, contactent les producteurs et vérifient
+          gratuitement l'authenticité de chaque produit via le QR code.
+        </p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="join-section">
+  <div class="join-section__inner">
+    <p class="text-eyebrow">Rejoindre la filière officielle</p>
+    <h2 class="join-section__title">Vous êtes producteur, récolteur ou coopérative ?</h2>
+    <p class="join-section__lede">
+      Inscrivez-vous gratuitement sur la plateforme pour déclarer vos lots, obtenir vos certifications
+      et être visible auprès des acheteurs. Votre dossier est examiné par un administrateur du ministère,
+      qui vous notifie par e-mail et SMS dès la validation.
+    </p>
+    <div class="join-section__cards">
+      <a routerLink="/inscription" [queryParams]="{ type: 'PRODUCTEUR' }" class="join-card">
+        <pnlf-icon name="leaf" [size]="28" />
+        <h3>Producteur</h3>
+        <p>Vous cultivez ou exploitez des PFNL de manière régulière.</p>
+      </a>
+      <a routerLink="/inscription" [queryParams]="{ type: 'COLLECTEUR' }" class="join-card">
+        <pnlf-icon name="map-pin" [size]="28" />
+        <h3>Collecteur / récolteur</h3>
+        <p>Vous collectez des PFNL en forêt pour les vendre ou les transformer.</p>
+      </a>
+      <a routerLink="/inscription" [queryParams]="{ type: 'COOPERATIVE' }" class="join-card">
+        <pnlf-icon name="users" [size]="28" />
+        <h3>Coopérative</h3>
+        <p>Vous représentez un groupement de producteurs ou de collecteurs.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="cta-section__inner">
+    <h2>Déjà inscrit ou acheteur ?</h2>
+    <p>Connectez-vous pour gérer vos lots, vos annonces, votre messagerie et votre fiche.</p>
+    <div class="cta-section__actions">
+      <a routerLink="/connexion" pnlfButton variant="primary" size="lg">Se connecter</a>
+      <a routerLink="/annuaire" pnlfButton variant="outline" size="lg">Consulter l’annuaire</a>
+    </div>
+  </div>
+</section>

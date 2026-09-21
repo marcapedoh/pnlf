@@ -1,0 +1,82 @@
+<div class="offres-pub">
+  <header class="offres-pub__header">
+    <p class="offres-pub__eyebrow">Marché de la filière</p>
+    <h1>Offres &amp; demandes de PFNL</h1>
+    <p>
+      Annonces validées par l'École Nationale des Eaux et Forêts. Consultez les lots proposés
+      ou recherchés, puis contactez l’auteur via la fiche de l’annonce.
+    </p>
+  </header>
+
+  <div class="offres-pub__filters">
+    <div class="offres-pub__field">
+      <pnlf-icon name="search" [size]="16" />
+      <input
+        type="search"
+        class="offres-pub__input"
+        placeholder="Rechercher un titre, un produit…"
+        [(ngModel)]="recherche"
+        (ngModelChange)="onFilterChange()"
+      />
+    </div>
+    <select class="offres-pub__select" [(ngModel)]="typeAnnonce" (ngModelChange)="onFilterChange()">
+      <option value="">Toutes les annonces</option>
+      <option value="OFFRE">Offres (vente)</option>
+      <option value="DEMANDE">Demandes (achat)</option>
+    </select>
+    <select class="offres-pub__select" [(ngModel)]="province" (ngModelChange)="onFilterChange()">
+      <option value="">Toutes les provinces</option>
+      @for (pr of provinces(); track pr.id) {
+        <option [value]="pr.id">{{ pr.nom }}</option>
+      }
+    </select>
+    <select class="offres-pub__select" [(ngModel)]="produit" (ngModelChange)="onFilterChange()">
+      <option value="">Tous les produits</option>
+      @for (p of produits(); track p.id) {
+        <option [value]="p.id">{{ p.nom }}</option>
+      }
+    </select>
+    <button type="button" class="offres-pub__btn" (click)="resetFilters()">Effacer les filtres</button>
+  </div>
+
+  @if (loading()) {
+    <div class="offres-pub__grid">
+      @for (i of [1, 2, 3, 4]; track i) {
+        <pnlf-skeleton height="280px" />
+      }
+    </div>
+  } @else if (items().length === 0) {
+    <pnlf-empty-state title="Aucune annonce publiée" description="Revenez ultérieurement ou élargissez vos critères.">
+      <button type="button" class="offres-pub__btn" (click)="resetFilters()">Effacer les filtres</button>
+    </pnlf-empty-state>
+  } @else {
+    <p class="offres-pub__count">{{ total() }} annonce{{ total() > 1 ? 's' : '' }} publiée{{ total() > 1 ? 's' : '' }}</p>
+    <div class="offres-pub__grid">
+      @for (o of items(); track o.id) {
+        <a class="offre-pub-card" [routerLink]="['/offres-demandes', o.id]">
+          <div class="offre-pub-card__photo">
+            @if (o.photos_urls?.length) {
+              <img [src]="o.photos_urls![0]" [alt]="o.titre" loading="lazy" />
+            } @else {
+              <span>Photo à venir</span>
+            }
+            <span class="offre-pub-card__type" [class.is-demande]="o.type_annonce === 'DEMANDE'">
+              {{ o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }}
+            </span>
+          </div>
+          <div class="offre-pub-card__body">
+            <h2>{{ o.titre }}</h2>
+            <p class="offre-pub-card__meta">{{ o.produit_nom }}@if (o.province_nom) { · {{ o.province_nom }} }</p>
+            @if (o.prix_unitaire) {
+              <p class="offre-pub-card__price">{{ o.prix_unitaire | number }} {{ o.devise }}</p>
+            }
+            <p class="offre-pub-card__date">Publiée le {{ o.created_at | date: 'dd/MM/yyyy' }}</p>
+          </div>
+        </a>
+      }
+    </div>
+    @if (total() > pageSize) {
+      <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+    }
+  }
+</div>

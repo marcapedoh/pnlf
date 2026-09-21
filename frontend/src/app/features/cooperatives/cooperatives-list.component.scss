@@ -1,3 +1,10 @@
+.cooperatives-list__pdf-fallback {
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  font-weight: 600;
+  color: var(--pnlf-green-700);
+}
+
 .coop-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12,4 +19,18 @@
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+}
+
+.coop-actions {
+  display: flex;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.coop-row {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--pnlf-green-50);
+  }
 }

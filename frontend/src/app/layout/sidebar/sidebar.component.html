@@ -21,7 +21,12 @@
                 (click)="closeMobile()"
                 class="app-sidebar__link"
               >
-                <pnlf-icon [name]="item.icon" [size]="19" />
+                <span class="app-sidebar__icon-wrap">
+                  <pnlf-icon [name]="item.icon" [size]="19" />
+                  @if (isMessagerie(item.route) && unreadMessages() > 0) {
+                    <span class="app-sidebar__badge">{{ unreadMessages() > 99 ? '99+' : unreadMessages() }}</span>
+                  }
+                </span>
                 <span class="app-sidebar__label">{{ item.label }}</span>
               </a>
             </li>

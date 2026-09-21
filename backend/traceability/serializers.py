@@ -7,6 +7,7 @@ from .models import (
     Cooperative,
     CooperativeMembre,
     Departement,
+    DocumentInscription,
     Lot,
     MessagePublic,
     Mouvement,
@@ -17,14 +18,23 @@ from .models import (
     Village,
     ZoneCollecte,
 )
+from .services import document_url as _document_url
+from .services import photo_url as _photo_url
+from .services import photos_urls_lot as _photos_urls_lot
 
 
-def _media_url(request, path):
-    if not path:
-        return None
-    if request:
-        return request.build_absolute_uri(f'/media/{path}')
-    return f'/media/{path}'
+def _documents_administratifs(entite_type: str, entite_id, request=None) -> list[dict]:
+    """Liste les documents administratifs joints (CNI, fiche circuit, agrément Nagoya…)."""
+    qs = DocumentInscription.objects.filter(entite_type=entite_type, entite_id=entite_id)
+    return [
+        {
+            'type_document': doc.type_document,
+            'nom_original': doc.nom_original,
+            'url': _document_url(doc.chemin, request),
+            'created_at': doc.created_at,
+        }
+        for doc in qs
+    ]
 
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -70,20 +80,32 @@ class ProduitSerializer(serializers.ModelSerializer):
         )
 
     def get_image_url(self, obj):
-        path = get_optional_column('produits', 'image_path', obj.id)
-        return _media_url(self.context.get('request'), path)
+        return _photo_url('produits', obj.id, self.context.get('request'))
 
 
 class CooperativeSerializer(serializers.ModelSerializer):
     province_nom = serializers.CharField(source='province.nom', read_only=True)
+    photo_url = serializers.SerializerMethodField()
+    documents = serializers.SerializerMethodField()
 
     class Meta:
         model = Cooperative
         fields = (
             'id', 'code', 'nom', 'numero_agrement', 'telephone', 'email', 'adresse',
-            'province', 'province_nom', 'utilisateur_id', 'actif', 'created_at', 'updated_at',
+            'province', 'province_nom', 'utilisateur_id', 'actif', 'statut', 'photo_url', 'documents',
+            'created_at', 'updated_at',
         )
-        read_only_fields = ('created_at', 'updated_at')
+        read_only_fields = ('created_at', 'updated_at', 'statut', 'utilisateur_id', 'actif')
+
+    def get_photo_url(self, obj):
+        return _photo_url('cooperatives', obj.id, self.context.get('request'))
+
+    def get_documents(self, obj):
+        request = self.context.get('request')
+        role = getattr(getattr(request, 'user', None), 'role', None)
+        if role not in ('ADMINISTRATEUR', 'AGENT_MINISTERE', 'AGENT_FORESTIER'):
+            return []
+        return _documents_administratifs('COOPERATIVE', obj.id, request)
 
 
 class CooperativeMembreSerializer(serializers.ModelSerializer):
@@ -93,6 +115,7 @@ class CooperativeMembreSerializer(serializers.ModelSerializer):
         model = CooperativeMembre
         fields = ('cooperative', 'producteur', 'producteur_nom', 'date_adhesion', 'actif', 'created_at')
         read_only_fields = ('created_at',)
+        extra_kwargs = {'date_adhesion': {'required': False, 'allow_null': True}}
 
     def get_producteur_nom(self, obj):
         return str(obj.producteur)
@@ -108,6 +131,7 @@ class ZoneCollecteSerializer(serializers.ModelSerializer):
             'latitude', 'longitude', 'actif', 'created_at', 'updated_at',
         )
         read_only_fields = ('created_at', 'updated_at')
+        extra_kwargs = {'code': {'required': False, 'allow_blank': True}}
 
 
 class ProducteurSerializer(serializers.ModelSerializer):
@@ -119,6 +143,7 @@ class ProducteurSerializer(serializers.ModelSerializer):
     )
     visible_public = serializers.BooleanField(required=False, default=True)
     photo_url = serializers.SerializerMethodField()
+    documents = serializers.SerializerMethodField()
 
     class Meta:
         model = Producteur
@@ -127,10 +152,12 @@ class ProducteurSerializer(serializers.ModelSerializer):
             'type_piece_identite', 'numero_piece', 'telephone', 'email', 'communaute',
             'province', 'province_nom', 'departement', 'village',
             'latitude', 'longitude', 'cooperative', 'utilisateur_id', 'statut',
-            'valide_par_id', 'valide_at', 'notes', 'visible_public', 'photo_url',
+            'valide_par_id', 'valide_at', 'notes', 'visible_public', 'photo_url', 'documents',
             'client_uuid', 'created_at', 'updated_at',
         )
-        read_only_fields = ('created_at', 'updated_at', 'utilisateur_id', 'valide_par_id', 'valide_at')
+        read_only_fields = (
+            'created_at', 'updated_at', 'utilisateur_id', 'valide_par_id', 'valide_at', 'statut',
+        )
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -140,11 +167,31 @@ class ProducteurSerializer(serializers.ModelSerializer):
         data['visible_public'] = bool(
             get_optional_column('producteurs', 'visible_public', instance.id, default=True)
         )
-        data['photo_url'] = _media_url(
-            self.context.get('request'),
-            get_optional_column('producteurs', 'photo_path', instance.id),
-        )
+        data['photo_url'] = _photo_url('producteurs', instance.id, self.context.get('request'))
+        request = self.context.get('request')
+        role = getattr(getattr(request, 'user', None), 'role', None)
+        if role not in (
+            'ADMINISTRATEUR',
+            'AGENT_MINISTERE',
+            'AGENT_FORESTIER',
+        ):
+            for key in ('type_piece_identite', 'numero_piece', 'date_naissance', 'notes'):
+                data.pop(key, None)
+            data['documents'] = []
+        else:
+            # Documents administratifs (CNI, fiche circuit, agrément Nagoya…) réservés
+            # aux agents/administrateurs pour l'examen du dossier d'inscription.
+            data['documents'] = _documents_administratifs('PRODUCTEUR', instance.id, request)
         return data
+
+    def get_photo_url(self, obj):
+        # Valeur définitive calculée dans to_representation ; requis car photo_url est
+        # déclaré comme SerializerMethodField (aucune colonne modèle correspondante).
+        return _photo_url('producteurs', obj.id, self.context.get('request'))
+
+    def get_documents(self, obj):
+        # Valeur définitive calculée dans to_representation (nécessite le contexte de rôle).
+        return []
 
     def create(self, validated_data):
         type_acteur = validated_data.pop('type_acteur', 'PRODUCTEUR')
@@ -187,26 +234,34 @@ class MouvementSerializer(serializers.ModelSerializer):
 class LotSerializer(serializers.ModelSerializer):
     produit_nom = serializers.CharField(source='produit.nom', read_only=True)
     producteur_nom = serializers.SerializerMethodField()
+    zone_collecte_nom = serializers.SerializerMethodField()
     mouvements = MouvementSerializer(many=True, read_only=True)
     qr_image_url = serializers.SerializerMethodField()
+    photos_urls = serializers.SerializerMethodField()
 
     class Meta:
         model = Lot
         fields = (
             'id', 'code_lot', 'uuid_public', 'produit', 'produit_nom',
-            'producteur', 'producteur_nom', 'cooperative', 'zone_collecte',
+            'producteur', 'producteur_nom', 'cooperative', 'zone_collecte', 'zone_collecte_nom',
             'date_collecte', 'quantite', 'unite', 'qualite_indicateur',
             'prix_indicatif', 'devise', 'latitude', 'longitude', 'statut',
-            'qr_payload', 'qr_image_path', 'qr_image_url', 'declare_par_id', 'observations', 'client_uuid',
+            'qr_payload', 'qr_image_path', 'qr_image_url', 'photos_urls',
+            'declare_par_id', 'observations', 'client_uuid',
             'mouvements', 'created_at', 'updated_at',
         )
         read_only_fields = (
-            'code_lot', 'uuid_public', 'qr_payload', 'qr_image_path', 'qr_image_url',
-            'declare_par_id', 'created_at', 'updated_at', 'mouvements',
+            'code_lot', 'uuid_public', 'qr_payload', 'qr_image_path', 'qr_image_url', 'photos_urls',
+            'declare_par_id', 'created_at', 'updated_at', 'mouvements', 'zone_collecte_nom', 'statut',
         )
 
     def get_producteur_nom(self, obj):
         return f'{obj.producteur.prenoms} {obj.producteur.nom}'.strip()
+
+    def get_zone_collecte_nom(self, obj):
+        if not obj.zone_collecte_id:
+            return None
+        return obj.zone_collecte.libelle
 
     def get_qr_image_url(self, obj):
         if obj.qr_image_path:
@@ -215,6 +270,9 @@ class LotSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(f'/media/{obj.qr_image_path}')
             return f'/media/{obj.qr_image_path}'
         return None
+
+    def get_photos_urls(self, obj):
+        return _photos_urls_lot(obj.id, self.context.get('request'))
 
 
 class TypeCertificationSerializer(serializers.ModelSerializer):
@@ -226,31 +284,88 @@ class TypeCertificationSerializer(serializers.ModelSerializer):
 
 class CertificationSerializer(serializers.ModelSerializer):
     type_libelle = serializers.CharField(source='type_certification.libelle', read_only=True)
+    type_organisme = serializers.CharField(source='type_certification.organisme', read_only=True)
+    type_description = serializers.CharField(source='type_certification.description', read_only=True)
+    type_duree_mois = serializers.IntegerField(source='type_certification.duree_mois', read_only=True)
+    producteur_nom = serializers.SerializerMethodField()
+    lot_code = serializers.CharField(source='lot.code_lot', read_only=True, default=None)
+    document_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Certification
         fields = (
-            'id', 'type_certification', 'type_libelle', 'lot', 'producteur',
+            'id', 'type_certification', 'type_libelle', 'type_organisme', 'type_description',
+            'type_duree_mois', 'lot', 'lot_code', 'producteur', 'producteur_nom',
             'numero_certificat', 'statut', 'date_demande', 'date_obtention', 'date_expiration',
-            'document_path', 'valide_par_id', 'observations', 'created_at', 'updated_at',
+            'document_path', 'document_url', 'valide_par_id', 'observations', 'created_at', 'updated_at',
         )
-        read_only_fields = ('created_at', 'updated_at', 'valide_par_id')
+        read_only_fields = ('created_at', 'updated_at', 'valide_par_id', 'document_path')
+
+    def get_producteur_nom(self, obj):
+        if not obj.producteur_id:
+            return None
+        return f'{obj.producteur.prenoms} {obj.producteur.nom}'.strip()
+
+    def get_document_url(self, obj):
+        from .services import document_url as _document_url
+
+        return _document_url(obj.document_path, self.context.get('request'))
 
 
 class LotVerifySerializer(serializers.ModelSerializer):
     produit_nom = serializers.CharField(source='produit.nom', read_only=True)
     producteur_nom = serializers.SerializerMethodField()
     province_nom = serializers.CharField(source='producteur.province.nom', read_only=True)
+    photos_urls = serializers.SerializerMethodField()
+    statut_libelle = serializers.SerializerMethodField()
+    mouvements = serializers.SerializerMethodField()
 
     class Meta:
         model = Lot
         fields = (
             'code_lot', 'uuid_public', 'produit_nom', 'producteur_nom', 'province_nom',
-            'date_collecte', 'quantite', 'unite', 'statut', 'qr_payload',
+            'date_collecte', 'quantite', 'unite', 'statut', 'statut_libelle', 'qr_payload',
+            'photos_urls', 'mouvements',
         )
 
     def get_producteur_nom(self, obj):
         return f'{obj.producteur.prenoms} {obj.producteur.nom}'.strip()
+
+    def get_photos_urls(self, obj):
+        return _photos_urls_lot(obj.id, self.context.get('request'))
+
+    def get_statut_libelle(self, obj):
+        return {
+            'BROUILLON': 'Brouillon',
+            'DECLARE': 'Déclaré',
+            'VALIDE': 'Validé',
+            'EN_TRANSIT': 'En transit',
+            'TRANSFORME': 'Transformé',
+            'COMMERCIALISE': 'Commercialisé',
+            'ARCHIVE': 'Archivé',
+            'ANNULE': 'Annulé',
+        }.get(obj.statut, obj.statut)
+
+    def get_mouvements(self, obj):
+        labels = {
+            'COLLECTE': 'Collecte',
+            'RECEPTION_COOPERATIVE': 'Réception coopérative',
+            'TRANSFERT': 'Transfert',
+            'TRANSFORMATION': 'Transformation',
+            'CONTROLE': 'Contrôle',
+            'VENTE': 'Vente',
+            'EXPORT': 'Export',
+            'AUTRE': 'Autre',
+        }
+        return [
+            {
+                'type_mouvement': m.type_mouvement,
+                'type_libelle': labels.get(m.type_mouvement, m.type_mouvement),
+                'date_mouvement': m.date_mouvement,
+                'lieu_libelle': m.lieu_libelle,
+            }
+            for m in obj.mouvements.all().order_by('date_mouvement', 'created_at')[:12]
+        ]
 
 
 # =============================================================================
@@ -266,20 +381,21 @@ class PublicProducteurSerializer(serializers.ModelSerializer):
     photo_url = serializers.SerializerMethodField()
     produits = serializers.SerializerMethodField()
     nb_lots = serializers.SerializerMethodField()
+    certifications = serializers.SerializerMethodField()
 
     class Meta:
         model = Producteur
         fields = (
             'id', 'nom', 'prenoms', 'type_acteur', 'communaute',
             'province', 'province_nom', 'cooperative_nom', 'photo_url',
-            'produits', 'nb_lots',
+            'produits', 'nb_lots', 'certifications',
         )
 
     def get_type_acteur(self, obj):
         return get_optional_column('producteurs', 'type_acteur', obj.id, default='PRODUCTEUR')
 
     def get_photo_url(self, obj):
-        return _media_url(self.context.get('request'), get_optional_column('producteurs', 'photo_path', obj.id))
+        return _photo_url('producteurs', obj.id, self.context.get('request'))
 
     def get_produits(self, obj):
         produits = self.context.get('produits_par_producteur', {})
@@ -289,16 +405,24 @@ class PublicProducteurSerializer(serializers.ModelSerializer):
         nb_lots = self.context.get('nb_lots_par_producteur', {})
         return nb_lots.get(obj.id, 0)
 
-
-class PublicProducteurDetailSerializer(PublicProducteurSerializer):
-    certifications = serializers.SerializerMethodField()
-
-    class Meta(PublicProducteurSerializer.Meta):
-        fields = PublicProducteurSerializer.Meta.fields + ('certifications',)
-
     def get_certifications(self, obj):
         certs = self.context.get('certifications_par_producteur', {})
         return certs.get(obj.id, [])
+
+
+class PublicProducteurDetailSerializer(PublicProducteurSerializer):
+    lots = serializers.SerializerMethodField()
+    compte_connecte = serializers.SerializerMethodField()
+
+    class Meta(PublicProducteurSerializer.Meta):
+        fields = PublicProducteurSerializer.Meta.fields + ('lots', 'compte_connecte')
+
+    def get_lots(self, obj):
+        lots = self.context.get('lots_par_producteur', {})
+        return lots.get(obj.id, [])
+
+    def get_compte_connecte(self, obj):
+        return bool(obj.utilisateur_id)
 
 
 class MessagePublicSerializer(serializers.ModelSerializer):

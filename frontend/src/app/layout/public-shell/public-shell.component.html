@@ -1,0 +1,100 @@
+<div class="public-site">
+  <header class="public-header">
+    <div class="public-header__inner">
+      <a routerLink="/" class="public-header__brand" (click)="closeMenu()">
+        <img src="assets/brand/logo-enef.jpg" alt="Logo de l'École Nationale des Eaux et Forêts" />
+        <div class="public-header__brand-text">
+          <span class="public-header__brand-title">PNLF · Traçabilité PFNL</span>
+          <span class="public-header__brand-subtitle">École Nationale des Eaux et Forêts — République Gabonaise</span>
+        </div>
+      </a>
+
+      <button
+        type="button"
+        class="public-header__menu-btn"
+        (click)="toggleMenu()"
+        [attr.aria-expanded]="menuOpen()"
+        aria-controls="public-nav"
+        aria-label="{{ menuOpen() ? 'Fermer le menu' : 'Ouvrir le menu' }}"
+      >
+        <pnlf-icon [name]="menuOpen() ? 'x' : 'menu'" [size]="22" />
+      </button>
+
+      <nav
+        id="public-nav"
+        class="public-header__nav"
+        [class.is-open]="menuOpen()"
+        aria-label="Navigation principale"
+      >
+        <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }" (click)="closeMenu()">Accueil</a>
+        <a routerLink="/annuaire" routerLinkActive="is-active" (click)="closeMenu()">Annuaire</a>
+        <a routerLink="/offres-demandes" routerLinkActive="is-active" (click)="closeMenu()">Offres &amp; demandes</a>
+        <a routerLink="/verifier" routerLinkActive="is-active" (click)="closeMenu()">Vérifier un produit</a>
+        @if (!auth.isAuthenticated()) {
+          <a routerLink="/inscription" routerLinkActive="is-active" (click)="closeMenu()">S'inscrire</a>
+        }
+        <a
+          class="public-header__nav-cta"
+          [routerLink]="auth.isAuthenticated() ? '/app/tableau-de-bord' : '/connexion'"
+          (click)="closeMenu()"
+        >
+          {{ auth.isAuthenticated() ? 'Mon espace' : 'Se connecter' }}
+        </a>
+      </nav>
+
+      <div class="public-header__actions">
+        @if (auth.isAuthenticated()) {
+          <a routerLink="/app/tableau-de-bord" class="public-header__cta public-header__cta--outline">
+            Mon espace
+          </a>
+        } @else {
+          <a routerLink="/connexion" class="public-header__cta">Se connecter</a>
+        }
+      </div>
+    </div>
+  </header>
+
+  <main class="public-main">
+    <router-outlet />
+  </main>
+
+  <footer class="public-footer">
+    <div class="public-footer__inner">
+      <div class="public-footer__grid">
+        <div>
+          <p class="public-footer__title">Plateforme PNLF-PFNL</p>
+          <p>
+            Plateforme Numérique de Traçabilité des Produits Forestiers Non Ligneux du Gabon —
+            initiative de l'École Nationale des Eaux et Forêts.
+          </p>
+        </div>
+        <div>
+          <p class="public-footer__title">Services publics</p>
+          <ul>
+            <li><a routerLink="/annuaire">Annuaire des acteurs</a></li>
+            <li><a routerLink="/offres-demandes">Offres &amp; demandes</a></li>
+            <li><a routerLink="/verifier">Vérifier un produit</a></li>
+            <li><a routerLink="/inscription">S'inscrire</a></li>
+            <li><a routerLink="/connexion">Se connecter</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="public-footer__title">Institution</p>
+          <p>République Gabonaise<br />Libreville, Gabon</p>
+        </div>
+        <div>
+          <p class="public-footer__title">Informations légales</p>
+          <ul>
+            <li><a routerLink="/faq">Foire aux questions</a></li>
+            <li><a routerLink="/politique-confidentialite">Politique de confidentialité</a></li>
+            <li><a routerLink="/conditions-utilisation">Conditions d'utilisation</a></li>
+            <li><a routerLink="/politique-cookies">Politique de cookies</a></li>
+          </ul>
+        </div>
+      </div>
+      <p class="public-footer__copy">
+        © {{ year }} République Gabonaise — École Nationale des Eaux et Forêts. Tous droits réservés.
+      </p>
+    </div>
+  </footer>
+</div>

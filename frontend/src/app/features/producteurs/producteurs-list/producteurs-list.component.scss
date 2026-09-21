@@ -1,3 +1,10 @@
 :host {
   display: block;
 }
+
+.producteurs-list__pdf-fallback {
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  font-weight: 600;
+  color: var(--pnlf-green-700);
+}

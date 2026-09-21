@@ -117,7 +117,9 @@ CREATE TYPE pnlf.type_offre AS ENUM (
 );
 
 CREATE TYPE pnlf.statut_offre AS ENUM (
+    'EN_VALIDATION',
     'OUVERTE',
+    'REJETEE',
     'CLOTUREE',
     'ANNULEE'
 );
@@ -576,6 +578,25 @@ CREATE TABLE pnlf.certifications (
 CREATE INDEX idx_certifications_lot ON pnlf.certifications (lot_id);
 CREATE INDEX idx_certifications_statut ON pnlf.certifications (statut);
 
+-- Documents administratifs joints à l'inscription (CNI, fiche circuit,
+-- agrément CITES/Nagoya…) — voir database/12_documents_administratifs.sql.
+-- Table créée dans public (pnlf_app n'a pas CREATE sur le schéma pnlf), comme
+-- conversation_context / conversation_participant_meta (migration 11).
+CREATE TABLE public.documents_inscription (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entite_type    VARCHAR(20) NOT NULL,
+    entite_id      UUID NOT NULL,
+    type_document  VARCHAR(30) NOT NULL,
+    chemin         TEXT NOT NULL,
+    nom_original   VARCHAR(255),
+    depose_par_id  UUID REFERENCES pnlf.utilisateurs(id) ON DELETE SET NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_doc_entite_type CHECK (entite_type IN ('PRODUCTEUR', 'COOPERATIVE', 'UTILISATEUR')),
+    CONSTRAINT ck_doc_type CHECK (type_document IN ('CNI', 'FICHE_CIRCUIT', 'AGREMENT_NAGOYA', 'AUTRE'))
+);
+
+CREATE INDEX idx_documents_inscription_entite ON public.documents_inscription (entite_type, entite_id);
+
 -- -----------------------------------------------------------------------------
 -- 13. MISE EN RELATION (annuaire / offres-demandes / messagerie)
 -- -----------------------------------------------------------------------------
@@ -592,7 +613,7 @@ CREATE TABLE pnlf.offres_demandes (
     titre               VARCHAR(200) NOT NULL,
     description         TEXT,
     certification_requise BOOLEAN NOT NULL DEFAULT FALSE,
-    statut              pnlf.statut_offre NOT NULL DEFAULT 'OUVERTE',
+    statut              pnlf.statut_offre NOT NULL DEFAULT 'EN_VALIDATION',
     expire_at           TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

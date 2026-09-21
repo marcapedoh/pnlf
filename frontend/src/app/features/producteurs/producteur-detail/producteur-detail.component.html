@@ -1,25 +1,55 @@
 @if (loading()) {
   <pnlf-skeleton height="220px" radius="16px" />
 } @else if (producteur(); as p) {
-  <div class="pnlf-page-header">
-    <div>
-      <p class="text-eyebrow">{{ p.code_producteur }}</p>
-      <h1 class="pnlf-page-header__title">{{ p.prenoms }} {{ p.nom }}</h1>
-      <div class="producteur-detail__badges">
-        <pnlf-status-badge [label]="statutLabels[p.statut]" [tone]="tone(p.statut)" />
-        <span class="text-sm text-muted">{{ p.type_acteur === 'COLLECTEUR' ? 'Collecteur' : 'Producteur' }}</span>
-      </div>
-    </div>
-    <div class="producteur-detail__actions">
-      @if (canValidate && p.statut === StatutProducteur.EN_VALIDATION) {
-        <button pnlfButton variant="outline" (click)="valider()">Valider la fiche</button>
-        <button pnlfButton variant="ghost" (click)="rejeter()">Rejeter</button>
+  <div class="producteur-detail__hero">
+    <div class="producteur-detail__photo">
+      @if (p.photo_url) {
+        <img [src]="p.photo_url" [alt]="p.prenoms + ' ' + p.nom" />
+      } @else {
+        <span class="producteur-detail__initials">{{ initials(p) }}</span>
       }
       @if (canManage) {
-        <a pnlfButton [routerLink]="['/app/producteurs', p.id, 'modifier']" variant="primary">Modifier</a>
+        <label class="producteur-detail__photo-btn">
+          <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onPhotoSelected($event)" hidden />
+          {{ uploadingPhoto() ? 'Envoi…' : 'Changer la photo' }}
+        </label>
       }
     </div>
+    <div class="pnlf-page-header producteur-detail__header">
+      <div>
+        <p class="text-eyebrow">{{ p.code_producteur }}</p>
+        <h1 class="pnlf-page-header__title">{{ p.prenoms }} {{ p.nom }}</h1>
+        <div class="producteur-detail__badges">
+          <pnlf-status-badge [label]="statutLabels[p.statut]" [tone]="tone(p.statut)" />
+          <span class="text-sm text-muted">{{ p.type_acteur === 'COLLECTEUR' ? 'Collecteur' : 'Producteur' }}</span>
+        </div>
+      </div>
+      <div class="producteur-detail__actions">
+        @if (canValidate && p.statut === StatutProducteur.EN_VALIDATION) {
+          <button pnlfButton variant="outline" (click)="valider()">Valider la fiche</button>
+          <button pnlfButton variant="ghost" (click)="rejeter()">Rejeter</button>
+        }
+        @if (canValidate && p.statut === StatutProducteur.ACTIF) {
+          <button pnlfButton variant="ghost" (click)="desactiver()">Désactiver</button>
+        }
+        @if (canValidate && p.statut === StatutProducteur.INACTIF) {
+          <button pnlfButton variant="outline" (click)="activer()">Réactiver</button>
+        }
+        <button pnlfButton variant="outline" type="button" [loading]="exportingPdf()" (click)="exporterPdf()">
+          Imprimer la fiche (PDF)
+        </button>
+        @if (canManage) {
+          <a pnlfButton [routerLink]="['/app/producteurs', p.id, 'modifier']" variant="primary">Modifier</a>
+        }
+      </div>
+    </div>
   </div>
+
+  @if (pdfReadyUrl(); as href) {
+    <a class="producteur-detail__pdf-fallback" [href]="href" target="_blank" rel="noopener">
+      Ouvrir le PDF de la fiche →
+    </a>
+  }
 
   <div class="producteur-detail__grid">
     <pnlf-card title="Informations personnelles">
@@ -65,6 +95,53 @@
       </div>
     }
   </pnlf-card>
+
+  <pnlf-card title="Messages reçus" subtitle="Demandes de contact via l’annuaire public ou une annonce">
+    @if (messages().length === 0) {
+      <pnlf-empty-state icon="mail" title="Aucun message" description="Les acheteurs et visiteurs qui vous contactent apparaîtront ici." />
+    } @else {
+      <ul class="producteur-messages">
+        @for (m of messages(); track m.id) {
+          <li>
+            <header>
+              <strong>{{ m.nom_visiteur }}</strong>
+              <span>{{ m.email_visiteur }}{{ m.telephone_visiteur ? ' · ' + m.telephone_visiteur : '' }}</span>
+              <time>{{ m.created_at | date: 'dd/MM/yyyy HH:mm' }}</time>
+            </header>
+            <p>{{ m.message }}</p>
+            @if (m.statut !== 'TRAITE') {
+              <button pnlfButton variant="ghost" type="button" (click)="marquerTraite(m)">Marquer comme traité</button>
+            } @else {
+              <span class="text-sm text-muted">Traité</span>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </pnlf-card>
 } @else {
   <pnlf-empty-state icon="users" title="Producteur introuvable" />
 }
+
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'rejeter'"
+  title="Rejeter la fiche"
+  message="Le motif sera communiqué au demandeur par e-mail et SMS."
+  confirmLabel="Rejeter"
+  [danger]="true"
+  [inputRequired]="true"
+  inputLabel="Motif du rejet"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'desactiver'"
+  title="Désactiver cette fiche ?"
+  message="Elle disparaîtra de l’annuaire public et le compte lié sera bloqué."
+  confirmLabel="Désactiver"
+  [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>

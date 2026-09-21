@@ -1,0 +1,83 @@
+<section class="legal-hero">
+  <div class="legal-hero__inner">
+    <p class="legal-hero__eyebrow">République Gabonaise · École Nationale des Eaux et Forêts</p>
+    <h1 class="legal-hero__title">Politique de cookies</h1>
+    <p class="legal-hero__updated">Dernière mise à jour : {{ derniereMiseAJour }}</p>
+  </div>
+</section>
+
+<section class="legal-body">
+  <div class="legal-body__inner">
+    <article class="legal-section">
+      <h2>1. Qu'est-ce qu'un cookie ?</h2>
+      <p>
+        Un cookie est un petit fichier texte déposé par un site web sur votre navigateur afin de
+        conserver certaines informations (préférences, état de connexion) entre deux visites. Cette
+        page décrit les cookies et technologies de stockage local utilisées par la plateforme
+        PNLF-PFNL.
+      </p>
+    </article>
+
+    <article class="legal-section">
+      <h2>2. Les cookies que nous utilisons</h2>
+      <p>La plateforme n'utilise que des cookies et équivalents (stockage local du navigateur) strictement nécessaires :</p>
+      <ul>
+        <li><strong>Session &amp; authentification :</strong> jeton de connexion sécurisé permettant de rester connecté à votre espace ;</li>
+        <li><strong>Préférences d'affichage :</strong> mémorisation de vos choix (ex. menu replié, filtres récents) ;</li>
+        <li><strong>Consentement aux cookies :</strong> mémorisation de votre choix concernant ce bandeau, afin de ne pas vous le présenter à chaque visite.</li>
+      </ul>
+      <p>
+        <strong>Aucun cookie publicitaire, de mesure d'audience tiers, ou de traçage entre sites n'est utilisé</strong>
+        par la plateforme.
+      </p>
+    </article>
+
+    <article class="legal-section">
+      <h2>3. Durée de conservation</h2>
+      <p>
+        Le jeton de connexion expire automatiquement après une période d'inactivité pour votre
+        sécurité. Le choix de consentement aux cookies est conservé jusqu'à ce que vous le
+        réinitialisiez ou effaciez les données de votre navigateur.
+      </p>
+    </article>
+
+    <article class="legal-section">
+      <h2>4. Gérer vos préférences</h2>
+      <p>Vous pouvez à tout moment réinitialiser votre choix concernant le bandeau de cookies :</p>
+      <div class="legal-consent-status">
+        <span>
+          Choix actuel :
+          <strong>
+            @switch (choice()) {
+              @case ('accepted') { Tout accepté }
+              @case ('essential_only') { Essentiels uniquement }
+              @default { Aucun choix enregistré }
+            }
+          </strong>
+        </span>
+        <button pnlfButton variant="outline" size="sm" type="button" (click)="rouvrirChoix()">
+          Réinitialiser mon choix
+        </button>
+      </div>
+      <p>
+        Vous pouvez également configurer votre navigateur pour bloquer ou supprimer les cookies ;
+        cela peut cependant limiter certaines fonctionnalités (maintien de la connexion notamment).
+      </p>
+    </article>
+
+    <article class="legal-section" id="contact">
+      <h2>5. Contact</h2>
+      <p>Pour toute question relative à cette politique, contactez le support technique :</p>
+      <div class="legal-contact-card">
+        <pnlf-icon name="mail" [size]="20" />
+        <div>
+          <p style="margin:0;">
+            <a href="mailto:Wadricempambou@outlook.com">Wadricempambou&#64;outlook.com</a>
+            &nbsp;·&nbsp;
+            <a href="tel:+24174054315">+241 74 05 43 15</a>
+          </p>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>

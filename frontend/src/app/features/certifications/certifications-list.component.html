@@ -20,6 +20,12 @@
     }
     <form [formGroup]="form" (ngSubmit)="submit()" class="cert-form">
       <pnlf-select-field label="Type de certification" formControlName="type_certification" [options]="types()" [required]="true" />
+      @if (needsProducteurChoice) {
+        <pnlf-select-field label="Producteur / collecteur" formControlName="producteur" [options]="producteurs()" [required]="true" />
+      }
+      <pnlf-select-field label="Lot concerné (optionnel)" formControlName="lot" [options]="lots()" placeholder="Aucun lot spécifique" />
+      <pnlf-text-field label="Date de la demande" type="date" formControlName="date_demande" [required]="true" />
+      <pnlf-text-field label="Observations" formControlName="observations" placeholder="Précisez le contexte, un justificatif, etc." />
       <div></div>
       <button pnlfButton type="submit" variant="primary" [loading]="saving()">Envoyer la demande</button>
     </form>
@@ -27,26 +33,148 @@
 }
 
 @if (loading()) {
-  <p class="text-sm text-muted">Chargement…</p>
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <tbody>
+        @for (i of [1, 2, 3, 4, 5]; track i) {
+          <tr><td colspan="6"><pnlf-skeleton height="18px" /></td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
 } @else if (items().length === 0) {
-  <pnlf-empty-state icon="shield-check" title="Aucune certification" description="Les demandes et certifications obtenues apparaîtront ici." />
+  <pnlf-empty-state icon="shield-check" title="Aucune certification" description="Les demandes et certifications obtenues apparaîtront ici.">
+    @if (canRequest) {
+      <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Demander une certification</button>
+    }
+  </pnlf-empty-state>
 } @else {
   <div class="pnlf-table-wrapper">
     <table class="pnlf-table">
       <thead>
-        <tr><th>Type</th><th>N° certificat</th><th>Date demande</th><th>Expiration</th><th>Statut</th></tr>
+        <tr>
+          <th>Type</th>
+          <th>Producteur</th>
+          <th>N° certificat</th>
+          <th>Date demande</th>
+          <th>Expiration</th>
+          <th>Statut</th>
+          <th></th>
+        </tr>
       </thead>
       <tbody>
         @for (c of items(); track c.id) {
           <tr>
             <td>{{ c.type_libelle }}</td>
+            <td>{{ c.producteur_nom || '—' }}</td>
             <td class="pnlf-table__muted">{{ c.numero_certificat || '—' }}</td>
             <td>{{ c.date_demande | date: 'dd/MM/yyyy' }}</td>
             <td>{{ c.date_expiration ? (c.date_expiration | date: 'dd/MM/yyyy') : '—' }}</td>
             <td><pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" /></td>
+            <td>
+              <div class="cert-actions">
+                <button pnlfButton variant="ghost" type="button" (click)="verDetail(c)">Détails</button>
+                @if (canValidate && (c.statut === StatutCertification.DEMANDEE || c.statut === StatutCertification.EN_COURS)) {
+                  <button pnlfButton variant="outline" type="button" [loading]="actionId() === c.id" (click)="valider(c)">Accepter</button>
+                  <button pnlfButton variant="ghost" type="button" [disabled]="actionId() === c.id" (click)="refuser(c)">Refuser</button>
+                }
+              </div>
+            </td>
           </tr>
         }
       </tbody>
     </table>
+  </div>
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+}
+
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'valider'"
+  title="Accepter la certification"
+  message="Un e-mail et un SMS seront envoyés au demandeur. Vous pouvez indiquer un numéro de certificat."
+  confirmLabel="Accepter"
+  inputLabel="Numéro de certificat (optionnel)"
+  inputPlaceholder="ex : CERT-2026-014"
+  inputHint="Laissez vide si le numéro n’est pas encore attribué."
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'refuser'"
+  title="Refuser la demande"
+  message="Le motif sera communiqué au demandeur par e-mail et SMS."
+  confirmLabel="Refuser"
+  [danger]="true"
+  [inputRequired]="true"
+  inputLabel="Motif du refus"
+  inputPlaceholder="Expliquez pourquoi la demande ne peut pas être acceptée…"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+
+@if (detail(); as d) {
+  <div class="cert-detail-backdrop" (click)="fermerDetail()" role="presentation">
+    <div class="cert-detail-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <div class="cert-detail-modal__head">
+        <div>
+          <p class="text-eyebrow">Certification</p>
+          <h2>{{ d.type_libelle }}</h2>
+        </div>
+        <pnlf-status-badge [label]="statutLabels[d.statut]" [tone]="tone(d.statut)" />
+      </div>
+
+      <dl class="cert-detail-dl">
+        <div><dt>Producteur / collecteur</dt><dd>{{ d.producteur_nom || '—' }}</dd></div>
+        @if (d.type_organisme) {
+          <div><dt>Organisme certificateur</dt><dd>{{ d.type_organisme }}</dd></div>
+        }
+        @if (d.type_description) {
+          <div><dt>Description du label</dt><dd>{{ d.type_description }}</dd></div>
+        }
+        @if (d.type_duree_mois) {
+          <div><dt>Durée de validité</dt><dd>{{ d.type_duree_mois }} mois</dd></div>
+        }
+        @if (d.lot_code) {
+          <div><dt>Lot concerné</dt><dd>{{ d.lot_code }}</dd></div>
+        }
+        <div><dt>N° de certificat</dt><dd>{{ d.numero_certificat || '—' }}</dd></div>
+        <div><dt>Date de la demande</dt><dd>{{ d.date_demande | date: 'dd/MM/yyyy' }}</dd></div>
+        @if (d.date_obtention) {
+          <div><dt>Date d'obtention</dt><dd>{{ d.date_obtention | date: 'dd/MM/yyyy' }}</dd></div>
+        }
+        @if (d.date_expiration) {
+          <div><dt>Date d'expiration</dt><dd>{{ d.date_expiration | date: 'dd/MM/yyyy' }}</dd></div>
+        }
+        @if (d.observations) {
+          <div><dt>Observations</dt><dd>{{ d.observations }}</dd></div>
+        }
+      </dl>
+
+      <div class="cert-detail-doc">
+        <p class="cert-detail-doc__label">Document justificatif</p>
+        @if (d.document_url) {
+          <a [href]="d.document_url" target="_blank" rel="noopener" pnlfButton variant="outline" size="sm">
+            Consulter le document
+          </a>
+        } @else {
+          <p class="text-sm text-muted">Aucun document joint pour le moment.</p>
+        }
+        @if (canRequest) {
+          <label class="cert-detail-doc__upload">
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" class="sr-only" [disabled]="uploadingDoc()" (change)="onDocumentSelected($event)" />
+            <span pnlfButton variant="ghost" size="sm">
+              {{ uploadingDoc() ? 'Envoi en cours…' : (d.document_url ? 'Remplacer le document' : 'Joindre un document (PDF/JPG/PNG)') }}
+            </span>
+          </label>
+        }
+      </div>
+
+      <div class="cert-detail-modal__actions">
+        <button pnlfButton variant="ghost" type="button" (click)="fermerDetail()">Fermer</button>
+      </div>
+    </div>
   </div>
 }

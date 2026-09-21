@@ -1,0 +1,111 @@
+@use '../legal-page' as *;
+
+.faq-group {
+  margin-bottom: var(--space-2);
+}
+
+.faq-group__title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-base);
+  color: var(--pnlf-green-800);
+  margin-bottom: var(--space-3);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--border-subtle);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.faq-item__question {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+
+  pnlf-icon {
+    flex-shrink: 0;
+    color: var(--pnlf-green-600);
+    transition: transform var(--duration-base) var(--ease-standard);
+  }
+
+  &[aria-expanded='true'] pnlf-icon {
+    transform: rotate(180deg);
+  }
+
+  &:hover {
+    color: var(--pnlf-green-700);
+  }
+}
+
+.faq-item__answer {
+  padding: 0 0 var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+.dev-card {
+  display: flex;
+  gap: var(--space-5);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.dev-card__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-pill);
+  background: var(--pnlf-green-700);
+  color: var(--text-inverse);
+  font-family: var(--font-serif);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.dev-card__body {
+  flex: 1 1 260px;
+}
+
+.dev-card__name {
+  font-family: var(--font-serif);
+  font-size: var(--fs-lg);
+  color: var(--pnlf-green-800);
+  margin-bottom: 2px;
+}
+
+.dev-card__role {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+.dev-card__contacts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dev-card__contacts a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--pnlf-green-700);
+  font-weight: 600;
+}

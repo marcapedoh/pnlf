@@ -1,0 +1,40 @@
+@if (open()) {
+  <div class="pnlf-dialog-backdrop" (click)="onBackdrop($event)" role="presentation">
+    <div class="pnlf-dialog" role="dialog" aria-modal="true" [attr.aria-labelledby]="'pnlf-dialog-title'">
+      <h2 id="pnlf-dialog-title" class="pnlf-dialog__title">{{ title() }}</h2>
+      @if (message()) {
+        <p class="pnlf-dialog__message">{{ message() }}</p>
+      }
+      @if (showInput()) {
+        <label class="pnlf-dialog__field">
+          <span>{{ inputLabel() }}@if (inputRequired()) { <abbr title="obligatoire">*</abbr> }</span>
+          <textarea
+            class="pnlf-dialog__textarea"
+            [placeholder]="inputPlaceholder()"
+            [value]="inputValue()"
+            (input)="inputValue.set($any($event.target).value)"
+            rows="4"
+          ></textarea>
+          @if (inputHint()) {
+            <small>{{ inputHint() }}</small>
+          }
+        </label>
+      }
+      <div class="pnlf-dialog__actions">
+        <button pnlfButton type="button" variant="ghost" (click)="onCancel()" [disabled]="loading()">
+          {{ cancelLabel() }}
+        </button>
+        <button
+          pnlfButton
+          type="button"
+          [variant]="danger() ? 'danger' : 'primary'"
+          [loading]="loading()"
+          [disabled]="inputRequired() && !inputValue().trim()"
+          (click)="onConfirm()"
+        >
+          {{ confirmLabel() }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

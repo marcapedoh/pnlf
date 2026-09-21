@@ -86,11 +86,7 @@ export class LoginComponent {
       error: (err) => {
         this.loading.set(false);
         const apiError = toApiError(err);
-        this.errorMessage.set(
-          err?.status === 401
-            ? 'Adresse e-mail ou mot de passe incorrect.'
-            : apiError.message,
-        );
+        this.errorMessage.set(apiError.message || 'Adresse e-mail ou mot de passe incorrect.');
       },
     });
   }

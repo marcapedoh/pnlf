@@ -12,7 +12,7 @@ export function toApiError(error: unknown): ApiError {
     return {
       status: 0,
       message:
-        "Impossible de joindre le serveur. Vérifiez votre connexion — vos données restent enregistrées localement.",
+        "Impossible de joindre le serveur. Vérifiez votre connexion, puis réessayez d’enregistrer.",
     };
   }
 

@@ -13,3 +13,18 @@
   display: flex;
   justify-content: flex-end;
 }
+
+.user-row {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--pnlf-green-50);
+  }
+}
+
+.user-row__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}

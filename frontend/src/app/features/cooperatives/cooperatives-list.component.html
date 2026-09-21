@@ -6,12 +6,23 @@
       Organisations collectant et regroupant les productions de leurs membres.
     </p>
   </div>
-  @if (canManage) {
-    <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
-      {{ showForm() ? 'Annuler' : '+ Nouvelle coopérative' }}
+  <div class="pnlf-page-header__actions">
+    <button pnlfButton variant="outline" type="button" [loading]="exportingPdf()" (click)="exporterListePdf()">
+      Exporter la liste (PDF)
     </button>
-  }
+    @if (canManage) {
+      <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
+        {{ showForm() ? 'Annuler' : '+ Nouvelle coopérative' }}
+      </button>
+    }
+  </div>
 </div>
+
+@if (pdfReadyUrl(); as href) {
+  <a class="cooperatives-list__pdf-fallback" [href]="href" target="_blank" rel="noopener">
+    Ouvrir le PDF de la liste →
+  </a>
+}
 
 @if (showForm()) {
   <pnlf-card title="Créer une coopérative" style="display:block; margin-bottom: 1.5rem;">
@@ -32,27 +43,99 @@
   </pnlf-card>
 }
 
+<div class="pnlf-toolbar">
+  <div class="pnlf-toolbar__filters">
+    <input
+      type="search"
+      class="pnlf-select pnlf-toolbar__search"
+      placeholder="Rechercher un nom, un code…"
+      [ngModel]="search()"
+      (ngModelChange)="onSearchInput($event)"
+    />
+  </div>
+</div>
+
 @if (loading()) {
-  <p class="text-sm text-muted">Chargement…</p>
+  <div class="pnlf-table-wrapper">
+    <table class="pnlf-table">
+      <tbody>
+        @for (i of [1, 2, 3, 4, 5]; track i) {
+          <tr><td colspan="6"><pnlf-skeleton height="18px" /></td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
 } @else if (items().length === 0) {
-  <pnlf-empty-state icon="building" title="Aucune coopérative enregistrée" />
+  <pnlf-empty-state
+    icon="building"
+    title="Aucune coopérative enregistrée"
+    description="Les coopératives validées de la filière apparaîtront ici."
+  />
 } @else {
   <div class="pnlf-table-wrapper">
     <table class="pnlf-table">
       <thead>
-        <tr><th>Code</th><th>Nom</th><th>Province</th><th>Téléphone</th><th>Statut</th></tr>
+        <tr><th>Code</th><th>Nom</th><th>Province</th><th>Téléphone</th><th>Statut</th>@if (canValidate || isProducteur) {<th>Actions</th>}</tr>
       </thead>
       <tbody>
         @for (c of items(); track c.id) {
-          <tr>
+          <tr class="coop-row" [routerLink]="[c.id]">
             <td>{{ c.code }}</td>
             <td>{{ c.nom }}</td>
             <td>{{ c.province_nom || '—' }}</td>
             <td class="pnlf-table__muted">{{ c.telephone || '—' }}</td>
-            <td><pnlf-status-badge [label]="c.actif ? 'Active' : 'Inactive'" [tone]="c.actif ? 'success' : 'neutral'" /></td>
+            <td>
+              <pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" />
+            </td>
+            @if (canValidate || isProducteur) {
+              <td (click)="$event.stopPropagation()">
+                @if (canValidate && c.statut === StatutCooperative.EN_VALIDATION) {
+                  <div class="coop-actions">
+                    <button pnlfButton size="sm" variant="primary" (click)="valider(c)">Valider</button>
+                    <button pnlfButton size="sm" variant="danger" (click)="rejeter(c)">Rejeter</button>
+                  </div>
+                } @else if (canValidate && c.statut === StatutCooperative.ACTIF) {
+                  <div class="coop-actions">
+                    <button pnlfButton size="sm" variant="ghost" (click)="desactiver(c)">Désactiver</button>
+                  </div>
+                } @else if (canValidate && c.statut === StatutCooperative.INACTIF) {
+                  <div class="coop-actions">
+                    <button pnlfButton size="sm" variant="outline" (click)="activer(c)">Réactiver</button>
+                  </div>
+                }
+                @if (isProducteur && c.statut === StatutCooperative.ACTIF) {
+                  <button pnlfButton size="sm" variant="outline" [loading]="adhesionId() === c.id" (click)="demanderAdhesion(c, $event)">Demander à rejoindre</button>
+                }
+              </td>
+            }
           </tr>
         }
       </tbody>
     </table>
   </div>
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
 }
+
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'rejeter'"
+  title="Rejeter la demande"
+  message="Le motif sera communiqué au demandeur par e-mail et SMS."
+  confirmLabel="Rejeter"
+  [danger]="true"
+  [inputRequired]="true"
+  inputLabel="Motif du rejet"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'desactiver'"
+  title="Désactiver cette coopérative ?"
+  message="Elle disparaîtra de l’annuaire public."
+  confirmLabel="Désactiver"
+  [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>

@@ -57,6 +57,14 @@
       />
       <div></div>
 
+      <div class="lot-form__field" style="grid-column: 1 / -1;">
+        <button pnlfButton type="button" variant="ghost" size="sm" (click)="useCurrentPosition()" [disabled]="locatingGps()">
+          {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position actuelle' }}
+        </button>
+        @if (gpsError()) {
+          <p class="text-sm text-muted">{{ gpsError() }}</p>
+        }
+      </div>
       <pnlf-text-field label="Latitude" formControlName="latitude" placeholder="ex : -0.5546" hint="Coordonnées GPS relevées sur le terrain" />
       <pnlf-text-field label="Longitude" formControlName="longitude" placeholder="ex : 11.6642" />
     </div>

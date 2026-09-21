@@ -17,3 +17,11 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Réponses JSON uniformes en production (DEBUG=False) pour les requêtes non
+# prises en charge par un ViewSet DRF (URL inconnue, hôte invalide, erreur
+# non interceptée). Voir config/error_views.py.
+handler400 = 'config.error_views.bad_request'
+handler403 = 'config.error_views.permission_denied'
+handler404 = 'config.error_views.not_found'
+handler500 = 'config.error_views.server_error'

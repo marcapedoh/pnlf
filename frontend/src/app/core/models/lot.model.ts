@@ -21,6 +21,7 @@ export const STATUT_LOT_LABELS: Record<StatutLot, string> = {
 };
 
 export const STATUT_LOT_ORDRE: StatutLot[] = [
+  StatutLot.BROUILLON,
   StatutLot.DECLARE,
   StatutLot.VALIDE,
   StatutLot.EN_TRANSIT,
@@ -78,6 +79,7 @@ export interface Lot {
   producteur_nom: string;
   cooperative: string | null;
   zone_collecte: string | null;
+  zone_collecte_nom?: string | null;
   date_collecte: string;
   quantite: number;
   unite: string;
@@ -90,6 +92,7 @@ export interface Lot {
   qr_payload: string | null;
   qr_image_path: string | null;
   qr_image_url: string | null;
+  photos_urls: string[];
   declare_par_id: string | null;
   observations: string | null;
   client_uuid: string | null;
@@ -108,7 +111,10 @@ export interface LotVerification {
   quantite: number;
   unite: string;
   statut: StatutLot;
+  statut_libelle?: string;
   qr_payload: string;
+  photos_urls: string[];
   authenticite: string;
   mouvements_count: number;
+  mouvements?: { type_libelle: string; date_mouvement: string; lieu_libelle: string | null }[];
 }

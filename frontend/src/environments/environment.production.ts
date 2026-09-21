@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  apiUrl: '/api',
+  apiUrl: 'https://pfnl.onrender.com/api',
   mediaUrl: '/media',
   appName: 'PNLF-PFNL',
 };

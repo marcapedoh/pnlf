@@ -1,0 +1,69 @@
+@if (loading()) {
+  <pnlf-skeleton height="260px" radius="16px" />
+} @else if (zone(); as z) {
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Zone {{ z.code }}</p>
+      <h1 class="pnlf-page-header__title">{{ z.libelle }}</h1>
+      <p class="text-sm text-muted">{{ z.province_nom }}</p>
+    </div>
+    <div class="zone-detail__actions">
+      @if (canManage && !editing()) {
+        <button pnlfButton variant="primary" (click)="startEdit()">Modifier</button>
+      }
+      <a pnlfButton routerLink="/app/zones-collecte" variant="ghost">← Retour à la liste</a>
+    </div>
+  </div>
+
+  @if (editing()) {
+    <pnlf-card title="Modifier la zone de collecte">
+      @if (errorMessage()) {
+        <p class="zone-detail__error">{{ errorMessage() }}</p>
+      }
+      <form [formGroup]="form" (ngSubmit)="save()" class="zone-detail__form">
+        <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" />
+        <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" />
+        <pnlf-text-field label="Description" formControlName="description" />
+        <pnlf-text-field label="Latitude (WGS84)" formControlName="latitude" placeholder="ex : -0.5546" />
+        <pnlf-text-field label="Longitude (WGS84)" formControlName="longitude" placeholder="ex : 11.6642" />
+        <div class="zone-detail__form-actions">
+          <button type="button" pnlfButton variant="ghost" (click)="cancelEdit()">Annuler</button>
+          <button pnlfButton type="submit" variant="primary" [loading]="saving()">Enregistrer</button>
+        </div>
+      </form>
+    </pnlf-card>
+  } @else {
+    <div class="zone-detail__grid">
+      <pnlf-card title="Informations générales">
+        <dl class="zone-detail__dl">
+          <div><dt>Code</dt><dd>{{ z.code }}</dd></div>
+          <div><dt>Libellé</dt><dd>{{ z.libelle }}</dd></div>
+          <div><dt>Province</dt><dd>{{ z.province_nom }}</dd></div>
+          <div><dt>Description</dt><dd>{{ z.description || '—' }}</dd></div>
+          <div><dt>Statut</dt><dd>{{ z.actif ? 'Active' : 'Inactive' }}</dd></div>
+        </dl>
+      </pnlf-card>
+
+      <pnlf-card title="Coordonnées WGS84">
+        <dl class="zone-detail__dl">
+          <div><dt>Latitude</dt><dd>{{ z.latitude ?? '—' }}</dd></div>
+          <div><dt>Longitude</dt><dd>{{ z.longitude ?? '—' }}</dd></div>
+          @if (z.latitude && z.longitude) {
+            <div>
+              <dt></dt>
+              <dd>
+                <a class="pnlf-table__link" [href]="mapsUrl(z.latitude, z.longitude)" target="_blank" rel="noopener">
+                  Voir sur la carte ↗
+                </a>
+              </dd>
+            </div>
+          }
+          <div><dt>Créée le</dt><dd>{{ z.created_at | date: 'dd/MM/yyyy' }}</dd></div>
+          <div><dt>Modifiée le</dt><dd>{{ z.updated_at | date: 'dd/MM/yyyy' }}</dd></div>
+        </dl>
+      </pnlf-card>
+    </div>
+  }
+} @else {
+  <pnlf-empty-state icon="map-pin" title="Zone de collecte introuvable" />
+}

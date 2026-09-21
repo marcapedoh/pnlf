@@ -40,7 +40,13 @@
     </table>
   </div>
 } @else if (items().length === 0) {
-  <pnlf-empty-state icon="package" title="Aucun lot trouvé" description="Ajustez vos filtres ou déclarez un nouveau lot." />
+  <pnlf-empty-state icon="package" title="Aucun lot trouvé" [description]="canCreate ? 'Ajustez vos filtres ou déclarez un nouveau lot.' : 'Aucun lot ne correspond à vos critères pour le moment.'">
+    @if (canCreate) {
+      <a pnlfButton routerLink="/app/lots/nouveau" variant="primary">Déclarer un lot</a>
+    } @else {
+      <button pnlfButton type="button" variant="ghost" (click)="search.set(''); statutFilter.set(''); onFilterChange()">Réinitialiser les filtres</button>
+    }
+  </pnlf-empty-state>
 } @else {
   <div class="pnlf-table-wrapper">
     <table class="pnlf-table">

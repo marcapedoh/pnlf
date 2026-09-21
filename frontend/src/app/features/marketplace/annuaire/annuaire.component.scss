@@ -1,3 +1,29 @@
+.annuaire-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.annuaire-filters__search {
+  position: relative;
+  flex: 1 1 260px;
+  display: flex;
+  align-items: center;
+
+  pnlf-icon {
+    position: absolute;
+    left: var(--space-3);
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  input {
+    width: 100%;
+    padding-left: calc(var(--space-3) * 2 + 16px);
+  }
+}
+
 .annuaire-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -11,15 +37,55 @@
 .annuaire-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  max-height: 420px;
+  gap: var(--space-2);
+  max-height: 480px;
   overflow-y: auto;
 }
 
 .annuaire-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--gray-50);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+
+  &:hover {
+    background: var(--pnlf-green-50);
+  }
+
+  > pnlf-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+}
+
+.annuaire-list__avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--pnlf-green-100);
+  color: var(--pnlf-green-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: var(--fs-xs);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.annuaire-list__info {
+  flex: 1;
+  min-width: 0;
 }
 
 .annuaire-list__name {

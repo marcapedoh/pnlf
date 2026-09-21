@@ -1,0 +1,255 @@
+<div class="inscription-page">
+  <div class="inscription-page__header">
+    <p class="text-eyebrow">République Gabonaise · École Nationale des Eaux et Forêts</p>
+    <h1>Inscription à la plateforme PNLF-PFNL</h1>
+    <p class="inscription-page__lede">
+      Rejoignez la filière officielle de traçabilité des Produits Forestiers Non Ligneux. Votre dossier
+      sera examiné par un administrateur ; vous recevrez un e-mail et un SMS dès sa validation.
+    </p>
+  </div>
+
+  @if (success(); as s) {
+    <pnlf-card>
+      <div class="inscription-success">
+        <pnlf-icon name="check" [size]="40" />
+        <h2>Votre demande est en examen</h2>
+        @if (s.numero_dossier) {
+          <p class="inscription-success__dossier">N° de dossier : <strong>{{ s.numero_dossier }}</strong></p>
+        }
+        <p>
+          Votre demande a été enregistrée avec l’adresse <strong>{{ s.email }}</strong>.
+          Conservez votre numéro de dossier. Vous recevrez un e-mail et un SMS dès que votre compte
+          sera validé — vous pourrez alors vous connecter avec le mot de passe choisi.
+        </p>
+        <p class="text-sm text-muted">Tant que le dossier n’est pas validé, la connexion affichera un message d’attente (et non une erreur de mot de passe).</p>
+        <div class="inscription-form__actions">
+          <a routerLink="/connexion" [queryParams]="loginQuery" pnlfButton variant="primary">Aller à la connexion</a>
+          <a routerLink="/" pnlfButton variant="ghost">Retour à l’accueil</a>
+        </div>
+      </div>
+    </pnlf-card>
+  } @else {
+    <pnlf-card>
+      <ol class="wizard-steps">
+        <li [class.is-active]="step() === 1" [class.is-done]="step() > 1">1. Identité</li>
+        <li [class.is-active]="step() === 2" [class.is-done]="step() > 2">2. Localisation</li>
+        <li [class.is-active]="step() === 3">3. Confirmation</li>
+      </ol>
+
+      @if (errorMessage()) {
+        <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;">{{ errorMessage() }}</pnlf-alert>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="submit()" class="inscription-form" novalidate>
+        <div class="honeypot" aria-hidden="true">
+          <label for="site_web">Site web</label>
+          <input id="site_web" type="text" formControlName="site_web" tabindex="-1" autocomplete="off" />
+        </div>
+
+        @if (step() === 1) {
+          <div class="type-selector" role="radiogroup" aria-label="Type d'inscription">
+            @for (t of types; track t.value) {
+              <button
+                type="button"
+                class="type-card"
+                [class.is-selected]="form.controls.type_demande.value === t.value"
+                role="radio"
+                [attr.aria-checked]="form.controls.type_demande.value === t.value"
+                (click)="selectType(t.value)"
+              >
+                <pnlf-icon [name]="t.icon" [size]="24" />
+                <span class="type-card__label">{{ t.label }}</span>
+                <span class="type-card__desc">{{ t.description }}</span>
+              </button>
+            }
+          </div>
+          <p class="text-sm text-muted">
+            Producteur : vous cultivez ou exploitez des PFNL. Collecteur : vous récoltez en forêt.
+            Coopérative : vous représentez un groupement. Acheteur : vous souhaitez acheter et discuter avec les acteurs.
+          </p>
+
+          @if (!isAcheteur) {
+          <h3 class="inscription-form__section">Photo {{ isCooperative ? 'de la coopérative' : "d'identité" }}</h3>
+          <div class="photo-picker">
+            <div class="photo-picker__preview">
+              @if (photoPreview()) {
+                <img [src]="photoPreview()" alt="Aperçu de la photo" />
+              } @else {
+                <pnlf-icon name="camera" [size]="28" />
+              }
+            </div>
+            <div class="photo-picker__controls">
+              <label class="photo-picker__button" for="photo-input">
+                Choisir une photo
+                <input id="photo-input" type="file" accept="image/png,image/jpeg,image/webp" (change)="onPhotoSelected($event)" hidden />
+              </label>
+              <p class="photo-picker__hint">JPEG, PNG ou WEBP — 5 Mo maximum.</p>
+              @if (submitted() && photoError()) {
+                <p class="photo-picker__error">{{ photoError() }}</p>
+              }
+            </div>
+          </div>
+
+          <h3 class="inscription-form__section">Pièce d'identité (CNI)</h3>
+          <div class="document-picker">
+            <label class="photo-picker__button" for="cni-input">
+              {{ documentCniName() || 'Choisir un fichier' }}
+              <input id="cni-input" type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="onDocumentCniSelected($event)" hidden />
+            </label>
+            <p class="photo-picker__hint">PDF, JPEG ou PNG — 8 Mo maximum. Ce document est examiné par un administrateur avant validation de votre dossier.</p>
+            @if (submitted() && documentCniError()) {
+              <p class="photo-picker__error">{{ documentCniError() }}</p>
+            }
+          </div>
+          }
+
+          <h3 class="inscription-form__section">
+            {{ isCooperative ? 'Informations sur la coopérative' : 'Identité' }}
+          </h3>
+          <div class="inscription-form__grid">
+            <pnlf-text-field
+              [label]="isCooperative ? 'Nom de la coopérative' : 'Nom'"
+              formControlName="nom"
+              [required]="true"
+              [errorMessage]="submitted() && form.controls.nom.invalid ? 'Ce champ est requis.' : ''"
+            />
+            @if (!isCooperative) {
+              <pnlf-text-field
+                label="Prénoms"
+                formControlName="prenoms"
+                [required]="true"
+                [errorMessage]="submitted() && !form.controls.prenoms.value ? 'Ce champ est requis.' : ''"
+              />
+            } @else {
+              <pnlf-text-field label="Numéro d'agrément (optionnel)" formControlName="numero_agrement" hint="À compléter si déjà attribué, sinon laissez vide." />
+            }
+
+            <pnlf-text-field
+              label="Adresse e-mail (identifiant de connexion)"
+              type="email"
+              formControlName="email"
+              [required]="true"
+              [errorMessage]="submitted() && form.controls.email.invalid ? 'Adresse e-mail valide requise.' : ''"
+            />
+            <pnlf-text-field
+              label="Téléphone"
+              type="tel"
+              formControlName="telephone"
+              placeholder="+241 …"
+              [required]="true"
+              [errorMessage]="submitted() && form.controls.telephone.invalid ? 'Numéro de téléphone requis.' : ''"
+            />
+          </div>
+
+          <h3 class="inscription-form__section">Sécurité du compte</h3>
+          <div class="inscription-form__grid">
+            <pnlf-text-field
+              label="Mot de passe"
+              type="password"
+              formControlName="password"
+              [required]="true"
+              hint="8 caractères minimum."
+              [errorMessage]="submitted() && form.controls.password.invalid ? 'Mot de passe trop court (8 caractères minimum).' : ''"
+            />
+            <pnlf-text-field
+              label="Confirmer le mot de passe"
+              type="password"
+              formControlName="password_confirmation"
+              [required]="true"
+              [errorMessage]="submitted() && form.errors?.['mismatch'] ? 'Les mots de passe ne correspondent pas.' : ''"
+            />
+          </div>
+        }
+
+        @if (step() === 2) {
+          <h3 class="inscription-form__section">{{ isAcheteur ? 'Localisation (optionnelle)' : 'Localisation' }}</h3>
+          <div class="inscription-form__grid">
+            <pnlf-select-field
+              label="Province"
+              formControlName="province"
+              [options]="provinces()"
+              [required]="!isAcheteur"
+              [errorMessage]="submitted() && form.controls.province.invalid ? 'La province est requise.' : ''"
+            />
+            @if (isAcheteur) {
+              <pnlf-text-field label="Adresse (optionnel)" formControlName="adresse" />
+            } @else if (!isCooperative) {
+              <pnlf-select-field
+                label="Département (optionnel)"
+                formControlName="departement"
+                [options]="departements()"
+                placeholder="Sélectionner une province d'abord"
+              />
+              <pnlf-select-field
+                label="Village (optionnel)"
+                formControlName="village"
+                [options]="villages()"
+                placeholder="Sélectionner un département d'abord"
+              />
+              <pnlf-text-field label="Communauté / lieu-dit" formControlName="communaute" />
+            } @else {
+              <pnlf-text-field label="Adresse de la coopérative" formControlName="adresse" />
+            }
+          </div>
+        }
+
+        @if (step() === 3) {
+          @if (!isAcheteur) {
+            <h3 class="inscription-form__section">Documents complémentaires (optionnels)</h3>
+            <p class="text-sm text-muted">
+              Joignez, si vous les avez déjà, votre fiche circuit et/ou votre agrément CITES/Nagoya
+              (obligatoire pour l'exploitation de certaines espèces protégées). Vous pourrez aussi les
+              transmettre plus tard depuis votre espace, une fois votre compte activé.
+            </p>
+            <div class="document-picker-row">
+              <div class="document-picker">
+                <label class="photo-picker__button" for="fiche-circuit-input">
+                  {{ documentFicheCircuitName() || 'Fiche circuit' }}
+                  <input id="fiche-circuit-input" type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="onDocumentFicheCircuitSelected($event)" hidden />
+                </label>
+              </div>
+              <div class="document-picker">
+                <label class="photo-picker__button" for="agrement-input">
+                  {{ documentAgrementName() || 'Agrément CITES / Nagoya' }}
+                  <input id="agrement-input" type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="onDocumentAgrementSelected($event)" hidden />
+                </label>
+              </div>
+            </div>
+          }
+
+          <pnlf-text-field
+            label="Message (optionnel)"
+            formControlName="message"
+            placeholder="Parlez-nous de votre activité, vos produits, votre zone de collecte…"
+          />
+
+          <label class="conditions-check">
+            <input type="checkbox" formControlName="accepte_conditions" />
+            <span>
+              Je certifie l'exactitude des informations fournies et j'accepte que mes données soient
+              traitées par l'École Nationale des Eaux et Forêts dans le cadre de la traçabilité des PFNL.
+            </span>
+          </label>
+          @if (submitted() && form.controls.accepte_conditions.invalid) {
+            <p class="photo-picker__error">Vous devez cocher cette case pour poursuivre.</p>
+          }
+        }
+
+        <div class="inscription-form__actions">
+          @if (step() === 1) {
+            <a routerLink="/" pnlfButton variant="ghost" type="button">Annuler</a>
+            <button pnlfButton type="button" variant="primary" size="lg" (click)="nextStep()">Continuer</button>
+          } @else if (step() === 2) {
+            <button pnlfButton type="button" variant="ghost" (click)="prevStep()">Retour</button>
+            <button pnlfButton type="button" variant="primary" size="lg" (click)="nextStep()">Continuer</button>
+          } @else {
+            <button pnlfButton type="button" variant="ghost" (click)="prevStep()">Retour</button>
+            <button pnlfButton type="submit" variant="primary" size="lg" [loading]="loading()">
+              Envoyer ma demande d'inscription
+            </button>
+          }
+        </div>
+      </form>
+    </pnlf-card>
+  }
+</div>

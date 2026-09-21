@@ -9,29 +9,54 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Utilisateur
 
 
+def _utilisateur_photo_url(user, request=None):
+    from traceability.services import photo_url as _photo_url
+
+    return _photo_url('utilisateurs', user.id, request)
+
+
 class UtilisateurSerializer(serializers.ModelSerializer):
+    photo_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Utilisateur
         fields = (
-            'id', 'email', 'telephone', 'role', 'statut', 'nom', 'prenoms',
+            'id', 'email', 'telephone', 'role', 'statut', 'nom', 'prenoms', 'photo_url',
             'doit_changer_mdp', 'preferences_notif', 'derniere_connexion', 'created_at',
         )
         read_only_fields = (
             'id', 'derniere_connexion', 'created_at',
         )
 
+    def get_photo_url(self, obj):
+        return _utilisateur_photo_url(obj, self.context.get('request'))
+
 
 class UtilisateurAdminSerializer(serializers.ModelSerializer):
     """Création / édition comptes par admin."""
     password = serializers.CharField(write_only=True, required=False, min_length=8)
+    photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Utilisateur
         fields = (
-            'id', 'email', 'telephone', 'role', 'statut', 'nom', 'prenoms',
-            'password', 'doit_changer_mdp', 'preferences_notif', 'created_at', 'updated_at',
+            'id', 'email', 'telephone', 'role', 'statut', 'nom', 'prenoms', 'photo_url',
+            'password', 'doit_changer_mdp', 'preferences_notif', 'derniere_connexion',
+            'created_at', 'updated_at',
         )
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'derniere_connexion', 'created_at', 'updated_at')
+
+    def get_photo_url(self, obj):
+        return _utilisateur_photo_url(obj, self.context.get('request'))
+
+    def validate_role(self, value):
+        request = self.context.get('request')
+        actor = getattr(request, 'user', None)
+        if value == Utilisateur.Role.ADMINISTRATEUR and getattr(actor, 'role', None) != Utilisateur.Role.ADMINISTRATEUR:
+            raise serializers.ValidationError(
+                'Seul un administrateur peut attribuer le rôle administrateur.'
+            )
+        return value
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
@@ -107,8 +132,15 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
             )
             raise serializers.ValidationError('Identifiants invalides.')
 
+        if user.statut == Utilisateur.Statut.EN_ATTENTE:
+            raise serializers.ValidationError(
+                'Votre compte est en cours de validation (délai indicatif : 5 jours ouvrés). '
+                'Vous recevrez un e-mail et un SMS dès qu’il sera activé.'
+            )
         if user.statut != Utilisateur.Statut.ACTIF:
-            raise serializers.ValidationError('Compte inactif ou en attente de validation.')
+            raise serializers.ValidationError(
+                'Compte inactif ou suspendu. Contactez l’École Nationale des Eaux et Forêts.'
+            )
 
         Utilisateur.objects.filter(pk=user.pk).update(
             tentatives_echec=0,

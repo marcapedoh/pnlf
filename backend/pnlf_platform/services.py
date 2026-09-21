@@ -126,28 +126,196 @@ def export_lots_xlsx(queryset) -> HttpResponse:
 
 
 def export_lots_pdf(queryset) -> HttpResponse:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
+    from pnlf_platform.pdf_export import export_lots_pdf as _export_lots_pdf
 
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    y = 800
-    c.setFont('Helvetica-Bold', 14)
-    c.drawString(40, y, 'Export lots PNLF')
-    y -= 30
-    c.setFont('Helvetica', 9)
-    for lot in queryset.select_related('produit', 'producteur')[:100]:
-        line = f'{lot.code_lot} | {lot.produit.nom} | {lot.quantite} {lot.unite} | {lot.statut}'
-        c.drawString(40, y, line[:110])
-        y -= 14
-        if y < 60:
-            c.showPage()
-            y = 800
-    c.save()
-    buf.seek(0)
-    response = HttpResponse(buf.read(), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="lots_pnlf_{datetime.now():%Y%m%d}.pdf"'
+    return _export_lots_pdf(queryset)
+
+
+def _periode_bornes(granularite: str, date_ref):
+    """Retourne (debut, fin exclusive, libelle) pour un jour / une semaine ISO / un mois."""
+    from datetime import date, timedelta
+
+    from django.utils.dateparse import parse_date
+
+    if isinstance(date_ref, str):
+        date_ref = parse_date(date_ref)
+    if date_ref is None:
+        date_ref = timezone.localdate()
+
+    if granularite == 'semaine':
+        debut = date_ref - timedelta(days=date_ref.weekday())
+        fin = debut + timedelta(days=7)
+        libelle = f'Semaine du {debut:%d/%m/%Y} au {(fin - timedelta(days=1)):%d/%m/%Y}'
+    elif granularite == 'mois':
+        debut = date(date_ref.year, date_ref.month, 1)
+        if date_ref.month == 12:
+            fin = date(date_ref.year + 1, 1, 1)
+        else:
+            fin = date(date_ref.year, date_ref.month + 1, 1)
+        mois_fr = [
+            '', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+            'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+        ]
+        libelle = f'{mois_fr[debut.month].capitalize()} {debut.year}'
+    else:
+        debut = date_ref
+        fin = date_ref + timedelta(days=1)
+        libelle = f'{debut:%d/%m/%Y}'
+    return debut, fin, libelle
+
+
+def _audit_rows(*, debut, fin, limit=2000, offset=0):
+    with connection.cursor() as cur:
+        cur.execute(
+            """
+            SELECT a.id, a.created_at, a.action, a.table_cible, a.enregistrement_id,
+                   a.ip_adresse::text, u.nom, u.prenoms, u.email
+            FROM audit_logs a
+            LEFT JOIN utilisateurs u ON u.id = a.utilisateur_id
+            WHERE a.created_at >= %s AND a.created_at < %s
+            ORDER BY a.created_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            [debut, fin, limit, offset],
+        )
+        cols = ['id', 'created_at', 'action', 'table_cible', 'enregistrement_id', 'ip_adresse', 'nom', 'prenoms', 'email']
+        rows = []
+        for raw in cur.fetchall():
+            item = dict(zip(cols, raw))
+            nom = item.pop('nom')
+            prenoms = item.pop('prenoms')
+            email = item.pop('email')
+            item['utilisateur'] = f'{prenoms or ""} {nom or ""}'.strip() or email or 'Système'
+            if item['created_at']:
+                item['created_at'] = timezone.localtime(item['created_at']).isoformat()
+            if item['enregistrement_id']:
+                item['enregistrement_id'] = str(item['enregistrement_id'])
+            rows.append(item)
+        cur.execute(
+            'SELECT COUNT(*) FROM audit_logs WHERE created_at >= %s AND created_at < %s',
+            [debut, fin],
+        )
+        total = cur.fetchone()[0]
+    return rows, total
+
+
+def journal_periodes(granularite: str) -> list[dict]:
+    trunc = {'jour': 'day', 'semaine': 'week', 'mois': 'month'}.get(granularite, 'day')
+    with connection.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT date_trunc(%s, created_at AT TIME ZONE 'Africa/Libreville')::date AS periode,
+                   COUNT(*) AS nb_evenements,
+                   COUNT(DISTINCT utilisateur_id) AS nb_utilisateurs
+            FROM audit_logs
+            GROUP BY 1
+            ORDER BY 1 DESC
+            LIMIT 36
+            """,
+            [trunc],
+        )
+        out = []
+        for periode, nb, nb_users in cur.fetchall():
+            debut, fin, libelle = _periode_bornes(granularite, periode)
+            out.append({
+                'date': debut.isoformat(),
+                'libelle': libelle,
+                'nb_evenements': nb,
+                'nb_utilisateurs': nb_users,
+            })
+    return out
+
+
+def journal_detail(granularite: str, date_ref, *, page=1, page_size=25):
+    debut, fin, libelle = _periode_bornes(granularite, date_ref)
+    debut_dt = timezone.make_aware(datetime.combine(debut, datetime.min.time()))
+    fin_dt = timezone.make_aware(datetime.combine(fin, datetime.min.time()))
+    offset = (page - 1) * page_size
+    rows, total = _audit_rows(debut=debut_dt, fin=fin_dt, limit=page_size, offset=offset)
+    return {
+        'granularite': granularite,
+        'date': debut.isoformat(),
+        'libelle': libelle,
+        'count': total,
+        'results': rows,
+    }
+
+
+def export_journal(granularite: str, date_ref, fmt: str) -> HttpResponse:
+    debut, fin, libelle = _periode_bornes(granularite, date_ref)
+    debut_dt = timezone.make_aware(datetime.combine(debut, datetime.min.time()))
+    fin_dt = timezone.make_aware(datetime.combine(fin, datetime.min.time()))
+    rows, _total = _audit_rows(debut=debut_dt, fin=fin_dt, limit=5000, offset=0)
+    slug = f'journal_{granularite}_{debut.isoformat()}'
+    headers = ['Date/heure', 'Action', 'Table', 'Enregistrement', 'Utilisateur', 'IP']
+
+    def _line(r):
+        created = r['created_at']
+        try:
+            created = datetime.fromisoformat(created).strftime('%d/%m/%Y %H:%M')
+        except Exception:
+            pass
+        return [
+            created,
+            r.get('action') or '',
+            r.get('table_cible') or '',
+            r.get('enregistrement_id') or '',
+            r.get('utilisateur') or '',
+            r.get('ip_adresse') or '',
+        ]
+
+    if fmt == 'xlsx':
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Journal'
+        ws.append([libelle])
+        ws.append(headers)
+        for r in rows:
+            ws.append(_line(r))
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        response = HttpResponse(
+            buf.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{slug}.xlsx"'
+        return response
+
+    if fmt == 'pdf':
+        from pnlf_platform.pdf_export import export_journal_pdf
+
+        return export_journal_pdf(rows, libelle)
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{slug}.csv"'
+    response.write('\ufeff')
+    w = csv.writer(response)
+    w.writerow([libelle])
+    w.writerow(headers)
+    for r in rows:
+        w.writerow(_line(r))
     return response
+
+
+def generer_qr_offre(offre) -> str:
+    """Génère le QR de vérification publique d'une offre/demande validée. Retourne le chemin relatif media."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    payload = offre.qr_payload or f'PNLF-OD:{offre.uuid_public}'
+    qr_dir = Path(settings.MEDIA_ROOT) / 'qr'
+    qr_dir.mkdir(parents=True, exist_ok=True)
+    filename = f'od-{offre.uuid_public}.png'
+    filepath = qr_dir / filename
+
+    import qrcode
+    img = qrcode.make(payload)
+    img.save(filepath)
+    return f'qr/{filename}'
 
 
 def creer_notification(destinataire_id, titre: str, corps: str, *, metadata=None) -> uuid.UUID:

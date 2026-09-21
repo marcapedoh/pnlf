@@ -1,0 +1,248 @@
+<div class="fiche">
+  <a routerLink="/annuaire" class="fiche__back">
+    <pnlf-icon name="arrow-left" [size]="14" /> Retour à l'annuaire
+  </a>
+
+  @if (loading()) {
+    <pnlf-skeleton height="420px" />
+  } @else if (producteur(); as p) {
+    <section class="identity">
+      <div class="identity__banner" aria-hidden="true"></div>
+      <div class="identity__main">
+        <div class="identity__avatar" [class.has-photo]="!!p.photo_url">
+          @if (p.photo_url) {
+            <img [src]="p.photo_url" [alt]="p.prenoms + ' ' + p.nom" />
+          } @else {
+            <span>{{ initials(p) }}</span>
+          }
+        </div>
+        <div class="identity__copy">
+          <div class="identity__tags">
+            <span class="identity__role" [class.is-collecteur]="p.type_acteur !== 'PRODUCTEUR'">
+              {{ typeLabels[p.type_acteur] }}
+            </span>
+            <span class="identity__trust">
+              <pnlf-icon name="shield-check" [size]="14" /> Fiche vérifiée ENEF
+            </span>
+          </div>
+          <h1>{{ p.prenoms }} {{ p.nom }}</h1>
+          <ul class="identity__facts">
+            <li>
+              <pnlf-icon name="map-pin" [size]="16" />
+              <span>{{ p.province_nom }}@if (p.communaute) { · {{ p.communaute }} }</span>
+            </li>
+            @if (p.cooperative_nom) {
+              <li>
+                <pnlf-icon name="users" [size]="16" />
+                <span>{{ p.cooperative_nom }}</span>
+              </li>
+            }
+            <li>
+              <pnlf-icon name="package" [size]="16" />
+              <span>{{ p.nb_lots }} lot{{ p.nb_lots > 1 ? 's' : '' }} tracé{{ p.nb_lots > 1 ? 's' : '' }}</span>
+            </li>
+            @if (p.certifications?.length) {
+              <li>
+                <pnlf-icon name="award" [size]="16" />
+                <span>{{ p.certifications!.length }} certification{{ p.certifications!.length > 1 ? 's' : '' }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <div class="fiche__layout">
+      <div class="fiche__main">
+        @if (p.certifications?.length) {
+          <section class="panel">
+            <header class="panel__head">
+              <h2><pnlf-icon name="award" [size]="18" /> Certifications</h2>
+              <p>Labels obtenus et vérifiés par la plateforme.</p>
+            </header>
+            <ul class="cert-list">
+              @for (cert of p.certifications!; track cert) {
+                <li class="cert-badge">
+                  <span class="cert-badge__icon" aria-hidden="true">
+                    <pnlf-icon name="award" [size]="18" />
+                  </span>
+                  <span class="cert-badge__text">
+                    <strong>{{ cert }}</strong>
+                    <em>Obtenue</em>
+                  </span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (p.produits.length) {
+          <section class="panel">
+            <header class="panel__head">
+              <h2><pnlf-icon name="leaf" [size]="18" /> Produits déclarés</h2>
+              <p>PFNL collectés ou commercialisés par cet acteur.</p>
+            </header>
+            <ul class="product-chips">
+              @for (prod of p.produits; track prod) {
+                <li>
+                  <pnlf-icon name="leaf" [size]="13" />
+                  {{ prod }}
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        <section class="panel">
+          <header class="panel__head">
+            <h2><pnlf-icon name="package" [size]="18" /> Lots disponibles</h2>
+            @if (p.lots?.length) {
+              <span class="panel__count">{{ p.lots!.length }}</span>
+            }
+          </header>
+
+          @if (p.lots?.length) {
+            <div class="lots-grid">
+              @for (lot of p.lots!; track lot.id) {
+                <a class="lot-tile" [routerLink]="['/annuaire/lot', lot.id]">
+                  <div class="lot-tile__media">
+                    @if (lot.photos_urls.length) {
+                      <img [src]="lot.photos_urls[0]" [alt]="lot.produit_nom" loading="lazy" />
+                      @if (lot.photos_urls.length > 1) {
+                        <span class="lot-tile__photos">{{ lot.photos_urls.length }} photos</span>
+                      }
+                    } @else {
+                      <div class="lot-tile__placeholder">
+                        <pnlf-icon name="camera" [size]="28" />
+                        <span>Photo à venir</span>
+                      </div>
+                    }
+                    <pnlf-status-badge
+                      class="lot-tile__status"
+                      [label]="lot.statut_libelle || statutLabel(lot.statut)"
+                      [tone]="statutTone(lot.statut)"
+                    />
+                  </div>
+                  <div class="lot-tile__body">
+                    <p class="lot-tile__code">{{ lot.code_lot }}</p>
+                    <h3>{{ lot.produit_nom }}</h3>
+                    <div class="lot-tile__meta">
+                      <span>{{ lot.quantite }} {{ lot.unite }}</span>
+                      @if (lot.qualite_indicateur) {
+                        <span>{{ lot.qualite_indicateur }}</span>
+                      }
+                      <span>{{ lot.date_collecte | date: 'dd/MM/yyyy' }}</span>
+                    </div>
+                    @if (lot.observations) {
+                      <p class="lot-tile__desc">{{ lot.observations }}</p>
+                    }
+                    <div class="lot-tile__foot">
+                      @if (lot.prix_indicatif) {
+                        <p class="lot-tile__price">
+                          {{ lot.prix_indicatif | number }} {{ lot.devise }}
+                          <span>/ {{ lot.unite }}</span>
+                        </p>
+                      } @else {
+                        <p class="lot-tile__price lot-tile__price--muted">Prix sur demande</p>
+                      }
+                      <span class="lot-tile__cta">Voir le lot <pnlf-icon name="chevron-right" [size]="14" /></span>
+                    </div>
+                  </div>
+                </a>
+              }
+            </div>
+          } @else {
+            <pnlf-empty-state
+              icon="package"
+              title="Aucun lot public pour le moment"
+              description="Les lots validés de cet acteur apparaîtront ici dès qu'ils seront publiés."
+            />
+          }
+        </section>
+      </div>
+
+      <aside class="fiche__aside">
+        <pnlf-card title="Discuter en direct" subtitle="Messagerie interne de la plateforme">
+          @if (!p.compte_connecte) {
+            <p class="chat-cta__text">
+              Cet acteur n’a pas encore de compte connecté. Utilisez le formulaire ci-dessous : le message
+              lui sera transmis par la plateforme.
+            </p>
+          } @else if (!isAuthenticated()) {
+            <p class="chat-cta__text">
+              Pour échanger en direct (texte, photo, message vocal), créez un compte acheteur ou connectez-vous.
+              Le formulaire de contact reste disponible sans inscription.
+            </p>
+            <div class="chat-cta__actions">
+              <a pnlfButton variant="primary" routerLink="/connexion" [queryParams]="{ returnUrl: returnUrl }" [fullWidth]="true">
+                Se connecter pour discuter
+              </a>
+              <a pnlfButton variant="outline" routerLink="/inscription" [queryParams]="{ type: 'ACHETEUR', returnUrl: returnUrl }" [fullWidth]="true">
+                S’inscrire comme acheteur
+              </a>
+            </div>
+          } @else if (peutDiscuter()) {
+            <p class="chat-cta__text">Ouvrez une discussion privée avec cet acteur depuis votre messagerie.</p>
+            <button pnlfButton variant="primary" [fullWidth]="true" [loading]="openingChat()" (click)="ouvrirDiscussion()">
+              Discuter maintenant
+            </button>
+          } @else {
+            <p class="chat-cta__text">
+              La discussion en direct est ouverte aux acheteurs, administrateurs et agents.
+              Vous pouvez tout de même laisser un message via le formulaire.
+            </p>
+          }
+        </pnlf-card>
+
+        <pnlf-card title="Contacter cet acteur" subtitle="Message transmis via la plateforme officielle ENEF">
+          @if (sent()) {
+            <p class="contact-success">
+              <pnlf-icon name="check" [size]="16" />
+              Message envoyé. Le producteur ou un agent du ministère vous recontactera.
+            </p>
+          }
+          <form [formGroup]="contactForm" (ngSubmit)="submitContact()" class="contact-form">
+            <pnlf-text-field
+              label="Votre nom"
+              formControlName="nom_visiteur"
+              [required]="true"
+              placeholder="Nom complet"
+            />
+            <pnlf-text-field
+              label="Votre e-mail"
+              type="email"
+              formControlName="email_visiteur"
+              [required]="true"
+              placeholder="email@exemple.com"
+            />
+            <pnlf-text-field
+              label="Téléphone (optionnel)"
+              formControlName="telephone_visiteur"
+              placeholder="+241 …"
+            />
+            <div class="contact-form__message">
+              <label for="message">Votre message</label>
+              <textarea
+                id="message"
+                formControlName="message"
+                rows="5"
+                placeholder="Achat, partenariat, information sur un lot…"
+              ></textarea>
+            </div>
+            <input type="text" class="hp-field" formControlName="site_web" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <button pnlfButton type="submit" variant="primary" [loading]="sending()" [fullWidth]="true">
+              Envoyer le message
+            </button>
+          </form>
+        </pnlf-card>
+      </aside>
+    </div>
+  } @else {
+    <div class="fiche__error">
+      <pnlf-icon name="users" [size]="36" />
+      <h1>Fiche introuvable</h1>
+      <p>Ce profil n'existe pas ou n'est plus visible publiquement.</p>
+      <a pnlfButton routerLink="/annuaire" variant="primary">Retour à l'annuaire</a>
+    </div>
+  }
+</div>
