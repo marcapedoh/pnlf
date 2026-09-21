@@ -5,6 +5,15 @@ import { map, Observable } from 'rxjs';
 import { SKIP_GLOBAL_ERROR_TOAST, SKIP_LOADING_BAR } from './http-context-tokens';
 
 /**
+ * En-tête standard signalant un appel AJAX (et non une navigation/téléchargement natif).
+ * De nombreux gestionnaires de téléchargement tiers installés dans le navigateur
+ * (Internet Download Manager, EagleGet, Free Download Manager...) excluent les requêtes
+ * portant cet en-tête de leur interception — utile en complément de la suppression des
+ * en-têtes `Content-Disposition` côté serveur pour ces mêmes endpoints.
+ */
+export const AJAX_EXPORT_HEADERS = { 'X-Requested-With': 'XMLHttpRequest' };
+
+/**
  * Déclenche le téléchargement natif d'un Blob déjà en mémoire (CSV, Excel, PDF...).
  * Fonctionne sur tous les navigateurs modernes ; utilisé notamment par
  * `PdfPreviewService` après affichage de l'aperçu.
@@ -71,7 +80,7 @@ export class FileDownloadService {
       .get(url, {
         responseType: 'arraybuffer',
         context,
-        headers: { Accept: '*/*' },
+        headers: { Accept: '*/*', ...AJAX_EXPORT_HEADERS },
       })
       .pipe(
         map((buffer) => {

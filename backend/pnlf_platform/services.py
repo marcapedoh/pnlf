@@ -87,8 +87,11 @@ def dashboard_stats(*, province_id=None, produit_id=None, date_debut=None, date_
 
 
 def export_lots_csv(queryset) -> HttpResponse:
+    # Pas de Content-Disposition : ce fichier est récupéré en Blob via XHR/fetch
+    # authentifié puis nommé côté client (voir triggerBrowserDownload). Ajouter cet
+    # en-tête ferait intercepter la requête par les gestionnaires de téléchargement
+    # tiers du navigateur (IDM, EagleGet...), qui renverraient une réponse vide.
     response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = f'attachment; filename="lots_pnlf_{datetime.now():%Y%m%d}.csv"'
     response.write('\ufeff')
     w = csv.writer(response)
     w.writerow(['code_lot', 'uuid_public', 'produit', 'producteur', 'date_collecte', 'quantite', 'unite', 'statut'])
@@ -121,7 +124,6 @@ def export_lots_xlsx(queryset) -> HttpResponse:
         buf.read(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
-    response['Content-Disposition'] = f'attachment; filename="lots_pnlf_{datetime.now():%Y%m%d}.xlsx"'
     return response
 
 
@@ -281,7 +283,6 @@ def export_journal(granularite: str, date_ref, fmt: str) -> HttpResponse:
             buf.read(),
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
-        response['Content-Disposition'] = f'attachment; filename="{slug}.xlsx"'
         return response
 
     if fmt == 'pdf':
@@ -289,8 +290,8 @@ def export_journal(granularite: str, date_ref, fmt: str) -> HttpResponse:
 
         return export_journal_pdf(rows, libelle)
 
+    # Pas de Content-Disposition (voir export_lots_csv) : fichier récupéré en Blob XHR.
     response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = f'attachment; filename="{slug}.csv"'
     response.write('\ufeff')
     w = csv.writer(response)
     w.writerow([libelle])

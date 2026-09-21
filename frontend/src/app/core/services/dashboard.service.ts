@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { AJAX_EXPORT_HEADERS } from '../http/download-file.util';
 import { DashboardStats } from '../models/dashboard.model';
 
 export type JournalGranularite = 'jour' | 'semaine' | 'mois';
@@ -64,7 +65,11 @@ export class DashboardService {
 
   /** Récupère le PDF des lots en Blob authentifié (pour aperçu via PdfPreviewService). */
   lotsPdfBlob(): Observable<Blob> {
-    return this.http.post(`${environment.apiUrl}/exports/lots/ticket/`, {}, { responseType: 'blob' });
+    return this.http.post(
+      `${environment.apiUrl}/exports/lots/ticket/`,
+      {},
+      { responseType: 'blob', headers: AJAX_EXPORT_HEADERS },
+    );
   }
 
   /** Récupère le PDF du journal en Blob authentifié (pour aperçu via PdfPreviewService). */
@@ -72,7 +77,7 @@ export class DashboardService {
     return this.http.post(
       `${environment.apiUrl}/exports/journal/ticket/`,
       { granularite, date },
-      { responseType: 'blob' },
+      { responseType: 'blob', headers: AJAX_EXPORT_HEADERS },
     );
   }
 

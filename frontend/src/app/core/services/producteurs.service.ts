@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { AJAX_EXPORT_HEADERS } from '../http/download-file.util';
 import { ApiListResponse } from '../models/common.model';
 import { Producteur } from '../models/producteur.model';
 import { MessagePublic } from '../models/public.model';
@@ -85,7 +86,11 @@ export class ProducteursService {
 
   /** Récupère la fiche PDF de ce producteur/collecteur en Blob authentifié. */
   fichePdfBlob(id: string): Observable<Blob> {
-    return this.http.post(`${this.base}${id}/pdf/`, {}, { responseType: 'blob' });
+    return this.http.post(
+      `${this.base}${id}/pdf/`,
+      {},
+      { responseType: 'blob', headers: AJAX_EXPORT_HEADERS },
+    );
   }
 
   /** Récupère la liste PDF des producteurs/collecteurs visibles en Blob authentifié. */
@@ -96,6 +101,10 @@ export class ProducteursService {
         httpParams[key] = String(value);
       }
     });
-    return this.http.post(`${this.base}pdf-liste/`, {}, { params: httpParams, responseType: 'blob' });
+    return this.http.post(
+      `${this.base}pdf-liste/`,
+      {},
+      { params: httpParams, responseType: 'blob', headers: AJAX_EXPORT_HEADERS },
+    );
   }
 }

@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { AJAX_EXPORT_HEADERS } from '../http/download-file.util';
 import { ApiListResponse } from '../models/common.model';
 import {
   CategorieProduit,
@@ -73,7 +74,10 @@ export class ReferenceService {
   }
 
   telechargerModeleImport(): Observable<Blob> {
-    return this.http.get(`${environment.apiUrl}/zones-collecte/modele-import/`, { responseType: 'blob' });
+    return this.http.get(`${environment.apiUrl}/zones-collecte/modele-import/`, {
+      responseType: 'blob',
+      headers: AJAX_EXPORT_HEADERS,
+    });
   }
 }
 

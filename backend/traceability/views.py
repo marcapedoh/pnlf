@@ -512,8 +512,8 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
         import csv
         from django.http import HttpResponse
 
+        # Pas de Content-Disposition : fichier récupéré en Blob XHR (voir export_lots_csv).
         response = HttpResponse(content_type='text/csv; charset=utf-8')
-        response['Content-Disposition'] = 'attachment; filename="modele-zones-collecte.csv"'
         writer = csv.writer(response)
         writer.writerow(['code', 'libelle', 'province_code', 'description', 'latitude', 'longitude'])
         writer.writerow(['ZC-EXEMPLE', 'Forêt de Minkébé — secteur nord', 'WOL', 'Zone d’exemple', '-0.5546', '11.6642'])

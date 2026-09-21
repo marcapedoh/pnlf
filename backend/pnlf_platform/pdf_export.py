@@ -308,10 +308,18 @@ def _render_pdf(story, *, title: str, footer: str) -> bytes:
 
 
 def pdf_file_response(pdf: bytes, filename: str) -> HttpResponse:
-    """Réponse pour une navigation navigateur native (pas un XHR)."""
-    ascii_name = filename.encode('ascii', 'ignore').decode('ascii') or 'export.pdf'
+    """Réponse binaire PDF destinée à être récupérée en Blob via XHR/fetch authentifié
+    (voir `PdfPreviewService` côté frontend), jamais via une navigation navigateur directe.
+
+    Volontairement SANS en-tête `Content-Disposition` : ce nom de fichier est déjà géré
+    côté client (JS) au moment du téléchargement réel. La présence de cet en-tête (même
+    en `inline`) associée à un `Content-Type: application/pdf` suffit à certains
+    gestionnaires de téléchargement tiers installés dans le navigateur (Internet Download
+    Manager, EagleGet, etc.) pour intercepter la requête et renvoyer une réponse vide
+    (HTTP 204) au JavaScript de la page — d'où un « document PDF vide » côté utilisateur
+    alors que le serveur a bien généré le fichier.
+    """
     response = HttpResponse(pdf, content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="{ascii_name}"'
     response['Cache-Control'] = 'no-store'
     response['X-Content-Type-Options'] = 'nosniff'
     response['Content-Length'] = str(len(pdf))
