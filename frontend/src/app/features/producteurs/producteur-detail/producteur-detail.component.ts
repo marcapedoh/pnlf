@@ -3,19 +3,13 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
-import {
-  messageFromDownloadError,
-  navigateOpenedTab,
-  openPdfTicketTab,
-  toSameOriginUrl,
-  writePdfLoadingPlaceholder,
-} from '../../../core/http/download-file.util';
 import { unwrapList } from '../../../core/models/common.model';
 import { Lot, STATUT_LOT_LABELS } from '../../../core/models/lot.model';
 import { Producteur, STATUT_PRODUCTEUR_LABELS, StatutProducteur } from '../../../core/models/producteur.model';
 import { MessagePublic } from '../../../core/models/public.model';
 import { RoleUtilisateur } from '../../../core/models/user.model';
 import { LotsService } from '../../../core/services/lots.service';
+import { PdfPreviewService } from '../../../core/services/pdf-preview.service';
 import { ProducteursService } from '../../../core/services/producteurs.service';
 import { lotStatusTone, producteurStatusTone } from '../../../core/ui/status-tone.util';
 import { ButtonComponent } from '../../../design-system/button/button.component';
@@ -67,8 +61,7 @@ export class ProducteurDetailComponent {
   readonly uploadingPhoto = signal(false);
   readonly dialog = signal<{ kind: 'rejeter' | 'desactiver' } | null>(null);
   readonly dialogLoading = signal(false);
-  readonly exportingPdf = signal(false);
-  readonly pdfReadyUrl = signal<string | null>(null);
+  private readonly pdfPreview = inject(PdfPreviewService);
 
   constructor() {
     this.load();
@@ -168,26 +161,9 @@ export class ProducteurDetailComponent {
   }
 
   exporterPdf(): void {
-    this.pdfReadyUrl.set(null);
-    const tab = openPdfTicketTab();
-    writePdfLoadingPlaceholder(tab);
-    this.exportingPdf.set(true);
-    this.service.createFichePdfTicket(this.id).subscribe({
-      next: ({ url }) => {
-        this.exportingPdf.set(false);
-        if (navigateOpenedTab(tab, url)) {
-          this.toast.success('Le PDF s’ouvre dans un nouvel onglet.');
-          return;
-        }
-        this.pdfReadyUrl.set(toSameOriginUrl(url));
-        this.toast.info('Cliquez sur « Ouvrir le PDF » — le navigateur a bloqué la nouvelle fenêtre.');
-      },
-      error: (err: unknown) => {
-        this.exportingPdf.set(false);
-        tab?.close();
-        this.toast.error(messageFromDownloadError(err));
-      },
-    });
+    const p = this.producteur();
+    const filename = `fiche-${p?.code_producteur ?? this.id}.pdf`;
+    this.pdfPreview.open('Fiche producteur/collecteur', filename, () => this.service.fichePdfBlob(this.id));
   }
 
   marquerTraite(m: MessagePublic): void {

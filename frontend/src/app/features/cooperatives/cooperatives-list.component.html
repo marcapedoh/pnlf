@@ -7,7 +7,7 @@
     </p>
   </div>
   <div class="pnlf-page-header__actions">
-    <button pnlfButton variant="outline" type="button" [loading]="exportingPdf()" (click)="exporterListePdf()">
+    <button pnlfButton variant="outline" type="button" (click)="exporterListePdf()">
       Exporter la liste (PDF)
     </button>
     @if (canManage) {
@@ -17,12 +17,6 @@
     }
   </div>
 </div>
-
-@if (pdfReadyUrl(); as href) {
-  <a class="cooperatives-list__pdf-fallback" [href]="href" target="_blank" rel="noopener">
-    Ouvrir le PDF de la liste →
-  </a>
-}
 
 @if (showForm()) {
   <pnlf-card title="Créer une coopérative" style="display:block; margin-bottom: 1.5rem;">

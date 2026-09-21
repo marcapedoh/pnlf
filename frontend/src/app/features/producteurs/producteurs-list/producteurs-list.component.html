@@ -7,7 +7,7 @@
     </p>
   </div>
   <div class="pnlf-page-header__actions">
-    <button pnlfButton variant="outline" type="button" [loading]="exportingPdf()" (click)="exporterListePdf()">
+    <button pnlfButton variant="outline" type="button" (click)="exporterListePdf()">
       Exporter la liste (PDF)
     </button>
     @if (canCreate) {
@@ -17,12 +17,6 @@
     }
   </div>
 </div>
-
-@if (pdfReadyUrl(); as href) {
-  <a class="producteurs-list__pdf-fallback" [href]="href" target="_blank" rel="noopener">
-    Ouvrir le PDF de la liste →
-  </a>
-}
 
 <div class="pnlf-toolbar">
   <div class="pnlf-toolbar__filters">

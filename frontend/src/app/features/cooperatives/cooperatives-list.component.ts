@@ -5,17 +5,11 @@ import { Router, RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth.service';
-import {
-  messageFromDownloadError,
-  navigateOpenedTab,
-  openPdfTicketTab,
-  toSameOriginUrl,
-  writePdfLoadingPlaceholder,
-} from '../../core/http/download-file.util';
 import { unwrapCount, unwrapList } from '../../core/models/common.model';
 import { Cooperative, STATUT_COOPERATIVE_LABELS, StatutCooperative } from '../../core/models/producteur.model';
 import { RoleUtilisateur } from '../../core/models/user.model';
 import { CooperativesService } from '../../core/services/cooperatives.service';
+import { PdfPreviewService } from '../../core/services/pdf-preview.service';
 import { cooperativeStatusTone } from '../../core/ui/status-tone.util';
 import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../design-system/button/button.component';
@@ -55,6 +49,7 @@ export class CooperativesListComponent {
   private readonly fb = inject(FormBuilder);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly pdfPreview = inject(PdfPreviewService);
   private readonly search$ = new Subject<void>();
 
   readonly items = signal<Cooperative[]>([]);
@@ -83,8 +78,6 @@ export class CooperativesListComponent {
   readonly dialog = signal<{ kind: 'rejeter' | 'desactiver'; item: Cooperative } | null>(null);
   readonly dialogLoading = signal(false);
   readonly adhesionId = signal<string | null>(null);
-  readonly exportingPdf = signal(false);
-  readonly pdfReadyUrl = signal<string | null>(null);
 
   readonly form = this.fb.nonNullable.group({
     code: ['', Validators.required],
@@ -215,25 +208,8 @@ export class CooperativesListComponent {
   }
 
   exporterListePdf(): void {
-    this.pdfReadyUrl.set(null);
-    const tab = openPdfTicketTab();
-    writePdfLoadingPlaceholder(tab);
-    this.exportingPdf.set(true);
-    this.service.createListePdfTicket({ search: this.search() }).subscribe({
-      next: ({ url }) => {
-        this.exportingPdf.set(false);
-        if (navigateOpenedTab(tab, url)) {
-          this.toast.success('Le PDF s’ouvre dans un nouvel onglet.');
-          return;
-        }
-        this.pdfReadyUrl.set(toSameOriginUrl(url));
-        this.toast.info('Cliquez sur « Ouvrir le PDF » — le navigateur a bloqué la nouvelle fenêtre.');
-      },
-      error: (err: unknown) => {
-        this.exportingPdf.set(false);
-        tab?.close();
-        this.toast.error(messageFromDownloadError(err));
-      },
-    });
+    this.pdfPreview.open('Liste des coopératives', 'pnlf-cooperatives.pdf', () =>
+      this.service.listePdfBlob({ search: this.search() }),
+    );
   }
 }

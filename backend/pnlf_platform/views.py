@@ -234,60 +234,58 @@ class ExportJournalView(ExportFileView):
 
 
 class ExportLotsTicketView(APIView):
-    """Génère le PDF sous JWT, puis renvoie une URL de téléchargement native."""
+    """Génère le PDF des lots sous JWT et le renvoie directement (octets, pas de redirection).
+
+    Historiquement cette vue renvoyait une URL de « ticket » à charger dans un nouvel
+    onglet ouvert via window.open() ; Chrome bloque/annule silencieusement ce type de
+    navigation asynchrone (ERR_ABORTED, considéré comme un téléchargement automatique
+    non rattaché à un geste utilisateur direct). Le frontend récupère désormais ce PDF
+    en Blob authentifié (fetch/XHR classique) puis l'affiche dans un aperçu intégré à la
+    page — robuste sur tous les navigateurs, sans dépendre du blocage anti-pop-up.
+    """
 
     permission_classes = [CanViewDashboard]
 
     def post(self, request):
         from accounts.permissions import scope_lots_qs
-        from pnlf_platform.export_ticket import ExportTicketError, download_url, store_pdf
         from pnlf_platform.pdf_export import lots_pdf_bytes
 
         qs = scope_lots_qs(Lot.objects.filter(deleted_at__isnull=True), request.user)
         try:
             pdf, filename = lots_pdf_bytes(qs)
-            ticket = store_pdf(pdf, filename, request.user.id)
-        except ExportTicketError as exc:
-            return Response({'detail': str(exc)}, status=500)
         except Exception:
             return Response({'detail': 'Impossible de générer le PDF des lots.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='lots',
-            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': 'pdf', 'via': 'ticket'},
+            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': 'pdf'},
         )
-        return Response({'url': download_url(ticket)})
+        from pnlf_platform.pdf_export import pdf_file_response
+
+        return pdf_file_response(pdf, filename)
 
 
 class ExportJournalTicketView(APIView):
+    """Génère le PDF du journal sous JWT et le renvoie directement (voir ExportLotsTicketView)."""
+
     permission_classes = [CanViewDashboard]
 
     def post(self, request):
-        from pnlf_platform.export_ticket import ExportTicketError, download_url, store_pdf
-
         granularite = (request.data.get('granularite') or 'jour').lower()
         if granularite not in ('jour', 'semaine', 'mois'):
             granularite = 'jour'
         date_ref = request.data.get('date')
         try:
             response = export_journal(granularite, date_ref, 'pdf')
-            pdf = bytes(response.content)
-            filename = 'PNLF-journal.pdf'
-            disposition = response.get('Content-Disposition') or ''
-            if 'filename="' in disposition:
-                filename = disposition.split('filename="', 1)[1].split('"', 1)[0]
-            ticket = store_pdf(pdf, filename, request.user.id)
-        except ExportTicketError as exc:
-            return Response({'detail': str(exc)}, status=500)
         except Exception:
             return Response({'detail': 'Impossible de générer le PDF du journal.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='audit_logs',
             ip_adresse=ip, user_agent=ua,
-            nouvelles_valeurs={'format': 'pdf', 'via': 'ticket', 'granularite': granularite, 'date': date_ref},
+            nouvelles_valeurs={'format': 'pdf', 'granularite': granularite, 'date': date_ref},
         )
-        return Response({'url': download_url(ticket)})
+        return response
 
 
 @method_decorator(xframe_options_exempt, name='dispatch')

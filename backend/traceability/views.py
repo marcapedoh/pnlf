@@ -289,46 +289,42 @@ class CooperativeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='pdf')
     def pdf(self, request, pk=None):
-        """Génère un ticket de téléchargement pour la fiche PDF de cette coopérative."""
-        from pnlf_platform.export_ticket import ExportTicketError, download_url, store_pdf
+        """Génère et renvoie directement la fiche PDF de cette coopérative (octets bruts)."""
         from pnlf_platform.pdf_export import cooperative_fiche_pdf_bytes
 
         coop = self.get_object()
         try:
             pdf, filename = cooperative_fiche_pdf_bytes(coop)
-            ticket = store_pdf(pdf, filename, request.user.id)
-        except ExportTicketError as exc:
-            return Response({'detail': str(exc)}, status=500)
         except Exception:
             return Response({'detail': 'Impossible de générer la fiche PDF.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='cooperatives',
             enregistrement_id=coop.id, ip_adresse=ip, user_agent=ua,
-            nouvelles_valeurs={'format': 'pdf', 'via': 'ticket'},
+            nouvelles_valeurs={'format': 'pdf'},
         )
-        return Response({'url': download_url(ticket)})
+        from pnlf_platform.pdf_export import pdf_file_response
+
+        return pdf_file_response(pdf, filename)
 
     @action(detail=False, methods=['post'], url_path='pdf-liste')
     def pdf_liste(self, request):
-        """Génère un ticket de téléchargement pour la liste PDF des coopératives visibles."""
-        from pnlf_platform.export_ticket import ExportTicketError, download_url, store_pdf
+        """Génère et renvoie directement la liste PDF des coopératives visibles."""
         from pnlf_platform.pdf_export import cooperatives_liste_pdf_bytes
 
         qs = self.filter_queryset(self.get_queryset())
         try:
             pdf, filename = cooperatives_liste_pdf_bytes(qs)
-            ticket = store_pdf(pdf, filename, request.user.id)
-        except ExportTicketError as exc:
-            return Response({'detail': str(exc)}, status=500)
         except Exception:
             return Response({'detail': 'Impossible de générer la liste PDF.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='cooperatives',
-            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': 'pdf', 'via': 'ticket'},
+            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': 'pdf'},
         )
-        return Response({'url': download_url(ticket)})
+        from pnlf_platform.pdf_export import pdf_file_response
+
+        return pdf_file_response(pdf, filename)
 
     @action(detail=True, methods=['post'], permission_classes=[CanValidateCooperatives])
     def desactiver(self, request, pk=None):
@@ -708,46 +704,47 @@ class ProducteurViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='pdf')
     def pdf(self, request, pk=None):
-        """Génère un ticket de téléchargement pour la fiche PDF de ce producteur/collecteur."""
-        from pnlf_platform.export_ticket import ExportTicketError, download_url, store_pdf
+        """Génère et renvoie directement la fiche PDF de ce producteur/collecteur (octets bruts).
+
+        Le frontend récupère ce PDF en Blob authentifié puis l'affiche dans un aperçu
+        intégré à la page (plus robuste multi-navigateurs que la navigation d'un onglet
+        ouvert via window.open(), que Chrome peut bloquer/annuler silencieusement).
+        """
         from pnlf_platform.pdf_export import producteur_fiche_pdf_bytes
 
         prod = self.get_object()
         try:
             pdf, filename = producteur_fiche_pdf_bytes(prod)
-            ticket = store_pdf(pdf, filename, request.user.id)
-        except ExportTicketError as exc:
-            return Response({'detail': str(exc)}, status=500)
         except Exception:
             return Response({'detail': 'Impossible de générer la fiche PDF.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='producteurs',
             enregistrement_id=prod.id, ip_adresse=ip, user_agent=ua,
-            nouvelles_valeurs={'format': 'pdf', 'via': 'ticket'},
+            nouvelles_valeurs={'format': 'pdf'},
         )
-        return Response({'url': download_url(ticket)})
+        from pnlf_platform.pdf_export import pdf_file_response
+
+        return pdf_file_response(pdf, filename)
 
     @action(detail=False, methods=['post'], url_path='pdf-liste')
     def pdf_liste(self, request):
-        """Génère un ticket de téléchargement pour la liste PDF des producteurs/collecteurs visibles."""
-        from pnlf_platform.export_ticket import ExportTicketError, download_url, store_pdf
+        """Génère et renvoie directement la liste PDF des producteurs/collecteurs visibles."""
         from pnlf_platform.pdf_export import producteurs_liste_pdf_bytes
 
         qs = self.filter_queryset(self.get_queryset())
         try:
             pdf, filename = producteurs_liste_pdf_bytes(qs)
-            ticket = store_pdf(pdf, filename, request.user.id)
-        except ExportTicketError as exc:
-            return Response({'detail': str(exc)}, status=500)
         except Exception:
             return Response({'detail': 'Impossible de générer la liste PDF.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='producteurs',
-            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': 'pdf', 'via': 'ticket'},
+            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': 'pdf'},
         )
-        return Response({'url': download_url(ticket)})
+        from pnlf_platform.pdf_export import pdf_file_response
+
+        return pdf_file_response(pdf, filename)
 
     @action(detail=False, methods=['get'], url_path='en-attente/compte', permission_classes=[CanValidateProducteurs])
     def en_attente_compte(self, request):

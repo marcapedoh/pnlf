@@ -35,7 +35,7 @@
         @if (canValidate && p.statut === StatutProducteur.INACTIF) {
           <button pnlfButton variant="outline" (click)="activer()">Réactiver</button>
         }
-        <button pnlfButton variant="outline" type="button" [loading]="exportingPdf()" (click)="exporterPdf()">
+        <button pnlfButton variant="outline" type="button" (click)="exporterPdf()">
           Imprimer la fiche (PDF)
         </button>
         @if (canManage) {
@@ -44,12 +44,6 @@
       </div>
     </div>
   </div>
-
-  @if (pdfReadyUrl(); as href) {
-    <a class="producteur-detail__pdf-fallback" [href]="href" target="_blank" rel="noopener">
-      Ouvrir le PDF de la fiche →
-    </a>
-  }
 
   <div class="producteur-detail__grid">
     <pnlf-card title="Informations personnelles">

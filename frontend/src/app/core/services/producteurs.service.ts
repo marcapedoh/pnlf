@@ -83,17 +83,19 @@ export class ProducteursService {
     return this.http.post<MessagePublic>(`${environment.apiUrl}/messages-publics/${messageId}/marquer_traite/`, {});
   }
 
-  createFichePdfTicket(id: string): Observable<{ url: string }> {
-    return this.http.post<{ url: string }>(`${this.base}${id}/pdf/`, {});
+  /** Récupère la fiche PDF de ce producteur/collecteur en Blob authentifié. */
+  fichePdfBlob(id: string): Observable<Blob> {
+    return this.http.post(`${this.base}${id}/pdf/`, {}, { responseType: 'blob' });
   }
 
-  createListePdfTicket(params: ProducteurQueryParams = {}): Observable<{ url: string }> {
+  /** Récupère la liste PDF des producteurs/collecteurs visibles en Blob authentifié. */
+  listePdfBlob(params: ProducteurQueryParams = {}): Observable<Blob> {
     const httpParams: Record<string, string> = {};
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
         httpParams[key] = String(value);
       }
     });
-    return this.http.post<{ url: string }>(`${this.base}pdf-liste/`, {}, { params: httpParams });
+    return this.http.post(`${this.base}pdf-liste/`, {}, { params: httpParams, responseType: 'blob' });
   }
 }

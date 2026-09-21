@@ -16,7 +16,8 @@ import { ProducteursService } from '../../core/services/producteurs.service';
 import { CertificationsService } from '../../core/services/certifications.service';
 import { unwrapList } from '../../core/models/common.model';
 import { ToastService } from '../../design-system/toast/toast.service';
-import { FileDownloadService, messageFromDownloadError, navigateOpenedTab, toSameOriginUrl, triggerBrowserDownload } from '../../core/http/download-file.util';
+import { FileDownloadService, messageFromDownloadError, triggerBrowserDownload } from '../../core/http/download-file.util';
+import { PdfPreviewService } from '../../core/services/pdf-preview.service';
 
 @Component({
   selector: 'app-rapports',
@@ -31,6 +32,7 @@ export class RapportsComponent {
   private readonly toast = inject(ToastService);
   private readonly producteurs = inject(ProducteursService);
   private readonly certifications = inject(CertificationsService);
+  private readonly pdfPreview = inject(PdfPreviewService);
 
   readonly downloading = signal<string | null>(null);
   readonly granularite = signal<JournalGranularite>('jour');
@@ -43,7 +45,6 @@ export class RapportsComponent {
   readonly eventsPageSize = 25;
   readonly loadingEvents = signal(false);
   readonly selectedLibelle = signal('');
-  readonly pdfReadyUrl = signal<string | null>(null);
 
   constructor() {
     this.loadPeriodes();
@@ -164,45 +165,13 @@ export class RapportsComponent {
   }
 
   private _openPdf(kind: 'lots' | 'journal'): void {
-    this.pdfReadyUrl.set(null);
-    const tab = window.open('', `pnlf-pdf-${kind}`);
-    if (tab) {
-      try {
-        tab.document.open();
-        tab.document.write(
-          '<!doctype html><html><head><meta charset="utf-8"><title>PNLF-PFNL</title></head><body style="font-family:sans-serif;padding:2rem;color:#146b3f">Préparation du PDF…</body></html>',
-        );
-        tab.document.close();
-      } catch {
-        /* certains navigateurs verrouillent document.write */
-      }
-    }
-    const key = `${kind}-pdf`;
-    this.downloading.set(key);
-    const req$ =
+    const title = kind === 'lots' ? 'Export des lots (PDF)' : 'Journal d’audit (PDF)';
+    const filename = kind === 'lots' ? 'pnlf-lots.pdf' : `pnlf-journal-${this.granularite()}-${this.selected()?.date ?? ''}.pdf`;
+    this.pdfPreview.open(title, filename, () =>
       kind === 'lots'
-        ? this.dashboardService.createLotsPdfTicket()
-        : this.dashboardService.createJournalPdfTicket(this.granularite(), this.selected()!.date);
-    req$.subscribe({
-      next: ({ url }) => {
-        this.downloading.set(null);
-        if (navigateOpenedTab(tab, url)) {
-          this.toast.success('Le PDF s’ouvre dans un nouvel onglet.');
-          return;
-        }
-        this.pdfReadyUrl.set(toSameOriginUrl(url));
-        this.toast.info('Cliquez sur « Ouvrir le PDF » — le navigateur a bloqué la nouvelle fenêtre.');
-      },
-      error: (err: unknown) => {
-        this.downloading.set(null);
-        try {
-          tab?.close();
-        } catch {
-          /* ignore */
-        }
-        this.toast.error(messageFromDownloadError(err));
-      },
-    });
+        ? this.dashboardService.lotsPdfBlob()
+        : this.dashboardService.journalPdfBlob(this.granularite(), this.selected()!.date),
+    );
   }
 
   private _download(url: string, filename: string, format: ExportFormat, key: string): void {

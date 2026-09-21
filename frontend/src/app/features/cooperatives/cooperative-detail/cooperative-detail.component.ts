@@ -3,17 +3,11 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
-import {
-  messageFromDownloadError,
-  navigateOpenedTab,
-  openPdfTicketTab,
-  toSameOriginUrl,
-  writePdfLoadingPlaceholder,
-} from '../../../core/http/download-file.util';
 import { unwrapList } from '../../../core/models/common.model';
 import { Cooperative, Producteur, STATUT_COOPERATIVE_LABELS, StatutCooperative } from '../../../core/models/producteur.model';
 import { RoleUtilisateur } from '../../../core/models/user.model';
 import { CooperativeMembre, CooperativesService } from '../../../core/services/cooperatives.service';
+import { PdfPreviewService } from '../../../core/services/pdf-preview.service';
 import { ProducteursService } from '../../../core/services/producteurs.service';
 import { cooperativeStatusTone } from '../../../core/ui/status-tone.util';
 import { ButtonComponent } from '../../../design-system/button/button.component';
@@ -67,8 +61,7 @@ export class CooperativeDetailComponent {
   readonly addingMembre = signal(false);
   readonly dialog = signal<{ kind: 'rejeter' | 'desactiver' | 'retirer'; producteur?: string; nom?: string } | null>(null);
   readonly dialogLoading = signal(false);
-  readonly exportingPdf = signal(false);
-  readonly pdfReadyUrl = signal<string | null>(null);
+  private readonly pdfPreview = inject(PdfPreviewService);
 
   constructor() {
     this.load();
@@ -242,25 +235,8 @@ export class CooperativeDetailComponent {
   }
 
   exporterPdf(): void {
-    this.pdfReadyUrl.set(null);
-    const tab = openPdfTicketTab();
-    writePdfLoadingPlaceholder(tab);
-    this.exportingPdf.set(true);
-    this.service.createFichePdfTicket(this.id).subscribe({
-      next: ({ url }) => {
-        this.exportingPdf.set(false);
-        if (navigateOpenedTab(tab, url)) {
-          this.toast.success('Le PDF s’ouvre dans un nouvel onglet.');
-          return;
-        }
-        this.pdfReadyUrl.set(toSameOriginUrl(url));
-        this.toast.info('Cliquez sur « Ouvrir le PDF » — le navigateur a bloqué la nouvelle fenêtre.');
-      },
-      error: (err: unknown) => {
-        this.exportingPdf.set(false);
-        tab?.close();
-        this.toast.error(messageFromDownloadError(err));
-      },
-    });
+    const c = this.coop();
+    const filename = `fiche-cooperative-${c?.code ?? this.id}.pdf`;
+    this.pdfPreview.open('Fiche coopérative', filename, () => this.service.fichePdfBlob(this.id));
   }
 }

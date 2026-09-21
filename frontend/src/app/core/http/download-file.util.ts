@@ -5,8 +5,9 @@ import { map, Observable } from 'rxjs';
 import { SKIP_GLOBAL_ERROR_TOAST, SKIP_LOADING_BAR } from './http-context-tokens';
 
 /**
- * CSV / Excel (XHR + Blob) — OK pour ces formats.
- * PDF : ne pas utiliser cette voie (Chrome interrompt le XHR). Voir triggerNativeGet.
+ * Déclenche le téléchargement natif d'un Blob déjà en mémoire (CSV, Excel, PDF...).
+ * Fonctionne sur tous les navigateurs modernes ; utilisé notamment par
+ * `PdfPreviewService` après affichage de l'aperçu.
  */
 export function triggerBrowserDownload(data: Blob, filename: string): void {
   const nav = window.navigator as Navigator & {
@@ -26,51 +27,6 @@ export function triggerBrowserDownload(data: Blob, filename: string): void {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
-}
-
-/** URL même origine (proxy Angular /api). */
-export function toSameOriginUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  const path = url.startsWith('/') ? url : `/${url}`;
-  return `${window.location.origin}${path}`;
-}
-
-/**
- * Ouvre le PDF dans un onglet déjà ouvert pendant le clic utilisateur.
- * Les iframes cachées sont bloquées par Chrome/Brave (X-Frame-Options + politique de téléchargement).
- */
-export function navigateOpenedTab(tab: Window | null, url: string): boolean {
-  const href = toSameOriginUrl(url);
-  if (!tab || tab.closed) return false;
-  try {
-    tab.location.replace(href);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Ouvre un onglet immédiatement (pendant le clic utilisateur, pour éviter le blocage
- * de pop-up), puis le fait naviguer vers l'URL du ticket PDF une fois généré côté
- * serveur. Retourne l'onglet (ou null si bloqué) pour permettre un repli affichage
- * d'un lien cliquable si le navigateur a quand même bloqué l'ouverture.
- */
-export function openPdfTicketTab(): Window | null {
-  return window.open('', '_blank');
-}
-
-export function writePdfLoadingPlaceholder(tab: Window | null): void {
-  if (!tab) return;
-  try {
-    tab.document.open();
-    tab.document.write(
-      '<!doctype html><html><head><meta charset="utf-8"><title>PNLF-PFNL</title></head><body style="font-family:sans-serif;padding:2rem;color:#146b3f">Préparation du PDF…</body></html>',
-    );
-    tab.document.close();
-  } catch {
-    /* certains navigateurs verrouillent document.write */
-  }
 }
 
 function looksLikeJsonError(buffer: ArrayBuffer): string | null {

@@ -81,18 +81,20 @@ export class CooperativesService {
     return this.http.post<{ detail: string }>(`${this.base}${id}/demander-adhesion/`, {});
   }
 
-  createFichePdfTicket(id: string): Observable<{ url: string }> {
-    return this.http.post<{ url: string }>(`${this.base}${id}/pdf/`, {});
+  /** Récupère la fiche PDF de cette coopérative en Blob authentifié. */
+  fichePdfBlob(id: string): Observable<Blob> {
+    return this.http.post(`${this.base}${id}/pdf/`, {}, { responseType: 'blob' });
   }
 
-  createListePdfTicket(params: CooperativeQueryParams = {}): Observable<{ url: string }> {
+  /** Récupère la liste PDF des coopératives visibles en Blob authentifié. */
+  listePdfBlob(params: CooperativeQueryParams = {}): Observable<Blob> {
     const httpParams: Record<string, string> = {};
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
         httpParams[key] = String(value);
       }
     });
-    return this.http.post<{ url: string }>(`${this.base}pdf-liste/`, {}, { params: httpParams });
+    return this.http.post(`${this.base}pdf-liste/`, {}, { params: httpParams, responseType: 'blob' });
   }
 }
 

@@ -1,0 +1,110 @@
+:host {
+  display: block;
+}
+
+.pdf-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  background: rgba(15, 23, 20, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.pdf-preview__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 100%);
+  height: min(90vh, 1100px);
+  background: var(--color-surface, #fff);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.pdf-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--color-border, #e2e8e4);
+  background: var(--color-surface-alt, #f6f8f6);
+}
+
+.pdf-preview__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--color-text, #1c2a22);
+  min-width: 0;
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.pdf-preview__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.pdf-preview__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted, #5b6b60);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+.pdf-preview__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #525659;
+}
+
+.pdf-preview__frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.pdf-preview__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+  color: #fff;
+
+  p {
+    margin: 0;
+    max-width: 32rem;
+  }
+}
+
+.pdf-preview__status--error {
+  color: #ffe3d6;
+}

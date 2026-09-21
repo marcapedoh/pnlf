@@ -62,15 +62,18 @@ export class DashboardService {
     return `${environment.apiUrl}/exports/journal/?granularite=${granularite}&date=${date}&export_format=${format}`;
   }
 
-  createLotsPdfTicket(): Observable<{ url: string }> {
-    return this.http.post<{ url: string }>(`${environment.apiUrl}/exports/lots/ticket/`, {});
+  /** Récupère le PDF des lots en Blob authentifié (pour aperçu via PdfPreviewService). */
+  lotsPdfBlob(): Observable<Blob> {
+    return this.http.post(`${environment.apiUrl}/exports/lots/ticket/`, {}, { responseType: 'blob' });
   }
 
-  createJournalPdfTicket(granularite: JournalGranularite, date: string): Observable<{ url: string }> {
-    return this.http.post<{ url: string }>(`${environment.apiUrl}/exports/journal/ticket/`, {
-      granularite,
-      date,
-    });
+  /** Récupère le PDF du journal en Blob authentifié (pour aperçu via PdfPreviewService). */
+  journalPdfBlob(granularite: JournalGranularite, date: string): Observable<Blob> {
+    return this.http.post(
+      `${environment.apiUrl}/exports/journal/ticket/`,
+      { granularite, date },
+      { responseType: 'blob' },
+    );
   }
 
   aTraiter(): Observable<InboxValidation> {

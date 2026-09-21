@@ -5,13 +5,6 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
-import {
-  messageFromDownloadError,
-  navigateOpenedTab,
-  openPdfTicketTab,
-  toSameOriginUrl,
-  writePdfLoadingPlaceholder,
-} from '../../../core/http/download-file.util';
 import { unwrapCount, unwrapList } from '../../../core/models/common.model';
 import {
   Producteur,
@@ -20,6 +13,7 @@ import {
   TypeActeur,
 } from '../../../core/models/producteur.model';
 import { RoleUtilisateur } from '../../../core/models/user.model';
+import { PdfPreviewService } from '../../../core/services/pdf-preview.service';
 import { ProducteursService } from '../../../core/services/producteurs.service';
 import { ReferenceService } from '../../../core/services/reference.service';
 import { producteurStatusTone } from '../../../core/ui/status-tone.util';
@@ -54,6 +48,7 @@ export class ProducteursListComponent {
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly pdfPreview = inject(PdfPreviewService);
   private readonly search$ = new Subject<void>();
 
   readonly items = signal<Producteur[]>([]);
@@ -86,8 +81,6 @@ export class ProducteursListComponent {
   readonly isProducteur = this.auth.hasRole(RoleUtilisateur.PRODUCTEUR);
   readonly dialog = signal<{ kind: 'desactiver' | 'rejeter'; item: Producteur } | null>(null);
   readonly dialogLoading = signal(false);
-  readonly exportingPdf = signal(false);
-  readonly pdfReadyUrl = signal<string | null>(null);
 
   constructor() {
     if (this.isProducteur) {
@@ -207,27 +200,12 @@ export class ProducteursListComponent {
   }
 
   exporterListePdf(): void {
-    this.pdfReadyUrl.set(null);
-    const tab = openPdfTicketTab();
-    writePdfLoadingPlaceholder(tab);
-    this.exportingPdf.set(true);
-    this.service
-      .createListePdfTicket({ search: this.search(), province: this.provinceFilter(), statut: this.statutFilter() })
-      .subscribe({
-        next: ({ url }) => {
-          this.exportingPdf.set(false);
-          if (navigateOpenedTab(tab, url)) {
-            this.toast.success('Le PDF s’ouvre dans un nouvel onglet.');
-            return;
-          }
-          this.pdfReadyUrl.set(toSameOriginUrl(url));
-          this.toast.info('Cliquez sur « Ouvrir le PDF » — le navigateur a bloqué la nouvelle fenêtre.');
-        },
-        error: (err: unknown) => {
-          this.exportingPdf.set(false);
-          tab?.close();
-          this.toast.error(messageFromDownloadError(err));
-        },
-      });
+    this.pdfPreview.open('Liste des producteurs/collecteurs', 'pnlf-producteurs.pdf', () =>
+      this.service.listePdfBlob({
+        search: this.search(),
+        province: this.provinceFilter(),
+        statut: this.statutFilter(),
+      }),
+    );
   }
 }

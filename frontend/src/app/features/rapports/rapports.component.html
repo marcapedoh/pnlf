@@ -12,10 +12,7 @@
   <div class="rapports-actions">
     <button pnlfButton variant="outline" [loading]="downloading() === 'lots-csv'" (click)="downloadLots('csv')">Export CSV</button>
     <button pnlfButton variant="outline" [loading]="downloading() === 'lots-xlsx'" (click)="downloadLots('xlsx')">Export Excel (XLSX)</button>
-    <button pnlfButton variant="outline" [loading]="downloading() === 'lots-pdf'" (click)="downloadLots('pdf')">Export PDF</button>
-    @if (pdfReadyUrl(); as href) {
-      <a pnlfButton variant="primary" [href]="href" target="_blank" rel="noopener">Ouvrir le PDF</a>
-    }
+    <button pnlfButton variant="outline" (click)="downloadLots('pdf')">Export PDF (aperçu)</button>
   </div>
 </pnlf-card>
 
@@ -54,10 +51,7 @@
     <div class="rapports-actions" style="margin-bottom: 1rem;">
       <button pnlfButton variant="outline" [loading]="downloading() === 'journal-csv'" (click)="downloadJournal('csv')">CSV</button>
       <button pnlfButton variant="outline" [loading]="downloading() === 'journal-xlsx'" (click)="downloadJournal('xlsx')">Excel (XLSX)</button>
-      <button pnlfButton variant="primary" [loading]="downloading() === 'journal-pdf'" (click)="downloadJournal('pdf')">PDF</button>
-      @if (pdfReadyUrl(); as href) {
-        <a pnlfButton variant="primary" [href]="href" target="_blank" rel="noopener">Ouvrir le PDF</a>
-      }
+      <button pnlfButton variant="primary" (click)="downloadJournal('pdf')">PDF (aperçu)</button>
     </div>
 
     @if (loadingEvents()) {
