@@ -460,9 +460,21 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='cloturer')
     def cloturer(self, request, pk=None):
         obj = self.get_object()
-        if obj.auteur_id != request.user.id and request.user.role != Utilisateur.Role.ADMINISTRATEUR:
+        # L'auteur ou un modérateur (admin, agent ministère — mêmes rôles habilités à
+        # valider/rejeter une annonce) peut clôturer. Sans agent ministère ici, le bouton
+        # « Clôturer » visible côté frontend pour ce rôle échouait systématiquement en 403.
+        est_moderateur = request.user.role in (
+            Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE,
+        )
+        if obj.auteur_id != request.user.id and not est_moderateur:
             raise PermissionDenied()
         write_statut(obj, 'CLOTUREE')
+        ip, ua = request_meta(request)
+        write_audit(
+            utilisateur_id=request.user.id, action='UPDATE', table_cible='offres_demandes',
+            enregistrement_id=obj.id, ip_adresse=ip, user_agent=ua,
+            nouvelles_valeurs={'statut': 'CLOTUREE'},
+        )
         return Response(OffreDemandeSerializer(obj, context={'request': request}).data)
 
 

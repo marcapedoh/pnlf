@@ -78,17 +78,42 @@ FONT_BOLD = 'Helvetica-Bold'
 
 
 def _register_fonts() -> None:
+    """Enregistre une police TrueType avec accents français corrects, quel que soit l'OS.
+
+    En développement (Windows) : Arial. En production (Docker/Linux, cf. backend/Dockerfile
+    qui installe `fonts-dejavu-core`) : DejaVu Sans ou Liberation Sans. Si aucune police
+    TrueType n'est trouvée, on reste sur Helvetica (base14 ReportLab, WinAnsiEncoding —
+    supporte déjà la plupart des accents français, donc jamais de crash ni de blocage).
+    """
     global _FONTS_READY, FONT, FONT_BOLD
     if _FONTS_READY:
         return
     windir = Path(os.environ.get('WINDIR', r'C:\Windows')) / 'Fonts'
-    regular = windir / 'arial.ttf'
-    bold = windir / 'arialbd.ttf'
-    if regular.is_file() and bold.is_file():
-        pdfmetrics.registerFont(TTFont('PNLF', str(regular)))
-        pdfmetrics.registerFont(TTFont('PNLF-Bold', str(bold)))
-        FONT = 'PNLF'
-        FONT_BOLD = 'PNLF-Bold'
+    candidates = [
+        (windir / 'arial.ttf', windir / 'arialbd.ttf'),
+        (
+            Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+            Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+        ),
+        (
+            Path('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf'),
+            Path('/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'),
+        ),
+        (
+            Path('/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf'),
+            Path('/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf'),
+        ),
+    ]
+    for regular, bold in candidates:
+        if regular.is_file() and bold.is_file():
+            try:
+                pdfmetrics.registerFont(TTFont('PNLF', str(regular)))
+                pdfmetrics.registerFont(TTFont('PNLF-Bold', str(bold)))
+                FONT = 'PNLF'
+                FONT_BOLD = 'PNLF-Bold'
+                break
+            except Exception:
+                continue
     _FONTS_READY = True
 
 
