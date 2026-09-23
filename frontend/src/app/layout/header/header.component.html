@@ -4,7 +4,8 @@
       type="button"
       class="app-header__icon-btn app-header__menu-btn"
       (click)="ui.toggleMobileMenu()"
-      aria-label="Ouvrir le menu"
+      [attr.aria-expanded]="ui.mobileMenuOpen()"
+      [attr.aria-label]="ui.mobileMenuOpen() ? 'Fermer le menu' : 'Ouvrir le menu'"
     >
       <pnlf-icon name="menu" [size]="22" />
     </button>
@@ -12,7 +13,7 @@
       type="button"
       class="app-header__icon-btn app-header__collapse-btn"
       (click)="ui.toggleSidebar()"
-      aria-label="Réduire le menu latéral"
+      [attr.aria-label]="ui.sidebarCollapsed() ? 'Développer le menu latéral' : 'Réduire le menu latéral'"
     >
       <pnlf-icon name="layers" [size]="20" />
     </button>
@@ -47,7 +48,7 @@
       </button>
 
       @if (notifMenuOpen()) {
-        <div class="app-header__dropdown app-header__dropdown--notif">
+        <div class="app-header__dropdown app-header__dropdown--notif" role="menu">
           <div class="app-header__dropdown-title">
             <span>Notifications</span>
             @if (notifications.unreadCount() > 0) {
@@ -66,9 +67,11 @@
           } @else {
             <ul class="app-header__notif-list">
               @for (n of notifications.items(); track n.id) {
-                <li [class.is-unread]="!n.lue" (click)="openNotification(n)">
-                  <p class="app-header__notif-title">{{ n.titre }}</p>
-                  <p class="app-header__notif-body">{{ n.corps }}</p>
+                <li [class.is-unread]="!n.lue">
+                  <button type="button" class="app-header__notif-btn" (click)="openNotification(n)">
+                    <p class="app-header__notif-title">{{ n.titre }}</p>
+                    <p class="app-header__notif-body">{{ n.corps }}</p>
+                  </button>
                 </li>
               }
             </ul>

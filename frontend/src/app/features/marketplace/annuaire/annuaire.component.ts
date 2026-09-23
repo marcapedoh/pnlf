@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
@@ -18,7 +18,7 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
 
 @Component({
   selector: 'app-annuaire',
-  imports: [FormsModule, CardComponent, EmptyStateComponent, IconComponent, SkeletonComponent],
+  imports: [FormsModule, RouterLink, CardComponent, EmptyStateComponent, IconComponent, SkeletonComponent],
   templateUrl: './annuaire.component.html',
   styleUrl: './annuaire.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,7 +26,6 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
 export class AnnuaireComponent {
   private readonly service = inject(MarketplaceService);
   private readonly referenceService = inject(ReferenceService);
-  private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly search$ = new Subject<void>();
 
@@ -69,23 +68,42 @@ export class AnnuaireComponent {
     });
   }
 
-  openProducteur(p: Producteur): void {
-    this.router.navigate(['/annuaire', p.id]);
-  }
-
-  openCooperative(c: Cooperative): void {
+  /** Fiche producteur dans le shell si le rôle a accès ; sinon fiche publique. */
+  producteurRoute(p: Producteur): string[] {
     if (
       this.auth.hasRole(
         RoleUtilisateur.ADMINISTRATEUR,
         RoleUtilisateur.AGENT_MINISTERE,
         RoleUtilisateur.AGENT_FORESTIER,
         RoleUtilisateur.COOPERATIVE,
+        RoleUtilisateur.PRODUCTEUR,
       )
     ) {
-      this.router.navigate(['/app/cooperatives', c.id]);
-      return;
+      return ['/app/producteurs', p.id];
     }
-    this.router.navigate(['/annuaire'], { queryParams: { q: c.nom } });
+    return ['/annuaire', p.id];
+  }
+
+  /** Fiche coop dans le shell app si le rôle y a accès ; sinon annuaire public filtré. */
+  cooperativeRoute(c: Cooperative): string[] {
+    if (this.canOpenCooperativeApp()) {
+      return ['/app/cooperatives', c.id];
+    }
+    return ['/annuaire'];
+  }
+
+  cooperativeQuery(c: Cooperative): Record<string, string> | undefined {
+    if (this.canOpenCooperativeApp()) return undefined;
+    return { q: c.nom };
+  }
+
+  private canOpenCooperativeApp(): boolean {
+    return this.auth.hasRole(
+      RoleUtilisateur.ADMINISTRATEUR,
+      RoleUtilisateur.AGENT_MINISTERE,
+      RoleUtilisateur.AGENT_FORESTIER,
+      RoleUtilisateur.COOPERATIVE,
+    );
   }
 
   initials(nom: string, prenoms = ''): string {

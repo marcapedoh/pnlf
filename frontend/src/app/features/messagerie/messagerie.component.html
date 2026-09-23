@@ -45,26 +45,28 @@
   </div>
 }
 
-<div class="chat-layout">
+<div class="chat-layout" [class.chat-layout--thread-open]="!!activeId()">
   <aside class="chat-inbox">
     <div class="chat-inbox__search">
       @if (supervisionMode()) {
         <pnlf-icon name="search" [size]="16" />
+        <label class="pnlf-visually-hidden" for="chat-search-supervision">Rechercher une discussion à superviser</label>
         <input
+          id="chat-search-supervision"
           type="search"
           placeholder="Rechercher un nom, un sujet, un message…"
           [ngModel]="supervisionQuery()"
           (ngModelChange)="onSupervisionSearch($event)"
-          aria-label="Rechercher une discussion à superviser"
         />
       } @else {
         <pnlf-icon name="search" [size]="16" />
+        <label class="pnlf-visually-hidden" for="chat-search-inbox">Rechercher dans mes conversations</label>
         <input
+          id="chat-search-inbox"
           type="search"
           placeholder="Rechercher une conversation…"
           [ngModel]="inboxQuery()"
           (ngModelChange)="onInboxSearch($event)"
-          aria-label="Rechercher dans mes conversations"
         />
       }
     </div>
@@ -138,6 +140,14 @@
     } @else {
       <header class="chat-pane__head">
         <div class="chat-pane__identity">
+          <button
+            type="button"
+            class="chat-pane__back"
+            (click)="clearSelection()"
+            aria-label="Retour à la liste des conversations"
+          >
+            ← Retour
+          </button>
           <span class="chat-avatar chat-avatar--lg" aria-hidden="true">
             @if (activeConversation()?.interlocuteur_photo_url) {
               <img [src]="activeConversation()!.interlocuteur_photo_url!" [alt]="''" />
@@ -261,9 +271,11 @@
 @if (showNew()) {
   <div class="chat-modal" (click)="showNew.set(false)">
     <pnlf-card title="Nouvelle discussion" (click)="$event.stopPropagation()">
+      <label class="pnlf-visually-hidden" for="chat-contact-search">Rechercher un contact</label>
       <input
         class="chat-modal__search"
         type="search"
+        id="chat-contact-search"
         name="contactQuery"
         placeholder="Rechercher un contact…"
         [ngModel]="contactQuery()"

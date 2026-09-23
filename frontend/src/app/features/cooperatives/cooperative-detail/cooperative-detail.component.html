@@ -17,6 +17,11 @@
     </div>
     <div class="pnlf-page-header coop-detail__header">
       <div>
+        <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
+          <a routerLink="/app/cooperatives">Coopératives</a>
+          <span aria-hidden="true">›</span>
+          <span aria-current="page">{{ c.nom }}</span>
+        </nav>
         <p class="text-eyebrow">{{ c.code }}</p>
         <h1 class="pnlf-page-header__title">{{ c.nom }}</h1>
         <pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" />
@@ -65,7 +70,9 @@
     @if (canAddMembres) {
       <div class="coop-membres__add">
         <div class="coop-membres__combo">
+          <label class="pnlf-visually-hidden" for="coop-membre-search">Rechercher un producteur à ajouter</label>
           <input
+            id="coop-membre-search"
             type="text"
             class="pnlf-select"
             placeholder="Rechercher un producteur par nom, code ou téléphone…"

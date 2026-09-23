@@ -1,5 +1,12 @@
 // =============================================================================
 // PFNL — Design tokens institutionnels
+//
+// Glossaire de marque (UX-15) :
+// - Nom produit affiché : « PFNL » (Produits Forestiers Non Ligneux)
+// - Préfixe CSS / code : `pnlf` / `--pnlf-*` (historique technique, ne pas renommer en masse)
+// - Dossier / repo : « Projet PNLF » — synonyme documentaire du même produit
+// - Institution : École Nationale des Eaux et Forêts (ENEF)
+//
 // Palette dérivée du drapeau et des armoiries de la République Gabonaise
 // et de l'identité de l'École Nationale des Eaux et Forêts.
 // =============================================================================
@@ -153,4 +160,10 @@
   --layout-sidebar-width: 272px;
   --layout-sidebar-collapsed: 76px;
   --layout-content-max: 1440px;
+
+  // --- Breakpoints (référence ; media queries SCSS utilisent les mêmes valeurs) -
+  --bp-sm: 640px;
+  --bp-md: 720px;
+  --bp-lg: 900px;
+  --bp-xl: 1100px;
 }

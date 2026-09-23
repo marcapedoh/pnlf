@@ -6,23 +6,44 @@
 
 .notif-list li {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+
+  &.is-unread {
+    background: var(--pnlf-green-50);
+    border-color: var(--pnlf-green-200);
+  }
+}
+
+.notif-list__toggle {
+  display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
+  width: 100%;
   padding: var(--space-4);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+  border: none;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-standard);
+  color: inherit;
+  font: inherit;
 
   &:hover {
     background: var(--gray-50);
   }
 
-  &.is-unread {
-    background: var(--pnlf-green-50);
-    border-color: var(--pnlf-green-200);
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset var(--shadow-focus);
+  }
 
+  .is-unread & {
     &:hover {
       background: var(--pnlf-green-100);
     }
@@ -32,7 +53,10 @@
 .notif-list li.is-open {
   background: var(--surface-raised);
   border-color: var(--pnlf-green-400);
-  box-shadow: var(--shadow-sm);
+}
+
+.notif-list__actions {
+  padding: 0 var(--space-4) var(--space-4);
 }
 
 .notif-list__main {

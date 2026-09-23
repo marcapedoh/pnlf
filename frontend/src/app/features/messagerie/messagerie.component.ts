@@ -228,6 +228,13 @@ export class MessagerieComponent implements OnDestroy {
     this.loadThread(id, true);
   }
 
+  /** Sur mobile : quitter le fil et revenir à la liste des conversations. */
+  clearSelection(): void {
+    this.activeId.set(null);
+    this.messages.set([]);
+    this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+  }
+
   askDelete(): void {
     if (!this.activeId() || this.lectureSeule()) return;
     this.confirmDeleteOpen.set(true);
@@ -557,7 +564,15 @@ export class MessagerieComponent implements OnDestroy {
         this.conversations.set(unwrapList(res));
         this.loadingList.set(false);
         const id = this.activeId();
-        if (!id && this.conversations().length && initial && !this.route.snapshot.queryParamMap.keys.length) {
+        // Auto-sélection desktop uniquement : sur mobile, la liste doit rester visible.
+        const isDesktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 721px)').matches;
+        if (
+          !id &&
+          isDesktop &&
+          this.conversations().length &&
+          initial &&
+          !this.route.snapshot.queryParamMap.keys.length
+        ) {
           this.select(this.conversations()[0].id);
         }
       },

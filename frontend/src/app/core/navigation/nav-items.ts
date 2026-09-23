@@ -144,6 +144,13 @@ export const NAV_SECTIONS: NavSection[] = [
       },
     ],
   },
+  {
+    title: 'Mon compte',
+    items: [
+      { label: 'Notifications', route: '/app/notifications', icon: 'bell' },
+      { label: 'Paramètres', route: '/app/parametres', icon: 'settings' },
+    ],
+  },
 ];
 
 export function navSectionsForRole(role: RoleUtilisateur | undefined): NavSection[] {

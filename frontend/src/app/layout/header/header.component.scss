@@ -280,20 +280,36 @@
 }
 
 .app-header__notif-list li {
-  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
+  padding: 0;
+
+  &.is-unread {
+    background: var(--pnlf-green-50);
+  }
+}
+
+.app-header__notif-btn {
+  display: block;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
+  color: inherit;
+  font: inherit;
 
   &:hover {
     background: var(--gray-50);
   }
 
-  &.is-unread {
-    background: var(--pnlf-green-50);
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset var(--shadow-focus);
+  }
 
-    &:hover {
-      background: var(--pnlf-green-100);
-    }
+  .is-unread &:hover {
+    background: var(--pnlf-green-100);
   }
 }
 

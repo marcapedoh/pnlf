@@ -6,6 +6,14 @@
 
 .app-footer__inner {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.app-footer__copy {
+  display: flex;
   flex-direction: column;
   gap: 2px;
 }
@@ -18,4 +26,20 @@
 .app-footer__meta {
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+.app-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  font-size: var(--fs-xs);
+
+  a {
+    color: var(--color-link);
+    font-weight: 600;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
 }

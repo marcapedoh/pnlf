@@ -11,8 +11,10 @@
 <div class="pnlf-toolbar">
   <div class="pnlf-toolbar__filters annuaire-filters">
     <div class="annuaire-filters__search">
+      <label class="pnlf-visually-hidden" for="annuaire-search">Rechercher dans l’annuaire</label>
       <pnlf-icon name="search" [size]="16" />
       <input
+        id="annuaire-search"
         type="search"
         class="pnlf-select"
         placeholder="Rechercher un nom, un code, un téléphone…"
@@ -20,7 +22,13 @@
         (ngModelChange)="onSearchInput($event)"
       />
     </div>
-    <select class="pnlf-select" [ngModel]="provinceFilter()" (ngModelChange)="provinceFilter.set($event); onFilterChange()">
+    <label class="pnlf-visually-hidden" for="annuaire-province">Filtrer par province</label>
+    <select
+      id="annuaire-province"
+      class="pnlf-select"
+      [ngModel]="provinceFilter()"
+      (ngModelChange)="provinceFilter.set($event); onFilterChange()"
+    >
       <option value="">Toutes les provinces</option>
       @for (p of provinces(); track p.value) {
         <option [value]="p.value">{{ p.label }}</option>
@@ -42,19 +50,25 @@
       } @else {
         <ul class="annuaire-list">
           @for (c of cooperatives(); track c.id) {
-            <li (click)="openCooperative(c)">
-              <span class="annuaire-list__avatar">
-                @if (c.photo_url) {
-                  <img [src]="c.photo_url" [alt]="c.nom" />
-                } @else {
-                  {{ initials(c.nom) }}
-                }
-              </span>
-              <div class="annuaire-list__info">
-                <p class="annuaire-list__name">{{ c.nom }}</p>
-                <p class="annuaire-list__meta">{{ c.province_nom || 'Province non renseignée' }}</p>
-              </div>
-              <pnlf-icon name="chevron-right" [size]="16" />
+            <li>
+              <a
+                [routerLink]="cooperativeRoute(c)"
+                [queryParams]="cooperativeQuery(c)"
+                class="annuaire-list__link"
+              >
+                <span class="annuaire-list__avatar">
+                  @if (c.photo_url) {
+                    <img [src]="c.photo_url" [alt]="" />
+                  } @else {
+                    {{ initials(c.nom) }}
+                  }
+                </span>
+                <div class="annuaire-list__info">
+                  <p class="annuaire-list__name">{{ c.nom }}</p>
+                  <p class="annuaire-list__meta">{{ c.province_nom || 'Province non renseignée' }}</p>
+                </div>
+                <pnlf-icon name="chevron-right" [size]="16" />
+              </a>
             </li>
           }
         </ul>
@@ -67,19 +81,21 @@
       } @else {
         <ul class="annuaire-list">
           @for (p of producteurs(); track p.id) {
-            <li (click)="openProducteur(p)">
-              <span class="annuaire-list__avatar">
-                @if (p.photo_url) {
-                  <img [src]="p.photo_url" [alt]="p.prenoms + ' ' + p.nom" />
-                } @else {
-                  {{ initials(p.nom, p.prenoms) }}
-                }
-              </span>
-              <div class="annuaire-list__info">
-                <p class="annuaire-list__name">{{ p.prenoms }} {{ p.nom }}</p>
-                <p class="annuaire-list__meta">{{ p.province_nom }} · {{ p.type_acteur === 'COLLECTEUR' ? 'Collecteur' : 'Producteur' }}</p>
-              </div>
-              <pnlf-icon name="chevron-right" [size]="16" />
+            <li>
+              <a [routerLink]="producteurRoute(p)" class="annuaire-list__link">
+                <span class="annuaire-list__avatar">
+                  @if (p.photo_url) {
+                    <img [src]="p.photo_url" [alt]="" />
+                  } @else {
+                    {{ initials(p.nom, p.prenoms) }}
+                  }
+                </span>
+                <div class="annuaire-list__info">
+                  <p class="annuaire-list__name">{{ p.prenoms }} {{ p.nom }}</p>
+                  <p class="annuaire-list__meta">{{ p.province_nom }} · {{ p.type_acteur === 'COLLECTEUR' ? 'Collecteur' : 'Producteur' }}</p>
+                </div>
+                <pnlf-icon name="chevron-right" [size]="16" />
+              </a>
             </li>
           }
         </ul>

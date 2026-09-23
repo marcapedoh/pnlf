@@ -1,11 +1,19 @@
 <footer class="app-footer">
   <div class="app-footer__inner">
-    <p>
-      © {{ year }} République Gabonaise — École Nationale des Eaux et Forêts.
-    </p>
-    <p class="app-footer__meta">
-      Plateforme de Traçabilité des Produits Forestiers Non Ligneux (PFNL) —
-      Version 1.0
-    </p>
+    <div class="app-footer__copy">
+      <p>
+        © {{ year }} République Gabonaise — École Nationale des Eaux et Forêts.
+      </p>
+      <p class="app-footer__meta">
+        Plateforme de Traçabilité des Produits Forestiers Non Ligneux (PFNL) —
+        Version 1.0
+      </p>
+    </div>
+    <nav class="app-footer__links" aria-label="Informations légales">
+      <a routerLink="/faq">FAQ</a>
+      <a routerLink="/politique-confidentialite">Confidentialité</a>
+      <a routerLink="/conditions-utilisation">Conditions d’utilisation</a>
+      <a routerLink="/politique-cookies">Cookies</a>
+    </nav>
   </div>
 </footer>

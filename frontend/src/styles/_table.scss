@@ -127,3 +127,61 @@
   gap: var(--space-2);
   flex-wrap: wrap;
 }
+
+/* Cartes résumé mobile (≤640px) — ajouter data-label sur chaque <td> */
+@media (max-width: 640px) {
+  .pnlf-table-wrapper--responsive {
+    border: none;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .pnlf-table-wrapper--responsive .pnlf-table {
+    thead {
+      display: none;
+    }
+
+    tbody tr {
+      display: block;
+      margin-bottom: var(--space-3);
+      padding: var(--space-3);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--surface-raised);
+    }
+
+    tbody tr:hover {
+      background: var(--surface-raised);
+    }
+
+    tbody td {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: var(--space-3);
+      padding: var(--space-2) 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    tbody td:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    tbody td::before {
+      content: attr(data-label);
+      flex-shrink: 0;
+      max-width: 45%;
+      font-size: var(--fs-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    .pnlf-table__actions {
+      justify-content: flex-start;
+      width: 100%;
+    }
+  }
+}

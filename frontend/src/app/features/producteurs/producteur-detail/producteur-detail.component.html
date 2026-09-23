@@ -17,6 +17,11 @@
     </div>
     <div class="pnlf-page-header producteur-detail__header">
       <div>
+        <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
+          <a routerLink="/app/producteurs">Producteurs &amp; collecteurs</a>
+          <span aria-hidden="true">›</span>
+          <span aria-current="page">{{ p.prenoms }} {{ p.nom }}</span>
+        </nav>
         <p class="text-eyebrow">{{ p.code_producteur }}</p>
         <h1 class="pnlf-page-header__title">{{ p.prenoms }} {{ p.nom }}</h1>
         <div class="producteur-detail__badges">
@@ -25,6 +30,7 @@
         </div>
       </div>
       <div class="producteur-detail__actions">
+        <a pnlfButton routerLink="/app/producteurs" variant="ghost">← Retour à la liste</a>
         @if (canValidate && p.statut === StatutProducteur.EN_VALIDATION) {
           <button pnlfButton variant="outline" (click)="valider()">Valider la fiche</button>
           <button pnlfButton variant="ghost" (click)="rejeter()">Rejeter</button>

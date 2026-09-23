@@ -13,12 +13,12 @@
       <div><dt>E-mail</dt><dd>{{ auth.currentUser()?.email }}</dd></div>
       <div><dt>Téléphone</dt><dd>{{ auth.currentUser()?.telephone || '—' }}</dd></div>
       <div><dt>Profil</dt><dd>{{ roleLabels[auth.currentUser()!.role] }}</dd></div>
-      <div><dt>Statut du compte</dt><dd>{{ auth.currentUser()?.statut }}</dd></div>
+      <div><dt>Statut du compte</dt><dd>{{ statutLabel(auth.currentUser()?.statut) }}</dd></div>
     </dl>
   </pnlf-card>
 
   <pnlf-card title="Sécurité">
-    <p class="text-sm text-secondary" style="margin-bottom: 1rem;">
+    <p class="text-sm text-secondary pnlf-mb-4">
       Modifiez régulièrement votre mot de passe pour protéger l'accès à vos données.
     </p>
     <a pnlfButton routerLink="/changer-mot-de-passe" variant="outline">Modifier mon mot de passe</a>

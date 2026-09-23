@@ -3,6 +3,11 @@
 } @else if (zone(); as z) {
   <div class="pnlf-page-header">
     <div>
+      <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
+        <a routerLink="/app/zones-collecte">Zones de collecte</a>
+        <span aria-hidden="true">›</span>
+        <span aria-current="page">{{ z.libelle }}</span>
+      </nav>
       <p class="text-eyebrow">Zone {{ z.code }}</p>
       <h1 class="pnlf-page-header__title">{{ z.libelle }}</h1>
       <p class="text-sm text-muted">{{ z.province_nom }}</p>

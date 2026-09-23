@@ -25,15 +25,15 @@
   @if (appareils().length === 0) {
     <pnlf-empty-state icon="wifi-off" title="Aucun appareil synchronisé pour le moment" description="Enregistrez cet appareil ci-dessus pour le retrouver ici." />
   } @else {
-    <div class="pnlf-table-wrapper">
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
         <thead><tr><th>Appareil</th><th>Identifiant</th><th>Dernière synchro</th></tr></thead>
         <tbody>
           @for (a of appareils(); track a.id) {
             <tr>
-              <td>{{ a.libelle || 'Appareil sans nom' }}</td>
-              <td class="pnlf-table__muted">{{ a.device_id }}</td>
-              <td>{{ a.dernier_sync_at ? (a.dernier_sync_at | date: 'dd/MM/yyyy HH:mm') : 'Jamais synchronisé' }}</td>
+              <td data-label="Appareil">{{ a.libelle || 'Appareil sans nom' }}</td>
+              <td class="pnlf-table__muted" data-label="Identifiant">{{ a.device_id }}</td>
+              <td data-label="Dernière synchro">{{ a.dernier_sync_at ? (a.dernier_sync_at | date: 'dd/MM/yyyy HH:mm') : 'Jamais synchronisé' }}</td>
             </tr>
           }
         </tbody>

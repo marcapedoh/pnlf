@@ -1,47 +1,113 @@
 <section class="hero">
   <div class="hero__inner">
     <div class="hero__content">
-      <p class="hero__eyebrow">République Gabonaise · Service public numérique</p>
+      <p class="hero__eyebrow">ENEF · Plateforme PFNL · République Gabonaise</p>
       <h1 class="hero__title">
         Traçabilité officielle des Produits Forestiers Non Ligneux
       </h1>
       <p class="hero__lede">
-        La plateforme PFNL garantit l'origine, la conformité et la traçabilité des PFNL
-        du Gabon — de la forêt à l'acheteur. Consultez l'annuaire des producteurs, vérifiez
-        l'authenticité d'un produit ou accédez à votre espace professionnel.
+        Origine, conformité et traçabilité des PFNL du Gabon — de la forêt à l'acheteur.
       </p>
-      <form class="hero__search" (ngSubmit)="rechercher()">
-        <pnlf-icon name="search" [size]="18" />
-        <input
-          type="search"
-          name="recherche"
-          placeholder="Rechercher un produit (ex : Moabi) ou un producteur…"
-          [(ngModel)]="recherche"
-          aria-label="Rechercher un produit ou un producteur"
-        />
-        <button type="submit" pnlfButton variant="primary" size="md">Rechercher</button>
-      </form>
-
-      <div class="hero-doors">
-        <a routerLink="/inscription" class="hero-door">
-          <strong>Je vends</strong>
-          <span>Producteurs, collecteurs et coopératives : inscrivez-vous pour déclarer vos lots.</span>
-        </a>
-        <a routerLink="/offres-demandes" class="hero-door">
-          <strong>Je cherche</strong>
-          <span>Acheteurs : parcourez les offres validées et contactez les auteurs.</span>
-        </a>
-        <a routerLink="/verifier" class="hero-door">
-          <strong>Je vérifie</strong>
-          <span>Scannez un QR code ou saisissez le code de traçabilité d’un lot.</span>
-        </a>
+      <div class="hero__actions">
+        <a routerLink="/annuaire" pnlfButton variant="primary" size="lg">Consulter l'annuaire</a>
+        <a routerLink="/verifier" pnlfButton variant="outline" size="lg">Vérifier un produit</a>
       </div>
     </div>
-    <div class="hero__visual" aria-hidden="true">
-      <div class="hero__badge">
-        <pnlf-icon name="shield-check" [size]="48" />
-        <span>Traçabilité certifiée</span>
+
+    <div
+      class="hero__visual"
+      role="region"
+      aria-roledescription="carrousel"
+      aria-label="Galerie photos de la filière PFNL"
+      (mouseenter)="pause()"
+      (mouseleave)="resume()"
+      (focusin)="pause()"
+      (focusout)="resume()"
+    >
+      <div class="hero-carousel">
+        @for (slide of slides; track slide.src; let i = $index) {
+          <figure
+            class="hero-carousel__slide"
+            [class.is-active]="activeIndex() === i"
+            [attr.aria-hidden]="activeIndex() !== i"
+          >
+            <img
+              [src]="slide.src"
+              [alt]="slide.alt"
+              [attr.loading]="i === 0 ? 'eager' : 'lazy'"
+              decoding="async"
+            />
+          </figure>
+        }
+
+        <button
+          type="button"
+          class="hero-carousel__nav hero-carousel__nav--prev"
+          (click)="prev()"
+          aria-label="Image précédente"
+        >
+          <pnlf-icon name="arrow-left" [size]="20" />
+        </button>
+        <button
+          type="button"
+          class="hero-carousel__nav hero-carousel__nav--next"
+          (click)="next()"
+          aria-label="Image suivante"
+        >
+          <pnlf-icon name="chevron-right" [size]="20" />
+        </button>
+
+        <div class="hero-carousel__dots" role="tablist" aria-label="Sélectionner une image">
+          @for (slide of slides; track slide.src; let i = $index) {
+            <button
+              type="button"
+              role="tab"
+              class="hero-carousel__dot"
+              [class.is-active]="activeIndex() === i"
+              [attr.aria-selected]="activeIndex() === i"
+              [attr.aria-label]="'Image ' + (i + 1) + ' sur ' + slides.length"
+              (click)="goTo(i)"
+            ></button>
+          }
+        </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="explore-section" aria-labelledby="explore-title">
+  <div class="explore-section__inner">
+    <h2 id="explore-title" class="explore-section__title">Explorer la filière</h2>
+    <p class="explore-section__lede">
+      Recherchez un acteur, ou choisissez votre parcours selon votre profil.
+    </p>
+
+    <form class="explore-search" (ngSubmit)="rechercher()">
+      <label class="pnlf-visually-hidden" for="home-search">Rechercher un produit ou un producteur</label>
+      <pnlf-icon name="search" [size]="18" />
+      <input
+        id="home-search"
+        type="search"
+        name="recherche"
+        placeholder="Rechercher un produit (ex : Moabi) ou un producteur…"
+        [(ngModel)]="recherche"
+      />
+      <button type="submit" pnlfButton variant="primary" size="md">Rechercher</button>
+    </form>
+
+    <div class="hero-doors">
+      <a routerLink="/inscription" class="hero-door">
+        <strong>Je vends</strong>
+        <span>Producteurs, collecteurs et coopératives : inscrivez-vous pour déclarer vos lots.</span>
+      </a>
+      <a routerLink="/offres-demandes" class="hero-door">
+        <strong>Je cherche</strong>
+        <span>Acheteurs : parcourez les offres validées et contactez les auteurs.</span>
+      </a>
+      <a routerLink="/verifier" class="hero-door">
+        <strong>Je vérifie</strong>
+        <span>Scannez un QR code ou saisissez le code de traçabilité d’un lot.</span>
+      </a>
     </div>
   </div>
 </section>

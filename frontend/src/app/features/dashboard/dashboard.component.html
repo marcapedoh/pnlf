@@ -22,7 +22,8 @@
 </div>
 
 @if (showOnboarding()) {
-  <pnlf-card title="Pour commencer" subtitle="Trois étapes pour utiliser la plateforme" style="display:block; margin-bottom: 1.5rem;">
+  <div class="pnlf-mb-5">
+  <pnlf-card title="Pour commencer" subtitle="Trois étapes pour utiliser la plateforme">
     <ol class="dash-onboard">
       <li>
         <strong>Compléter ma fiche</strong>
@@ -38,6 +39,7 @@
       </li>
     </ol>
   </pnlf-card>
+  </div>
 }
 
 @if (isInstitutional()) {
@@ -91,15 +93,15 @@
 @if (isAcheteur && offresRecentes().length > 0) {
   <pnlf-card title="Dernières offres & demandes" subtitle="Annonces publiées de la filière">
     <div card-actions><a routerLink="/app/marketplace/offres" class="dashboard-see-all">Voir tout →</a></div>
-    <div class="pnlf-table-wrapper">
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
         <thead><tr><th>Titre</th><th>Produit</th><th>Type</th></tr></thead>
         <tbody>
           @for (o of offresRecentes(); track o.id) {
             <tr>
-              <td><a class="pnlf-table__link" [routerLink]="['/app/marketplace/offres', o.id]">{{ o.titre }}</a></td>
-              <td>{{ o.produit_nom }}</td>
-              <td>{{ o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }}</td>
+              <td data-label="Titre"><a class="pnlf-table__link" [routerLink]="['/app/marketplace/offres', o.id]">{{ o.titre }}</a></td>
+              <td data-label="Produit">{{ o.produit_nom }}</td>
+              <td data-label="Type">{{ o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }}</td>
             </tr>
           }
         </tbody>
@@ -114,7 +116,7 @@
   </div>
 
   @if (loading()) {
-    <div class="pnlf-stack" style="gap: 12px;">
+    <div class="pnlf-stack" style="gap: var(--space-3);">
       @for (i of [1, 2, 3]; track i) { <pnlf-skeleton height="20px" /> }
     </div>
   } @else if (recentLots().length === 0) {
@@ -126,7 +128,7 @@
       }
     </pnlf-empty-state>
   } @else {
-    <div class="pnlf-table-wrapper">
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
         <thead>
           <tr><th>Code lot</th><th>Produit</th><th>Producteur</th><th>Quantité</th><th>Statut</th></tr>
@@ -134,11 +136,11 @@
         <tbody>
           @for (lot of recentLots(); track lot.id) {
             <tr>
-              <td><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
-              <td>{{ lot.produit_nom }}</td>
-              <td>{{ lot.producteur_nom }}</td>
-              <td>{{ lot.quantite }} {{ lot.unite }}</td>
-              <td><pnlf-status-badge [label]="statutLotLabels[lot.statut]" [tone]="lotStatusTone(lot.statut)" /></td>
+              <td data-label="Code lot"><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
+              <td data-label="Produit">{{ lot.produit_nom }}</td>
+              <td data-label="Producteur">{{ lot.producteur_nom }}</td>
+              <td data-label="Quantité">{{ lot.quantite }} {{ lot.unite }}</td>
+              <td data-label="Statut"><pnlf-status-badge [label]="statutLotLabels[lot.statut]" [tone]="lotStatusTone(lot.statut)" /></td>
             </tr>
           }
         </tbody>

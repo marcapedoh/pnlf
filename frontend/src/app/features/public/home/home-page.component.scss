@@ -38,53 +38,188 @@
   margin-bottom: var(--space-6);
 }
 
-.hero-doors {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
-  max-width: 640px;
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.hero-door {
+.hero__actions {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.12);
-  color: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-wrap: wrap;
+  gap: var(--space-3);
 
-  strong {
-    font-size: var(--fs-sm);
-  }
+  // Le variant "outline" du bouton est prévu pour un fond clair ; sur le
+  // dégradé vert foncé du hero il faut l'inverser (texte/bordure clairs).
+  ::ng-deep .pnlf-btn--outline {
+    color: var(--text-inverse);
+    border-color: rgba(255, 255, 255, 0.55);
 
-  span {
-    font-size: var(--fs-xs);
-    opacity: 0.9;
-    line-height: 1.4;
-  }
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.2);
+    &:hover:not([disabled]) {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--text-inverse);
+    }
   }
 }
 
-.hero__search {
+.hero__visual {
+  position: relative;
+  min-height: 320px;
+  height: 100%;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 40px rgba(6, 46, 34, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.hero-carousel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  aspect-ratio: 4 / 3;
+}
+
+.hero-carousel__slide {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  transform: scale(1.04);
+  transition:
+    opacity 0.85s var(--ease-standard),
+    transform 0.85s var(--ease-standard);
+  pointer-events: none;
+
+  &.is-active {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+    z-index: 1;
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
+}
+
+.hero-carousel__nav {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(6, 46, 34, 0.45);
+  color: var(--white);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.2s ease, border-color 0.2s ease;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(6, 46, 34, 0.72);
+    border-color: rgba(255, 255, 255, 0.6);
+    outline: none;
+  }
+
+  &--prev {
+    left: 12px;
+  }
+
+  &--next {
+    right: 12px;
+  }
+}
+
+.hero-carousel__dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 48px;
+}
+
+.hero-carousel__dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+
+  &.is-active {
+    background: var(--pnlf-gold-400);
+    border-color: var(--pnlf-gold-300);
+    transform: scale(1.25);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pnlf-gold-300);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-carousel__slide {
+    transition: opacity 0.01ms;
+    transform: none;
+  }
+}
+
+.explore-section {
+  padding: var(--space-12) var(--space-5);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.explore-section__inner {
+  max-width: var(--layout-content-max);
+  margin-inline: auto;
+}
+
+.explore-section__title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--pnlf-green-800);
+  margin-bottom: var(--space-2);
+  text-align: center;
+}
+
+.explore-section__lede {
+  text-align: center;
+  color: var(--text-secondary);
+  margin: 0 auto var(--space-6);
+  max-width: 48ch;
+  line-height: var(--lh-normal);
+}
+
+.explore-search {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--white);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   max-width: 560px;
-  margin-bottom: var(--space-4);
-  box-shadow: var(--shadow-md);
+  margin: 0 auto var(--space-6);
+  box-shadow: var(--shadow-sm);
 
   pnlf-icon {
     color: var(--pnlf-green-600);
@@ -107,40 +242,44 @@
   }
 }
 
-.hero__actions {
-  display: flex;
-  flex-wrap: wrap;
+.hero-doors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-3);
+  max-width: 720px;
+  margin-inline: auto;
 
-  // Le variant "outline" du bouton est prévu pour un fond clair ; sur le
-  // dégradé vert foncé du hero il faut l'inverser (texte/bordure clairs).
-  ::ng-deep .pnlf-btn--outline {
-    color: var(--text-inverse);
-    border-color: rgba(255, 255, 255, 0.55);
-
-    &:hover:not([disabled]) {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: var(--text-inverse);
-    }
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
   }
 }
 
-.hero__visual {
-  display: flex;
-  justify-content: center;
-}
-
-.hero__badge {
+.hero-door {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-8);
-  border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  font-weight: 600;
-  font-size: var(--fs-base);
+  gap: 4px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--pnlf-green-50);
+  color: var(--text-primary);
+  border: 1px solid var(--pnlf-green-200);
+  text-decoration: none;
+
+  strong {
+    font-size: var(--fs-sm);
+    color: var(--pnlf-green-800);
+  }
+
+  span {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  &:hover {
+    border-color: var(--pnlf-green-400);
+    background: var(--pnlf-green-100);
+  }
 }
 
 .stats-section {
@@ -348,12 +487,38 @@
   justify-content: center;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .hero__inner {
     grid-template-columns: 1fr;
+    gap: var(--space-8);
   }
 
   .hero__visual {
-    display: none;
+    min-height: 240px;
+    max-width: 560px;
+    margin-inline: auto;
+    width: 100%;
+  }
+
+  .hero-carousel {
+    min-height: 240px;
+    aspect-ratio: 16 / 10;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero-carousel__nav {
+    width: 34px;
+    height: 34px;
+  }
+
+  .hero-carousel__dots {
+    padding: 0 40px;
+    gap: 5px;
+  }
+
+  .hero-carousel__dot {
+    width: 7px;
+    height: 7px;
   }
 }

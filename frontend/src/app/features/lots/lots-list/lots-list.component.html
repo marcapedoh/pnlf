@@ -13,7 +13,9 @@
 
 <div class="pnlf-toolbar">
   <div class="pnlf-toolbar__filters">
+    <label class="pnlf-visually-hidden" for="lots-search">Rechercher un lot</label>
     <input
+      id="lots-search"
       type="search"
       class="pnlf-select pnlf-toolbar__search"
       placeholder="Rechercher un code lot, produit…"
@@ -48,7 +50,7 @@
     }
   </pnlf-empty-state>
 } @else {
-  <div class="pnlf-table-wrapper">
+  <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
     <table class="pnlf-table">
       <thead>
         <tr>
@@ -63,12 +65,12 @@
       <tbody>
         @for (lot of items(); track lot.id) {
           <tr>
-            <td><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
-            <td>{{ lot.produit_nom }}</td>
-            <td>{{ lot.producteur_nom }}</td>
-            <td class="pnlf-table__muted">{{ lot.date_collecte }}</td>
-            <td>{{ lot.quantite }} {{ lot.unite }}</td>
-            <td><pnlf-status-badge [label]="statutLabels[lot.statut]" [tone]="tone(lot.statut)" /></td>
+            <td data-label="Code lot"><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
+            <td data-label="Produit">{{ lot.produit_nom }}</td>
+            <td data-label="Producteur">{{ lot.producteur_nom }}</td>
+            <td class="pnlf-table__muted" data-label="Date de collecte">{{ lot.date_collecte }}</td>
+            <td data-label="Quantité">{{ lot.quantite }} {{ lot.unite }}</td>
+            <td data-label="Statut"><pnlf-status-badge [label]="statutLabels[lot.statut]" [tone]="tone(lot.statut)" /></td>
           </tr>
         }
       </tbody>

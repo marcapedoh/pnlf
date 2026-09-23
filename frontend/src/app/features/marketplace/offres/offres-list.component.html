@@ -1,21 +1,16 @@
-<div class="pnlf-page-header">
-  <div>
-    <p class="text-eyebrow">Filière &amp; partenaires</p>
-    <h1 class="pnlf-page-header__title">Offres &amp; demandes</h1>
-    <p class="pnlf-page-header__subtitle">
-      Mise en relation entre producteurs, coopératives et acheteurs de produits PFNL. Chaque annonce est
-      vérifiée par un administrateur avant publication.
-    </p>
-  </div>
-  @if (canPost) {
-    <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
-      {{ showForm() ? 'Annuler' : "+ Publier une annonce" }}
-    </button>
-  }
-</div>
-
 @if (showForm()) {
-  <pnlf-card title="Nouvelle annonce" style="display:block; margin-bottom:1.5rem;">
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Filière &amp; partenaires</p>
+      <h1 class="pnlf-page-header__title">Publier une annonce</h1>
+      <p class="pnlf-page-header__subtitle">
+        Chaque annonce est vérifiée par un administrateur avant publication.
+      </p>
+    </div>
+    <button pnlfButton variant="ghost" type="button" (click)="showForm.set(false)">← Retour à la liste</button>
+  </div>
+
+  <pnlf-card title="Nouvelle annonce">
     @if (errorMessage()) {
       <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
     }
@@ -54,75 +49,93 @@
       </div>
     </form>
   </pnlf-card>
-}
-
-<div class="pnlf-toolbar">
-  <input
-    type="search"
-    class="pnlf-select pnlf-toolbar__search"
-    placeholder="Rechercher un titre, une description…"
-    [ngModel]="search()"
-    (ngModelChange)="onSearchInput($event)"
-  />
-  <div class="offre-tabs">
-    <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'TOUS'" (click)="setTypeFiltre('TOUS')">Tout type</button>
-    <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'OFFRE'" (click)="setTypeFiltre('OFFRE')">Offres</button>
-    <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'DEMANDE'" (click)="setTypeFiltre('DEMANDE')">Demandes</button>
-  </div>
-  <div class="offre-tabs">
-    <button type="button" class="offre-tab" [class.is-active]="filtre() === 'TOUTES'" (click)="setFiltre('TOUTES')">Tous statuts</button>
-    <button type="button" class="offre-tab" [class.is-active]="filtre() === 'OUVERTE'" (click)="setFiltre('OUVERTE')">Publiées</button>
-    @if (canValidate) {
-      <button type="button" class="offre-tab" [class.is-active]="filtre() === 'EN_VALIDATION'" (click)="setFiltre('EN_VALIDATION')">En attente de validation</button>
-    }
-  </div>
-</div>
-
-@if (loading()) {
-  <div class="offre-grid">
-    @for (i of [1, 2, 3, 4]; track i) {
-      <pnlf-skeleton height="220px" radius="12px" />
-    }
-  </div>
-} @else if (items().length === 0) {
-  <pnlf-empty-state
-    icon="shopping-bag"
-    title="Aucune annonce"
-    [description]="canPost ? 'Publiez une offre ou une demande pour entrer en relation avec des partenaires.' : 'Aucune annonce ne correspond à ce filtre pour le moment.'"
-  >
-    @if (canPost) {
-      <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Publier une annonce</button>
-    }
-  </pnlf-empty-state>
 } @else {
-  <div class="offre-grid">
-    @for (o of items(); track o.id) {
-      <pnlf-card class="offre-card" (click)="openDetail(o)">
-        <div class="offre-card__header">
-          <pnlf-status-badge [label]="o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande'" [tone]="o.type_annonce === 'OFFRE' ? 'success' : 'info'" />
-          <span class="offre-card__date">{{ o.created_at | date: 'dd/MM/yyyy' }}</span>
-        </div>
-        @if (o.photos_urls?.length) {
-          <div class="offre-card__photo">
-            <img [src]="o.photos_urls![0]" [alt]="o.titre" loading="lazy" />
-          </div>
-        }
-        <h3 class="offre-card__title">{{ o.titre }}</h3>
-        @if (o.description) {
-          <p class="offre-card__desc">{{ o.description }}</p>
-        }
-        <div class="offre-card__footer">
-          @if (o.quantite) {
-            <span>{{ o.quantite }} {{ o.unite }}</span>
-          }
-          @if (o.prix_unitaire) {
-            <span>{{ o.prix_unitaire | number }} {{ o.devise }} / unité</span>
-          }
-        </div>
-        <pnlf-status-badge [label]="statutLabels[o.statut]" [tone]="tone(o.statut)" style="margin-top: 0.5rem;" />
-      </pnlf-card>
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Filière &amp; partenaires</p>
+      <h1 class="pnlf-page-header__title">Offres &amp; demandes</h1>
+      <p class="pnlf-page-header__subtitle">
+        Mise en relation entre producteurs, coopératives et acheteurs de produits PFNL. Chaque annonce est
+        vérifiée par un administrateur avant publication.
+      </p>
+    </div>
+    @if (canPost) {
+      <button pnlfButton variant="primary" (click)="showForm.set(true)">
+        + Publier une annonce
+      </button>
     }
   </div>
 
-  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  <div class="pnlf-toolbar">
+    <label class="pnlf-visually-hidden" for="offre-search">Rechercher une annonce</label>
+    <input
+      id="offre-search"
+      type="search"
+      class="pnlf-select pnlf-toolbar__search"
+      placeholder="Rechercher un titre, une description…"
+      [ngModel]="search()"
+      (ngModelChange)="onSearchInput($event)"
+    />
+    <div class="offre-tabs">
+      <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'TOUS'" (click)="setTypeFiltre('TOUS')">Tout type</button>
+      <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'OFFRE'" (click)="setTypeFiltre('OFFRE')">Offres</button>
+      <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'DEMANDE'" (click)="setTypeFiltre('DEMANDE')">Demandes</button>
+    </div>
+    <div class="offre-tabs">
+      <button type="button" class="offre-tab" [class.is-active]="filtre() === 'TOUTES'" (click)="setFiltre('TOUTES')">Tous statuts</button>
+      <button type="button" class="offre-tab" [class.is-active]="filtre() === 'OUVERTE'" (click)="setFiltre('OUVERTE')">Publiées</button>
+      @if (canValidate) {
+        <button type="button" class="offre-tab" [class.is-active]="filtre() === 'EN_VALIDATION'" (click)="setFiltre('EN_VALIDATION')">En attente de validation</button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="offre-grid">
+      @for (i of [1, 2, 3, 4]; track i) {
+        <pnlf-skeleton height="220px" radius="12px" />
+      }
+    </div>
+  } @else if (items().length === 0) {
+    <pnlf-empty-state
+      icon="shopping-bag"
+      title="Aucune annonce"
+      [description]="canPost ? 'Publiez une offre ou une demande pour entrer en relation avec des partenaires.' : 'Aucune annonce ne correspond à ce filtre pour le moment.'"
+    >
+      @if (canPost) {
+        <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Publier une annonce</button>
+      }
+    </pnlf-empty-state>
+  } @else {
+    <div class="offre-grid">
+      @for (o of items(); track o.id) {
+        <pnlf-card class="offre-card" (click)="openDetail(o)">
+          <div class="offre-card__header">
+            <pnlf-status-badge [label]="o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande'" [tone]="o.type_annonce === 'OFFRE' ? 'success' : 'info'" />
+            <span class="offre-card__date">{{ o.created_at | date: 'dd/MM/yyyy' }}</span>
+          </div>
+          @if (o.photos_urls?.length) {
+            <div class="offre-card__photo">
+              <img [src]="o.photos_urls![0]" [alt]="o.titre" loading="lazy" />
+            </div>
+          }
+          <h3 class="offre-card__title">{{ o.titre }}</h3>
+          @if (o.description) {
+            <p class="offre-card__desc">{{ o.description }}</p>
+          }
+          <div class="offre-card__footer">
+            @if (o.quantite) {
+              <span>{{ o.quantite }} {{ o.unite }}</span>
+            }
+            @if (o.prix_unitaire) {
+              <span>{{ o.prix_unitaire | number }} {{ o.devise }} / unité</span>
+            }
+          </div>
+          <pnlf-status-badge [label]="statutLabels[o.statut]" [tone]="tone(o.statut)" style="margin-top: 0.5rem;" />
+        </pnlf-card>
+      }
+    </div>
+
+    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  }
 }

@@ -18,9 +18,14 @@
         >
           <pnlf-icon name="camera" [size]="14" />
         </button>
-        <input #photoInput type="file" accept="image/*" class="sr-only" (change)="onPhotoSelected($event)" />
+        <input #photoInput type="file" accept="image/*" class="pnlf-visually-hidden" (change)="onPhotoSelected($event)" />
       </div>
       <div>
+        <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
+          <a routerLink="/app/utilisateurs">Comptes utilisateurs</a>
+          <span aria-hidden="true">›</span>
+          <span aria-current="page">{{ u.prenoms }} {{ u.nom }}</span>
+        </nav>
         <p class="text-eyebrow">Compte utilisateur</p>
         <h1 class="pnlf-page-header__title">{{ u.prenoms }} {{ u.nom }}</h1>
         <pnlf-status-badge [label]="statutLabels[u.statut]" [tone]="statutTone(u.statut)" />

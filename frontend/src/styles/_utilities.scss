@@ -35,6 +35,66 @@
   border: 0;
 }
 
+.pnlf-skip-link {
+  position: absolute;
+  left: var(--space-4);
+  top: -100px;
+  z-index: calc(var(--z-toast) + 1);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--pnlf-green-800);
+  color: var(--white);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-decoration: none;
+
+  &:focus {
+    top: var(--space-3);
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.pnlf-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+
+  a {
+    color: var(--color-link);
+    font-weight: 600;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  [aria-current='page'] {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+}
+
+.pnlf-mb-2 {
+  margin-bottom: var(--space-2);
+}
+.pnlf-mb-3 {
+  margin-bottom: var(--space-3);
+}
+.pnlf-mb-4 {
+  margin-bottom: var(--space-4);
+}
+.pnlf-mb-5 {
+  margin-bottom: var(--space-5);
+}
+.pnlf-mt-4 {
+  margin-top: var(--space-4);
+}
+
 .pnlf-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: var(--gray-300) transparent;

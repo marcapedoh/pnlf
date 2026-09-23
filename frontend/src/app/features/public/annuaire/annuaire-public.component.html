@@ -14,13 +14,14 @@
     <form class="annuaire-filters" (submit)="$event.preventDefault()">
       <div class="annuaire-filters__search">
         <pnlf-icon name="search" [size]="18" />
+        <label class="pnlf-visually-hidden" for="annuaire-public-search">Recherche dans l'annuaire</label>
         <input
+          id="annuaire-public-search"
           type="search"
           placeholder="Rechercher un nom, une communauté, un produit…"
           [(ngModel)]="recherche"
           name="recherche"
           (ngModelChange)="onFilterChange()"
-          aria-label="Recherche dans l'annuaire"
         />
       </div>
       <label class="annuaire-filters__select">

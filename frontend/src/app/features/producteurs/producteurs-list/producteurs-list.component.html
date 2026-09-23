@@ -20,7 +20,9 @@
 
 <div class="pnlf-toolbar">
   <div class="pnlf-toolbar__filters">
+    <label class="pnlf-visually-hidden" for="producteurs-search">Rechercher un producteur ou collecteur</label>
     <input
+      id="producteurs-search"
       type="search"
       class="pnlf-select pnlf-toolbar__search"
       placeholder="Rechercher un nom, code, téléphone…"
@@ -70,7 +72,7 @@
     }
   </pnlf-empty-state>
 } @else {
-  <div class="pnlf-table-wrapper">
+  <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
     <table class="pnlf-table">
       <thead>
         <tr>
@@ -88,16 +90,16 @@
       <tbody>
         @for (p of items(); track p.id) {
           <tr>
-            <td>
+            <td data-label="Code">
               <a class="pnlf-table__link" [routerLink]="['/app/producteurs', p.id]">{{ p.code_producteur }}</a>
             </td>
-            <td>{{ p.prenoms }} {{ p.nom }}</td>
-            <td>{{ p.type_acteur === TypeActeur.COLLECTEUR ? 'Collecteur' : 'Producteur' }}</td>
-            <td>{{ p.province_nom }}</td>
-            <td class="pnlf-table__muted">{{ p.telephone || '—' }}</td>
-            <td><pnlf-status-badge [label]="statutLabels[p.statut]" [tone]="tone(p.statut)" /></td>
+            <td data-label="Nom complet">{{ p.prenoms }} {{ p.nom }}</td>
+            <td data-label="Type">{{ p.type_acteur === TypeActeur.COLLECTEUR ? 'Collecteur' : 'Producteur' }}</td>
+            <td data-label="Province">{{ p.province_nom }}</td>
+            <td class="pnlf-table__muted" data-label="Téléphone">{{ p.telephone || '—' }}</td>
+            <td data-label="Statut"><pnlf-status-badge [label]="statutLabels[p.statut]" [tone]="tone(p.statut)" /></td>
             @if (canValidate) {
-              <td>
+              <td data-label="">
                 @if (p.statut === StatutProducteur.EN_VALIDATION) {
                   <div class="pnlf-table__actions">
                     <button pnlfButton variant="outline" size="sm" (click)="valider(p)">Valider</button>

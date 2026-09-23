@@ -1,22 +1,18 @@
-<div class="pnlf-page-header">
-  <div>
-    <p class="text-eyebrow">Traçabilité · Qualité</p>
-    <h1 class="pnlf-page-header__title">Certifications</h1>
-    <p class="pnlf-page-header__subtitle">
-      Suivi des labels et certifications de qualité obtenus par les producteurs et les lots.
-    </p>
-  </div>
-  @if (canRequest) {
-    <button pnlfButton variant="primary" (click)="showForm.set(!showForm())">
-      {{ showForm() ? 'Annuler' : '+ Demander une certification' }}
-    </button>
-  }
-</div>
-
 @if (showForm()) {
-  <pnlf-card title="Nouvelle demande de certification" style="display:block; margin-bottom:1.5rem;">
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Traçabilité · Qualité</p>
+      <h1 class="pnlf-page-header__title">Demander une certification</h1>
+      <p class="pnlf-page-header__subtitle">
+        Déposez une demande de label ou de certification de qualité pour un producteur ou un lot.
+      </p>
+    </div>
+    <button pnlfButton variant="ghost" type="button" (click)="showForm.set(false)">← Retour à la liste</button>
+  </div>
+
+  <pnlf-card title="Nouvelle demande de certification">
     @if (errorMessage()) {
-      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
+      <pnlf-alert tone="error" class="pnlf-mb-4">{{ errorMessage() }}</pnlf-alert>
     }
     <form [formGroup]="form" (ngSubmit)="submit()" class="cert-form">
       <pnlf-select-field label="Type de certification" formControlName="type_certification" [options]="types()" [required]="true" />
@@ -30,63 +26,78 @@
       <button pnlfButton type="submit" variant="primary" [loading]="saving()">Envoyer la demande</button>
     </form>
   </pnlf-card>
-}
-
-@if (loading()) {
-  <div class="pnlf-table-wrapper">
-    <table class="pnlf-table">
-      <tbody>
-        @for (i of [1, 2, 3, 4, 5]; track i) {
-          <tr><td colspan="6"><pnlf-skeleton height="18px" /></td></tr>
-        }
-      </tbody>
-    </table>
-  </div>
-} @else if (items().length === 0) {
-  <pnlf-empty-state icon="shield-check" title="Aucune certification" description="Les demandes et certifications obtenues apparaîtront ici.">
-    @if (canRequest) {
-      <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Demander une certification</button>
-    }
-  </pnlf-empty-state>
 } @else {
-  <div class="pnlf-table-wrapper">
-    <table class="pnlf-table">
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Producteur</th>
-          <th>N° certificat</th>
-          <th>Date demande</th>
-          <th>Expiration</th>
-          <th>Statut</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (c of items(); track c.id) {
-          <tr>
-            <td>{{ c.type_libelle }}</td>
-            <td>{{ c.producteur_nom || '—' }}</td>
-            <td class="pnlf-table__muted">{{ c.numero_certificat || '—' }}</td>
-            <td>{{ c.date_demande | date: 'dd/MM/yyyy' }}</td>
-            <td>{{ c.date_expiration ? (c.date_expiration | date: 'dd/MM/yyyy') : '—' }}</td>
-            <td><pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" /></td>
-            <td>
-              <div class="cert-actions">
-                <button pnlfButton variant="ghost" type="button" (click)="verDetail(c)">Détails</button>
-                @if (canValidate && (c.statut === StatutCertification.DEMANDEE || c.statut === StatutCertification.EN_COURS)) {
-                  <button pnlfButton variant="outline" type="button" [loading]="actionId() === c.id" (click)="valider(c)">Accepter</button>
-                  <button pnlfButton variant="ghost" type="button" [disabled]="actionId() === c.id" (click)="refuser(c)">Refuser</button>
-                }
-              </div>
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Traçabilité · Qualité</p>
+      <h1 class="pnlf-page-header__title">Certifications</h1>
+      <p class="pnlf-page-header__subtitle">
+        Suivi des labels et certifications de qualité obtenus par les producteurs et les lots.
+      </p>
+    </div>
+    @if (canRequest) {
+      <button pnlfButton variant="primary" (click)="showForm.set(true)">
+        + Demander une certification
+      </button>
+    }
   </div>
 
-  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  @if (loading()) {
+    <div class="pnlf-table-wrapper">
+      <table class="pnlf-table">
+        <tbody>
+          @for (i of [1, 2, 3, 4, 5]; track i) {
+            <tr><td colspan="6"><pnlf-skeleton height="18px" /></td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (items().length === 0) {
+    <pnlf-empty-state icon="shield-check" title="Aucune certification" description="Les demandes et certifications obtenues apparaîtront ici.">
+      @if (canRequest) {
+        <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Demander une certification</button>
+      }
+    </pnlf-empty-state>
+  } @else {
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+      <table class="pnlf-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Producteur</th>
+            <th>N° certificat</th>
+            <th>Date demande</th>
+            <th>Expiration</th>
+            <th>Statut</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of items(); track c.id) {
+            <tr>
+              <td data-label="Type">{{ c.type_libelle }}</td>
+              <td data-label="Producteur">{{ c.producteur_nom || '—' }}</td>
+              <td class="pnlf-table__muted" data-label="N° certificat">{{ c.numero_certificat || '—' }}</td>
+              <td data-label="Date demande">{{ c.date_demande | date: 'dd/MM/yyyy' }}</td>
+              <td data-label="Expiration">{{ c.date_expiration ? (c.date_expiration | date: 'dd/MM/yyyy') : '—' }}</td>
+              <td data-label="Statut"><pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" /></td>
+              <td data-label="">
+                <div class="cert-actions">
+                  <button pnlfButton variant="ghost" type="button" (click)="verDetail(c)">Détails</button>
+                  @if (canValidate && (c.statut === StatutCertification.DEMANDEE || c.statut === StatutCertification.EN_COURS)) {
+                    <button pnlfButton variant="outline" type="button" [loading]="actionId() === c.id" (click)="valider(c)">Accepter</button>
+                    <button pnlfButton variant="ghost" type="button" [disabled]="actionId() === c.id" (click)="refuser(c)">Refuser</button>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  }
 }
 
 <pnlf-confirm-dialog
@@ -164,7 +175,7 @@
         }
         @if (canRequest) {
           <label class="cert-detail-doc__upload">
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" class="sr-only" [disabled]="uploadingDoc()" (change)="onDocumentSelected($event)" />
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" class="pnlf-visually-hidden" [disabled]="uploadingDoc()" (change)="onDocumentSelected($event)" />
             <span pnlfButton variant="ghost" size="sm">
               {{ uploadingDoc() ? 'Envoi en cours…' : (d.document_url ? 'Remplacer le document' : 'Joindre un document (PDF/JPG/PNG)') }}
             </span>

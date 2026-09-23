@@ -3,6 +3,11 @@
 } @else if (lot(); as l) {
   <div class="pnlf-page-header">
     <div>
+      <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
+        <a routerLink="/app/lots">Lots</a>
+        <span aria-hidden="true">›</span>
+        <span aria-current="page">{{ l.code_lot }}</span>
+      </nav>
       <p class="text-eyebrow">Lot {{ l.code_lot }}</p>
       <h1 class="pnlf-page-header__title">{{ l.produit_nom }}</h1>
       <div class="lot-detail__badges">

@@ -16,7 +16,7 @@
 
     <div class="verify-card">
       <form (ngSubmit)="submit()" class="verify-card__form">
-        <label class="sr-only" for="verify-code">Code de traçabilité</label>
+        <label class="pnlf-visually-hidden" for="verify-code">Code de traçabilité</label>
         <input
           id="verify-code"
           type="text"
@@ -70,7 +70,7 @@
         #fileInput
         type="file"
         accept="image/*"
-        class="sr-only"
+        class="pnlf-visually-hidden"
         (change)="onFileInputChange($event)"
       />
       <div id="qr-reader-file" class="verify-card__scanner-hidden"></div>

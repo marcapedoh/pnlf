@@ -1,29 +1,40 @@
-<div class="pnlf-page-header">
-  <div>
-    <p class="text-eyebrow">Traçabilité · Référentiel géographique</p>
-    <h1 class="pnlf-page-header__title">Zones de collecte</h1>
-    <p class="pnlf-page-header__subtitle">Aires de collecte référencées pour le rattachement des lots, avec leurs coordonnées WGS84.</p>
-  </div>
-  @if (canManage) {
-    <div class="zone-page__actions">
-      <button pnlfButton variant="outline" (click)="showImport.set(!showImport()); showForm.set(false)">
-        {{ showImport() ? 'Annuler' : 'Importer un fichier' }}
-      </button>
-      <a pnlfButton variant="ghost" [href]="modeleUrl" (click)="telechargerModele($event)">Télécharger le modèle CSV</a>
-      <button pnlfButton variant="primary" (click)="showForm.set(!showForm()); showImport.set(false)">
-        {{ showForm() ? 'Annuler' : '+ Nouvelle zone' }}
-      </button>
+@if (showForm()) {
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Traçabilité · Référentiel géographique</p>
+      <h1 class="pnlf-page-header__title">Nouvelle zone de collecte</h1>
+      <p class="pnlf-page-header__subtitle">Aire de collecte avec coordonnées WGS84 pour le rattachement des lots.</p>
     </div>
-  } @else {
-    <p class="text-sm text-muted zone-import__hint" style="margin-bottom: 1rem;">
-      Seules les autorités (admin, ministère, forestier) enrichissent le référentiel national.
-      Vous pouvez toutefois créer une zone au moment de déclarer un lot.
-    </p>
-  }
-</div>
+    <button pnlfButton variant="ghost" type="button" (click)="showForm.set(false)">← Retour à la liste</button>
+  </div>
 
-@if (showImport()) {
-  <pnlf-card title="Importer des zones depuis un fichier CSV ou XLSX" style="display:block; margin-bottom:1.5rem;">
+  <pnlf-card title="Créer une zone de collecte">
+    @if (errorMessage()) {
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
+    }
+    <form [formGroup]="form" (ngSubmit)="submit()" class="zone-form">
+      <pnlf-text-field label="Code" formControlName="code" [required]="true" />
+      <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" />
+      <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" />
+      <pnlf-text-field label="Description" formControlName="description" />
+      <pnlf-text-field label="Latitude (WGS84)" formControlName="latitude" placeholder="ex : -0.5546" />
+      <pnlf-text-field label="Longitude (WGS84)" formControlName="longitude" placeholder="ex : 11.6642" />
+      <div class="zone-form__actions">
+        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer</button>
+      </div>
+    </form>
+  </pnlf-card>
+} @else if (showImport()) {
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Traçabilité · Référentiel géographique</p>
+      <h1 class="pnlf-page-header__title">Importer des zones</h1>
+      <p class="pnlf-page-header__subtitle">Import en masse depuis un fichier CSV ou XLSX.</p>
+    </div>
+    <button pnlfButton variant="ghost" type="button" (click)="showImport.set(false)">← Retour à la liste</button>
+  </div>
+
+  <pnlf-card title="Importer des zones depuis un fichier CSV ou XLSX">
     <p class="text-sm text-muted zone-import__hint">
       Colonnes attendues (en-tête) : <code>code</code>, <code>libelle</code>, <code>province</code> (code ou nom),
       <code>description</code>, <code>latitude</code>, <code>longitude</code>. Une zone existante (même code) est mise à jour.
@@ -54,80 +65,87 @@
       </div>
     }
   </pnlf-card>
-}
-
-@if (showForm()) {
-  <pnlf-card title="Créer une zone de collecte" style="display:block; margin-bottom:1.5rem;">
-    @if (errorMessage()) {
-      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
-    }
-    <form [formGroup]="form" (ngSubmit)="submit()" class="zone-form">
-      <pnlf-text-field label="Code" formControlName="code" [required]="true" />
-      <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" />
-      <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" />
-      <pnlf-text-field label="Description" formControlName="description" />
-      <pnlf-text-field label="Latitude (WGS84)" formControlName="latitude" placeholder="ex : -0.5546" />
-      <pnlf-text-field label="Longitude (WGS84)" formControlName="longitude" placeholder="ex : 11.6642" />
-      <div class="zone-form__actions">
-        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer</button>
-      </div>
-    </form>
-  </pnlf-card>
-}
-
-<div class="pnlf-toolbar">
-  <div class="pnlf-toolbar__filters">
-    <input
-      type="search"
-      class="pnlf-select pnlf-toolbar__search"
-      placeholder="Rechercher un code ou un libellé…"
-      [ngModel]="search()"
-      (ngModelChange)="onSearchInput($event)"
-    />
-  </div>
-</div>
-
-@if (loading()) {
-  <div class="pnlf-table-wrapper">
-    <table class="pnlf-table">
-      <tbody>
-        @for (i of [1, 2, 3, 4, 5]; track i) {
-          <tr><td colspan="5"><pnlf-skeleton height="18px" /></td></tr>
-        }
-      </tbody>
-    </table>
-  </div>
-} @else if (items().length === 0) {
-  <pnlf-empty-state icon="map-pin" title="Aucune zone de collecte" description="Les zones recensées serviront au rattachement des lots. Vous pouvez aussi en créer une au moment de déclarer un lot.">
-    @if (canManage) {
-      <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Créer une zone</button>
-    } @else {
-      <a pnlfButton routerLink="/app/lots/nouveau" variant="outline">Déclarer un lot</a>
-    }
-  </pnlf-empty-state>
 } @else {
-  <div class="pnlf-table-wrapper">
-    <table class="pnlf-table">
-      <thead><tr><th>Code</th><th>Libellé</th><th>Province</th><th>Coordonnées GPS</th><th></th></tr></thead>
-      <tbody>
-        @for (z of items(); track z.id) {
-          <tr class="zone-row" (click)="openDetail(z)">
-            <td>{{ z.code }}</td>
-            <td>{{ z.libelle }}</td>
-            <td>{{ z.province_nom }}</td>
-            <td class="pnlf-table__muted">
-              @if (z.latitude && z.longitude) {
-                {{ z.latitude }}, {{ z.longitude }}
-              } @else {
-                —
-              }
-            </td>
-            <td><a class="pnlf-table__link" [routerLink]="['/app/zones-collecte', z.id]" (click)="$event.stopPropagation()">Voir la fiche →</a></td>
-          </tr>
-        }
-      </tbody>
-    </table>
+  <div class="pnlf-page-header">
+    <div>
+      <p class="text-eyebrow">Traçabilité · Référentiel géographique</p>
+      <h1 class="pnlf-page-header__title">Zones de collecte</h1>
+      <p class="pnlf-page-header__subtitle">Aires de collecte référencées pour le rattachement des lots, avec leurs coordonnées WGS84.</p>
+    </div>
+    @if (canManage) {
+      <div class="zone-page__actions">
+        <button pnlfButton variant="outline" (click)="showImport.set(true); showForm.set(false)">
+          Importer un fichier
+        </button>
+        <a pnlfButton variant="ghost" [href]="modeleUrl" (click)="telechargerModele($event)">Télécharger le modèle CSV</a>
+        <button pnlfButton variant="primary" (click)="showForm.set(true); showImport.set(false)">
+          + Nouvelle zone
+        </button>
+      </div>
+    } @else {
+      <p class="text-sm text-muted zone-import__hint" style="margin-bottom: 1rem;">
+        Seules les autorités (admin, ministère, forestier) enrichissent le référentiel national.
+        Vous pouvez toutefois créer une zone au moment de déclarer un lot.
+      </p>
+    }
   </div>
 
-  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  <div class="pnlf-toolbar">
+    <div class="pnlf-toolbar__filters">
+      <label class="pnlf-visually-hidden" for="zone-search">Rechercher une zone de collecte</label>
+      <input
+        id="zone-search"
+        type="search"
+        class="pnlf-select pnlf-toolbar__search"
+        placeholder="Rechercher un code ou un libellé…"
+        [ngModel]="search()"
+        (ngModelChange)="onSearchInput($event)"
+      />
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="pnlf-table-wrapper">
+      <table class="pnlf-table">
+        <tbody>
+          @for (i of [1, 2, 3, 4, 5]; track i) {
+            <tr><td colspan="5"><pnlf-skeleton height="18px" /></td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (items().length === 0) {
+    <pnlf-empty-state icon="map-pin" title="Aucune zone de collecte" description="Les zones recensées serviront au rattachement des lots. Vous pouvez aussi en créer une au moment de déclarer un lot.">
+      @if (canManage) {
+        <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Créer une zone</button>
+      } @else {
+        <a pnlfButton routerLink="/app/lots/nouveau" variant="outline">Déclarer un lot</a>
+      }
+    </pnlf-empty-state>
+  } @else {
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+      <table class="pnlf-table">
+        <thead><tr><th>Code</th><th>Libellé</th><th>Province</th><th>Coordonnées GPS</th><th></th></tr></thead>
+        <tbody>
+          @for (z of items(); track z.id) {
+            <tr class="zone-row" (click)="openDetail(z)">
+              <td data-label="Code">{{ z.code }}</td>
+              <td data-label="Libellé">{{ z.libelle }}</td>
+              <td data-label="Province">{{ z.province_nom }}</td>
+              <td class="pnlf-table__muted" data-label="Coordonnées GPS">
+                @if (z.latitude && z.longitude) {
+                  {{ z.latitude }}, {{ z.longitude }}
+                } @else {
+                  —
+                }
+              </td>
+              <td data-label=""><a class="pnlf-table__link" [routerLink]="['/app/zones-collecte', z.id]" (click)="$event.stopPropagation()">Voir la fiche →</a></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  }
 }
