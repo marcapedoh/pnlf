@@ -109,6 +109,25 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+_DEFAULT_CORS_ORIGINS = [
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+    'https://platformedetracabilite-pnlf.netlify.app',
+    'https://platformedetracabilite-pnfl.netlify.app',
+]
+_ENV_CORS = [
+    o.strip()
+    for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
+    if o.strip()
+]
+# Union env Render + origines Netlify/local (sinon inscription front bloquée).
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_ENV_CORS + _DEFAULT_CORS_ORIGINS))
+CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ['Content-Disposition']
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://.*\.netlify\.app$',
+]
+
 # Sécurité production
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
@@ -121,11 +140,18 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    CSRF_TRUSTED_ORIGINS = [
+    _csrf_env = [
         o.strip()
         for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
         if o.strip()
     ]
+    CSRF_TRUSTED_ORIGINS = list(
+        dict.fromkeys(
+            _csrf_env
+            + [o for o in CORS_ALLOWED_ORIGINS if o.startswith('https://')]
+            + ['https://pfnl.onrender.com']
+        )
+    )
 
 PNLF_PUBLIC_VERIFY_URL = os.getenv('PNLF_PUBLIC_VERIFY_URL', 'http://localhost:8000/api/verify/')
 PNLF_FRONTEND_URL = os.getenv('PNLF_FRONTEND_URL', 'http://localhost:4200')
@@ -190,17 +216,6 @@ SIMPLE_JWT = {
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
 }
-
-CORS_ALLOWED_ORIGINS = [
-    o.strip()
-    for o in os.getenv(
-        'CORS_ALLOWED_ORIGINS',
-        'http://localhost:4200,http://127.0.0.1:4200',
-    ).split(',')
-    if o.strip()
-]
-CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ['Content-Disposition']
 
 # Cookie HttpOnly pour le refresh JWT (SEC-04)
 PNLF_REFRESH_COOKIE = 'pfnl_refresh'
