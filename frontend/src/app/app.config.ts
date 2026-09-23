@@ -45,7 +45,8 @@ export const appConfig: ApplicationConfig = {
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
-      registrationStrategy: 'registerWhenStable:30000',
+      // Vérifie immédiatement une nouvelle version (évite CSS/HTML périmés en prod)
+      registrationStrategy: 'registerImmediately',
     }),
   ],
 };
