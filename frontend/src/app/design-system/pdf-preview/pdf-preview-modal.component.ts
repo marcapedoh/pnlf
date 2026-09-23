@@ -35,6 +35,13 @@ export class PdfPreviewModalComponent {
     this.service.download();
   }
 
+  openInNewTab(): void {
+    const url = this.state().objectUrl;
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
   close(): void {
     this.service.close();
   }

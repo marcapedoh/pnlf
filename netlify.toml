@@ -13,7 +13,12 @@
   to = "/index.html"
   status = 200
 
-# Headers (complète public/_headers)
+# Headers (complète public/_headers) — CSP explicite pour l'aperçu PDF (blob:/object/worker)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://pfnl.onrender.com; frame-src 'self' blob:; object-src 'self' blob:; worker-src 'self' blob:; child-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
 [[headers]]
   for = "/index.html"
   [headers.values]

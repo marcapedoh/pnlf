@@ -55,13 +55,15 @@ export function messageFromDownloadError(error: unknown): string {
   if (error instanceof HttpErrorResponse) {
     if (error.status === 403) return "Vous n'avez pas les droits pour exporter ce document.";
     if (error.status === 401) return 'Session expirée, veuillez vous reconnecter.';
-    if (error.status === 0) return 'Impossible de joindre le serveur. Vérifiez que Django tourne sur le port 8000.';
+    if (error.status === 0) {
+      return 'Impossible de joindre le serveur. Vérifiez votre connexion, puis réessayez.';
+    }
     if (error.status === 406) return 'Le serveur a refusé le type de fichier. Rechargez la page puis réessayez.';
     if (error.status >= 500) return 'Erreur serveur pendant la génération du document.';
   }
   if (error instanceof Error && error.message) {
     if (/failed to fetch/i.test(error.message)) {
-      return 'Impossible de joindre le serveur. Vérifiez que Django tourne sur le port 8000, puis rechargez la page.';
+      return 'Impossible de joindre le serveur. Vérifiez votre connexion, puis réessayez.';
     }
     return error.message;
   }

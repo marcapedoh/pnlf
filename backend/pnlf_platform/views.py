@@ -274,6 +274,9 @@ class ExportLotsTicketView(APIView):
         try:
             pdf, filename = lots_pdf_bytes(qs)
         except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception('Échec génération PDF lots')
             return Response({'detail': 'Impossible de générer le PDF des lots.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
@@ -299,6 +302,9 @@ class ExportJournalTicketView(APIView):
         try:
             response = export_journal(granularite, date_ref, 'pdf', **filtres)
         except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception('Échec génération PDF journal')
             return Response({'detail': 'Impossible de générer le PDF du journal.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
