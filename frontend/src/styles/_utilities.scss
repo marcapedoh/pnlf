@@ -38,18 +38,25 @@
 .pnlf-skip-link {
   position: absolute;
   left: var(--space-4);
-  top: -100px;
+  top: 0;
   z-index: calc(var(--z-toast) + 1);
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
   background: var(--pnlf-green-800);
-  color: var(--white);
+  color: var(--white) !important;
   font-size: var(--fs-sm);
   font-weight: 700;
   text-decoration: none;
+  /* Hors écran jusqu’au focus clavier — évite le lien bleu visible en header */
+  transform: translateY(-120%);
+  opacity: 0;
+  pointer-events: none;
 
-  &:focus {
-    top: var(--space-3);
+  &:focus,
+  &:focus-visible {
+    transform: translateY(var(--space-3));
+    opacity: 1;
+    pointer-events: auto;
     outline: none;
     box-shadow: var(--shadow-focus);
   }

@@ -29,6 +29,15 @@
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
+  color: var(--white);
+  text-decoration: none;
+
+  &:visited,
+  &:hover,
+  &:focus-visible {
+    color: var(--white);
+    text-decoration: none;
+  }
 
   img {
     width: 44px;
@@ -37,6 +46,7 @@
     border-radius: var(--radius-sm);
     background: var(--white);
     padding: 2px;
+    flex-shrink: 0;
   }
 }
 
@@ -51,11 +61,12 @@
   font-family: var(--font-serif);
   font-weight: 700;
   font-size: var(--fs-md);
+  color: var(--white);
 }
 
 .public-header__brand-subtitle {
   font-size: var(--fs-xs);
-  opacity: 0.85;
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .public-header__menu-btn {
