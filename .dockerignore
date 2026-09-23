@@ -1,0 +1,15 @@
+.git
+.github
+frontend
+database
+*.pdf
+*.docx
+*.tmp
+logo*.jpg
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.local
+**/media
+**/staticfiles
+backend/.purge_non_admins_v1.done
