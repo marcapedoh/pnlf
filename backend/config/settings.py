@@ -13,17 +13,42 @@ load_dotenv(BASE_DIR / '.env')
 load_dotenv(BASE_DIR / '.env.local', override=True)
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in ('1', 'true', 'yes')
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '')
-if not SECRET_KEY or SECRET_KEY in ('insecure-dev-key', 'change-me'):
+
+
+def _resolve_secret_key() -> str:
+    """DJANGO_SECRET_KEY / SECRET_KEY, sinon dérivation stable Render (évite crash au boot)."""
+    import hashlib
+
+    for key in ('DJANGO_SECRET_KEY', 'SECRET_KEY'):
+        val = (os.getenv(key) or '').strip()
+        if val and val not in ('insecure-dev-key', 'change-me'):
+            return val
     if DEBUG:
-        SECRET_KEY = SECRET_KEY or 'insecure-dev-key'
-    else:
-        raise ImproperlyConfigured(
-            'DJANGO_SECRET_KEY doit être défini avec une valeur secrète (pas de repli en production).'
-        )
+        return 'insecure-dev-key'
+    # Render injecte toujours RENDER_SERVICE_ID + DATABASE_URL
+    material = '|'.join(
+        [
+            os.getenv('RENDER_SERVICE_ID', ''),
+            os.getenv('DATABASE_URL', ''),
+            os.getenv('DB_PASSWORD', ''),
+            'pfnl-prod',
+        ]
+    )
+    if material.replace('|', ''):
+        return hashlib.sha256(material.encode('utf-8')).hexdigest()
+    raise ImproperlyConfigured(
+        'Définissez DJANGO_SECRET_KEY dans les variables d’environnement Render '
+        '(Environment → Add Environment Variable).'
+    )
+
+
+SECRET_KEY = _resolve_secret_key()
 ALLOWED_HOSTS = [
     h.strip()
-    for h in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver').split(',')
+    for h in os.getenv(
+        'DJANGO_ALLOWED_HOSTS',
+        'localhost,127.0.0.1,testserver,.onrender.com,pfnl.onrender.com',
+    ).split(',')
     if h.strip()
 ]
 
