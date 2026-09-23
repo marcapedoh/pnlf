@@ -1,0 +1,16 @@
+# Blueprint Render — force le bon contexte Docker (évite Failed après restructuration /backend)
+services:
+  - type: web
+    name: pfnl
+    runtime: docker
+    plan: starter
+    region: ohio
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/public/stats/
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: PYTHONUNBUFFERED
+        value: "1"
