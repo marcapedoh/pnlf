@@ -152,6 +152,9 @@ export interface InscriptionPubliquePayload {
   prenoms?: string;
   email: string;
   telephone: string;
+  date_naissance?: string;
+  latitude?: number;
+  longitude?: number;
   password: string;
   password_confirmation: string;
   photo?: File;

@@ -96,6 +96,24 @@ def enregistrer_piece_message(fichier, message_id, piece_type: str) -> str:
     ext = _ext_from_name(getattr(fichier, 'name', ''), '.webm')
     if ext not in AUDIO_EXT:
         ext = '.webm'
+    # En-têtes audio courants (webm/ogg/mp3/wav/mp4)
+    pos = fichier.tell()
+    try:
+        fichier.seek(0)
+        head = fichier.read(12)
+    finally:
+        fichier.seek(pos)
+    audio_ok = (
+        head.startswith(b'\x1a\x45\xdf\xa3')  # EBML / webm
+        or head.startswith(b'OggS')
+        or head.startswith(b'ID3')
+        or head.startswith(b'\xff\xfb')
+        or head.startswith(b'\xff\xf3')
+        or head.startswith(b'RIFF')
+        or head[4:8] == b'ftyp'
+    )
+    if not audio_ok:
+        raise DrfValidationError({'piece': 'Fichier audio invalide ou non reconnu.'})
     filename = f'{message_id}{ext}'
     filepath = dest_dir / filename
     fichier.seek(0)
@@ -108,9 +126,8 @@ def enregistrer_piece_message(fichier, message_id, piece_type: str) -> str:
 def piece_url(rel_path: str | None, request=None) -> str | None:
     if not rel_path:
         return None
-    if request:
-        return request.build_absolute_uri(f'/media/{rel_path}')
-    return f'/media/{rel_path}'
+    from config.media_views import build_media_url
+    return build_media_url(rel_path, request)
 
 
 def nom_utilisateur(user: Utilisateur | None) -> str:
@@ -120,9 +137,8 @@ def nom_utilisateur(user: Utilisateur | None) -> str:
 
 
 def _media_url(rel: str, request=None) -> str:
-    if request:
-        return request.build_absolute_uri(f'/media/{rel}')
-    return f'/media/{rel}'
+    from config.media_views import build_media_url
+    return build_media_url(rel, request) or ''
 
 
 def photo_url_utilisateur(utilisateur_id, request=None) -> str | None:

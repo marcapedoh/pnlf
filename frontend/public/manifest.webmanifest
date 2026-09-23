@@ -1,7 +1,7 @@
 {
-  "name": "PNLF-PFNL — Traçabilité des Produits Forestiers Non Ligneux",
-  "short_name": "PNLF-PFNL",
-  "description": "Plateforme Numérique de Traçabilité des Produits Forestiers Non Ligneux du Gabon — École Nationale des Eaux et Forêts.",
+  "name": "PFNL — Traçabilité des Produits Forestiers Non Ligneux",
+  "short_name": "PFNL",
+  "description": "Plateforme de Traçabilité des Produits Forestiers Non Ligneux du Gabon — École Nationale des Eaux et Forêts.",
   "lang": "fr",
   "display": "standalone",
   "orientation": "portrait-primary",

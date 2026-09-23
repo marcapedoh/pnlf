@@ -5,7 +5,12 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { unwrapList } from '../../../core/models/common.model';
 import { Lot, STATUT_LOT_LABELS } from '../../../core/models/lot.model';
-import { Producteur, STATUT_PRODUCTEUR_LABELS, StatutProducteur } from '../../../core/models/producteur.model';
+import {
+  DocumentInscription,
+  Producteur,
+  STATUT_PRODUCTEUR_LABELS,
+  StatutProducteur,
+} from '../../../core/models/producteur.model';
 import { MessagePublic } from '../../../core/models/public.model';
 import { RoleUtilisateur } from '../../../core/models/user.model';
 import { LotsService } from '../../../core/services/lots.service';
@@ -62,6 +67,17 @@ export class ProducteurDetailComponent {
   readonly dialog = signal<{ kind: 'rejeter' | 'desactiver' } | null>(null);
   readonly dialogLoading = signal(false);
   private readonly pdfPreview = inject(PdfPreviewService);
+
+  /** Documents administratifs attendus lors de l'instruction d'un dossier d'inscription. */
+  readonly typesDocumentsAttendus: {
+    type: DocumentInscription['type_document'];
+    label: string;
+    requis: boolean;
+  }[] = [
+    { type: 'CNI', label: "Pièce d'identité (CNI)", requis: true },
+    { type: 'FICHE_CIRCUIT', label: 'Fiche circuit', requis: false },
+    { type: 'AGREMENT_NAGOYA', label: 'Agrément CITES / Nagoya', requis: false },
+  ];
 
   constructor() {
     this.load();
@@ -158,6 +174,15 @@ export class ProducteurDetailComponent {
 
   initials(p: Producteur): string {
     return `${p.prenoms.charAt(0)}${p.nom.charAt(0)}`.toUpperCase();
+  }
+
+  /** Un champ est considéré manquant s'il est vide/nul — mis en évidence dans la fiche. */
+  estManquant(valeur: unknown): boolean {
+    return valeur === null || valeur === undefined || valeur === '';
+  }
+
+  documentPour(type: DocumentInscription['type_document']): DocumentInscription | null {
+    return this.producteur()?.documents?.find((d) => d.type_document === type) ?? null;
   }
 
   exporterPdf(): void {

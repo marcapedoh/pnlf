@@ -34,7 +34,11 @@ export class ResetPasswordComponent {
   readonly submitted = signal(false);
   readonly done = signal(false);
   readonly errorMessage = signal('');
-  readonly token = this.route.snapshot.queryParamMap.get('token') ?? '';
+  readonly token =
+    this.route.snapshot.queryParamMap.get('token')
+    || (typeof location !== 'undefined' && location.hash.startsWith('#token=')
+      ? decodeURIComponent(location.hash.slice('#token='.length))
+      : '');
 
   readonly form = this.fb.nonNullable.group(
     {

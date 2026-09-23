@@ -1,7 +1,7 @@
 <div class="inscription-page">
   <div class="inscription-page__header">
     <p class="text-eyebrow">République Gabonaise · École Nationale des Eaux et Forêts</p>
-    <h1>Inscription à la plateforme PNLF-PFNL</h1>
+    <h1>Inscription à la plateforme PFNL</h1>
     <p class="inscription-page__lede">
       Rejoignez la filière officielle de traçabilité des Produits Forestiers Non Ligneux. Votre dossier
       sera examiné par un administrateur ; vous recevrez un e-mail et un SMS dès sa validation.
@@ -139,6 +139,15 @@
               [required]="true"
               [errorMessage]="submitted() && form.controls.telephone.invalid ? 'Numéro de téléphone requis.' : ''"
             />
+            @if (isPersonne) {
+              <pnlf-text-field
+                label="Date de naissance"
+                type="date"
+                formControlName="date_naissance"
+                [required]="true"
+                [errorMessage]="submitted() && form.controls.date_naissance.invalid ? 'La date de naissance est requise.' : ''"
+              />
+            }
           </div>
 
           <h3 class="inscription-form__section">Sécurité du compte</h3>
@@ -191,6 +200,28 @@
               <pnlf-text-field label="Adresse de la coopérative" formControlName="adresse" />
             }
           </div>
+
+          @if (isPersonne) {
+            <h3 class="inscription-form__section">Position GPS (optionnelle)</h3>
+            <p class="text-sm text-muted">
+              Facultatif : partagez votre position exacte pour faciliter la localisation de votre zone
+              de collecte sur la carte. Vous pouvez continuer sans cette information.
+            </p>
+            <div class="gps-picker">
+              <button pnlfButton variant="outline" type="button" (click)="obtenirPosition()" [loading]="gpsLoading()">
+                <pnlf-icon name="map-pin" [size]="16" />
+                Utiliser ma position actuelle
+              </button>
+              @if (gpsCaptured()) {
+                <span class="gps-picker__ok">
+                  Position enregistrée ({{ form.controls.latitude.value }}, {{ form.controls.longitude.value }})
+                </span>
+              }
+              @if (gpsError()) {
+                <span class="photo-picker__error">{{ gpsError() }}</span>
+              }
+            </div>
+          }
         }
 
         @if (step() === 3) {

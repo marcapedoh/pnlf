@@ -69,7 +69,13 @@ class UtilisateurAdminSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
+        request = self.context.get('request')
+        actor = getattr(request, 'user', None)
         password = validated_data.pop('password', None)
+        if password and getattr(actor, 'role', None) != Utilisateur.Role.ADMINISTRATEUR:
+            raise serializers.ValidationError({
+                'password': 'Seul un administrateur peut définir le mot de passe d’un compte.',
+            })
         for k, v in validated_data.items():
             setattr(instance, k, v)
         if password:
@@ -105,9 +111,12 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     @classmethod
     def get_token(cls, user):
+        from .token_utils import password_fingerprint
+
         token = RefreshToken.for_user(user)
         token['email'] = user.email
         token['role'] = user.role
+        token['pwd'] = password_fingerprint(user)
         return token
 
     def validate(self, attrs):

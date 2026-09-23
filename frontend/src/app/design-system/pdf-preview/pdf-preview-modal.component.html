@@ -32,7 +32,12 @@
             <button pnlfButton variant="outline" size="sm" type="button" (click)="close()">Fermer</button>
           </div>
         } @else if (safeUrl()) {
-          <iframe [src]="safeUrl()" class="pdf-preview__frame" title="Aperçu PDF"></iframe>
+          <iframe
+            [src]="safeUrl()"
+            class="pdf-preview__frame"
+            title="Aperçu PDF"
+            sandbox="allow-same-origin allow-scripts"
+          ></iframe>
         }
       </div>
     </div>

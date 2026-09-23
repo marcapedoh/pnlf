@@ -1,4 +1,4 @@
-"""Génération de rapports PDF institutionnels PNLF-PFNL."""
+"""Génération de rapports PDF institutionnels PFNL."""
 
 from __future__ import annotations
 
@@ -284,8 +284,8 @@ def _render_pdf(story, *, title: str, footer: str) -> bytes:
         bottomMargin=16 * mm,
         title=title,
         author='École Nationale des Eaux et Forêts',
-        subject='Plateforme PNLF-PFNL — rapport institutionnel',
-        creator='PNLF-PFNL',
+        subject='Plateforme PFNL — rapport institutionnel',
+        creator='PFNL',
     )
 
     def on_page(canvas, document):
@@ -332,7 +332,7 @@ def _build_pdf(story, *, filename: str, title: str, footer: str) -> HttpResponse
 
 def lots_pdf_bytes(queryset) -> tuple[bytes, str]:
     response = export_lots_pdf(queryset)
-    filename = f'PNLF-lots-{timezone.localtime():%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-lots-{timezone.localtime():%Y%m%d-%H%M}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
         filename = disposition.split('filename="', 1)[1].split('"', 1)[0]
@@ -341,7 +341,7 @@ def lots_pdf_bytes(queryset) -> tuple[bytes, str]:
 
 def journal_pdf_bytes(rows: list[dict], libelle: str) -> tuple[bytes, str]:
     response = export_journal_pdf(rows, libelle)
-    filename = f'PNLF-journal-{timezone.localtime():%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-journal-{timezone.localtime():%Y%m%d-%H%M}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
         filename = disposition.split('filename="', 1)[1].split('"', 1)[0]
@@ -354,7 +354,7 @@ def export_lots_pdf(queryset) -> HttpResponse:
     lots = list(queryset.select_related('produit', 'producteur', 'producteur__province')[:800])
 
     story = [
-        _header_table(styles, 'Plateforme numérique de traçabilité des PFNL'),
+        _header_table(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 8),
         Paragraph('Registre des lots de produits forestiers non ligneux', styles['title']),
         _meta_table(styles, [
@@ -394,11 +394,11 @@ def export_lots_pdf(queryset) -> HttpResponse:
         story.append(_data_table(header, rows, widths, styles, center_cols=(0, 4, 5, 6)))
         story.append(Spacer(1, 8))
         story.append(Paragraph(
-            'Les statuts sont exprimés en français. Document généré automatiquement par la plateforme PNLF-PFNL.',
+            'Les statuts sont exprimés en français. Document généré automatiquement par la plateforme PFNL.',
             styles['meta'],
         ))
 
-    filename = f'PNLF-lots-{now:%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-lots-{now:%Y%m%d-%H%M}.pdf'
     return _build_pdf(
         story,
         filename=filename,
@@ -451,8 +451,8 @@ def _render_pdf_portrait(story, *, title: str, footer: str) -> bytes:
         bottomMargin=16 * mm,
         title=title,
         author='École Nationale des Eaux et Forêts',
-        subject='Plateforme PNLF-PFNL — fiche institutionnelle',
-        creator='PNLF-PFNL',
+        subject='Plateforme PFNL — fiche institutionnelle',
+        creator='PFNL',
     )
 
     def on_page(canvas, document):
@@ -514,7 +514,7 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
     ) == 'COLLECTEUR' else 'Producteur'
 
     story: list = [
-        _header_table_portrait(styles, 'Plateforme numérique de traçabilité des PFNL'),
+        _header_table_portrait(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 10),
         Paragraph(f'Fiche {type_acteur.lower()} — {producteur.prenoms} {producteur.nom}', styles['title']),
     ]
@@ -611,7 +611,7 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
         ]
         story.append(_data_table(header, rows, [40 * mm, 35 * mm, 30 * mm, 30 * mm, 30 * mm], styles, center_cols=(2, 3, 4)))
 
-    filename = f'PNLF-fiche-{(producteur.code_producteur or str(producteur.id)[:8])}.pdf'
+    filename = f'PFNL-fiche-{(producteur.code_producteur or str(producteur.id)[:8])}.pdf'
     return _build_pdf_portrait(
         story, filename=filename, title=f'Fiche producteur — {producteur.nom}',
         footer='ENEF · République Gabonaise · Document généré automatiquement',
@@ -625,7 +625,7 @@ def export_producteurs_liste_pdf(queryset) -> HttpResponse:
     items = list(queryset.select_related('province')[:1000])
 
     story = [
-        _header_table(styles, 'Plateforme numérique de traçabilité des PFNL'),
+        _header_table(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 8),
         Paragraph('Registre des producteurs et collecteurs', styles['title']),
         _meta_table(styles, [
@@ -654,7 +654,7 @@ def export_producteurs_liste_pdf(queryset) -> HttpResponse:
         widths = [12 * mm, 32 * mm, 62 * mm, 36 * mm, 46 * mm, 42 * mm]
         story.append(_data_table(header, rows, widths, styles, center_cols=(0,)))
 
-    filename = f'PNLF-producteurs-{now:%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-producteurs-{now:%Y%m%d-%H%M}.pdf'
     return _build_pdf(
         story, filename=filename, title='Registre des producteurs',
         footer='ENEF · République Gabonaise · Confidentiel — ne pas diffuser hors circuit institutionnel',
@@ -680,7 +680,7 @@ def export_cooperative_fiche_pdf(cooperative, request=None) -> HttpResponse:
     ]
 
     story: list = [
-        _header_table_portrait(styles, 'Plateforme numérique de traçabilité des PFNL'),
+        _header_table_portrait(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 10),
         Paragraph(f'Fiche coopérative — {cooperative.nom}', styles['title']),
         Spacer(1, 8),
@@ -709,7 +709,7 @@ def export_cooperative_fiche_pdf(cooperative, request=None) -> HttpResponse:
         ]
         story.append(_data_table(header, rows, [70 * mm, 36 * mm, 38 * mm, 30 * mm], styles, center_cols=(2, 3)))
 
-    filename = f'PNLF-fiche-coop-{(cooperative.code or str(cooperative.id)[:8])}.pdf'
+    filename = f'PFNL-fiche-coop-{(cooperative.code or str(cooperative.id)[:8])}.pdf'
     return _build_pdf_portrait(
         story, filename=filename, title=f'Fiche coopérative — {cooperative.nom}',
         footer='ENEF · République Gabonaise · Document généré automatiquement',
@@ -730,7 +730,7 @@ def export_cooperatives_liste_pdf(queryset) -> HttpResponse:
     )
 
     story = [
-        _header_table(styles, 'Plateforme numérique de traçabilité des PFNL'),
+        _header_table(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 8),
         Paragraph('Registre des coopératives', styles['title']),
         _meta_table(styles, [
@@ -760,7 +760,7 @@ def export_cooperatives_liste_pdf(queryset) -> HttpResponse:
         widths = [10 * mm, 28 * mm, 52 * mm, 32 * mm, 40 * mm, 22 * mm, 42 * mm]
         story.append(_data_table(header, rows, widths, styles, center_cols=(0, 5)))
 
-    filename = f'PNLF-cooperatives-{now:%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-cooperatives-{now:%Y%m%d-%H%M}.pdf'
     return _build_pdf(
         story, filename=filename, title='Registre des coopératives',
         footer='ENEF · République Gabonaise · Confidentiel — ne pas diffuser hors circuit institutionnel',
@@ -773,7 +773,7 @@ def _build_pdf_portrait(story, *, filename: str, title: str, footer: str) -> Htt
 
 def producteur_fiche_pdf_bytes(producteur) -> tuple[bytes, str]:
     response = export_producteur_fiche_pdf(producteur)
-    filename = f'PNLF-fiche-{producteur.code_producteur or str(producteur.id)[:8]}.pdf'
+    filename = f'PFNL-fiche-{producteur.code_producteur or str(producteur.id)[:8]}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
         filename = disposition.split('filename="', 1)[1].split('"', 1)[0]
@@ -782,7 +782,7 @@ def producteur_fiche_pdf_bytes(producteur) -> tuple[bytes, str]:
 
 def producteurs_liste_pdf_bytes(queryset) -> tuple[bytes, str]:
     response = export_producteurs_liste_pdf(queryset)
-    filename = f'PNLF-producteurs-{timezone.localtime():%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-producteurs-{timezone.localtime():%Y%m%d-%H%M}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
         filename = disposition.split('filename="', 1)[1].split('"', 1)[0]
@@ -791,7 +791,7 @@ def producteurs_liste_pdf_bytes(queryset) -> tuple[bytes, str]:
 
 def cooperative_fiche_pdf_bytes(cooperative) -> tuple[bytes, str]:
     response = export_cooperative_fiche_pdf(cooperative)
-    filename = f'PNLF-fiche-coop-{cooperative.code or str(cooperative.id)[:8]}.pdf'
+    filename = f'PFNL-fiche-coop-{cooperative.code or str(cooperative.id)[:8]}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
         filename = disposition.split('filename="', 1)[1].split('"', 1)[0]
@@ -800,7 +800,7 @@ def cooperative_fiche_pdf_bytes(cooperative) -> tuple[bytes, str]:
 
 def cooperatives_liste_pdf_bytes(queryset) -> tuple[bytes, str]:
     response = export_cooperatives_liste_pdf(queryset)
-    filename = f'PNLF-cooperatives-{timezone.localtime():%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-cooperatives-{timezone.localtime():%Y%m%d-%H%M}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
         filename = disposition.split('filename="', 1)[1].split('"', 1)[0]
@@ -813,7 +813,7 @@ def export_journal_pdf(rows: list[dict], libelle: str) -> HttpResponse:
     data_rows = rows[:800]
 
     story = [
-        _header_table(styles, 'Plateforme numérique de traçabilité des PFNL'),
+        _header_table(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 8),
         Paragraph('Journal d’activité de la plateforme', styles['title']),
         _meta_table(styles, [
@@ -849,7 +849,7 @@ def export_journal_pdf(rows: list[dict], libelle: str) -> HttpResponse:
         widths = [36 * mm, 36 * mm, 38 * mm, 58 * mm, 62 * mm, 34 * mm]
         story.append(_data_table(header, body, widths, styles, center_cols=(0, 5)))
 
-    filename = f'PNLF-journal-{now:%Y%m%d-%H%M}.pdf'
+    filename = f'PFNL-journal-{now:%Y%m%d-%H%M}.pdf'
     return _build_pdf(
         story,
         filename=filename,

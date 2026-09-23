@@ -175,7 +175,10 @@ class ProducteurSerializer(serializers.ModelSerializer):
             'AGENT_MINISTERE',
             'AGENT_FORESTIER',
         ):
-            for key in ('type_piece_identite', 'numero_piece', 'date_naissance', 'notes'):
+            for key in (
+                'type_piece_identite', 'numero_piece', 'date_naissance', 'notes',
+                'telephone', 'email',
+            ):
                 data.pop(key, None)
             data['documents'] = []
         else:
@@ -265,10 +268,8 @@ class LotSerializer(serializers.ModelSerializer):
 
     def get_qr_image_url(self, obj):
         if obj.qr_image_path:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(f'/media/{obj.qr_image_path}')
-            return f'/media/{obj.qr_image_path}'
+            from config.media_views import build_media_url
+            return build_media_url(obj.qr_image_path, self.context.get('request'))
         return None
 
     def get_photos_urls(self, obj):
@@ -299,7 +300,10 @@ class CertificationSerializer(serializers.ModelSerializer):
             'numero_certificat', 'statut', 'date_demande', 'date_obtention', 'date_expiration',
             'document_path', 'document_url', 'valide_par_id', 'observations', 'created_at', 'updated_at',
         )
-        read_only_fields = ('created_at', 'updated_at', 'valide_par_id', 'document_path')
+        read_only_fields = (
+            'created_at', 'updated_at', 'valide_par_id', 'document_path',
+            'numero_certificat', 'date_obtention', 'date_expiration', 'statut',
+        )
 
     def get_producteur_nom(self, obj):
         if not obj.producteur_id:

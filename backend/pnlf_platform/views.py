@@ -1,11 +1,5 @@
-import uuid as uuid_lib
-
 from django.db.models import F, OuterRef, Q, Subquery
 from django.utils import timezone
-from django.http import HttpResponse
-from django.views import View
-from django.views.decorators.clickjacking import xframe_options_exempt
-from django.utils.decorators import method_decorator
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -16,7 +10,8 @@ from rest_framework.views import APIView
 
 from accounts.models import Utilisateur
 from accounts.audit import request_meta, write_audit
-from accounts.permissions import CanUseMarketplace, CanViewDashboard, CanSyncTerrain
+from accounts.permissions import CanExportJournal, CanUseMarketplace, CanViewDashboard, CanSyncTerrain
+import uuid as uuid_lib
 from pnlf_platform.models import (
     AppareilSync,
     Conversation,
@@ -194,7 +189,27 @@ class JournalPeriodesView(APIView):
         granularite = (request.query_params.get('granularite') or 'jour').lower()
         if granularite not in ('jour', 'semaine', 'mois'):
             granularite = 'jour'
-        return Response({'granularite': granularite, 'results': journal_periodes(granularite)})
+        return Response({
+            'granularite': granularite,
+            'results': journal_periodes(
+                granularite,
+                date_debut=request.query_params.get('date_debut') or None,
+                date_fin=request.query_params.get('date_fin') or None,
+                q=request.query_params.get('q') or None,
+            ),
+        })
+
+
+def _journal_filtres(request):
+    """Extrait les filtres communs aux endpoints journal (GET query ou POST body)."""
+    src = request.query_params if request.method == 'GET' else request.data
+    return {
+        'utilisateur_id': src.get('utilisateur_id') or None,
+        'action': (src.get('action') or '').strip().upper() or None,
+        'q': (src.get('q') or '').strip() or None,
+        'date_debut': src.get('date_debut') or None,
+        'date_fin': src.get('date_fin') or None,
+    }
 
 
 class JournalDetailView(APIView):
@@ -213,10 +228,14 @@ class JournalDetailView(APIView):
             page_size = min(100, max(1, int(request.query_params.get('page_size') or 25)))
         except (TypeError, ValueError):
             page_size = 25
-        return Response(journal_detail(granularite, date_ref, page=page, page_size=page_size))
+        filtres = _journal_filtres(request)
+        return Response(journal_detail(
+            granularite, date_ref, page=page, page_size=page_size, **filtres,
+        ))
 
 
 class ExportJournalView(ExportFileView):
+    permission_classes = [CanExportJournal]
 
     def get(self, request):
         granularite = (request.query_params.get('granularite') or 'jour').lower()
@@ -224,13 +243,14 @@ class ExportJournalView(ExportFileView):
             granularite = 'jour'
         date_ref = request.query_params.get('date')
         fmt = (request.query_params.get('export_format') or 'csv').lower()
+        filtres = _journal_filtres(request)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='audit_logs',
             ip_adresse=ip, user_agent=ua,
-            nouvelles_valeurs={'format': fmt, 'granularite': granularite, 'date': date_ref},
+            nouvelles_valeurs={'format': fmt, 'granularite': granularite, 'date': date_ref, **filtres},
         )
-        return export_journal(granularite, date_ref, fmt)
+        return export_journal(granularite, date_ref, fmt, **filtres)
 
 
 class ExportLotsTicketView(APIView):
@@ -268,39 +288,37 @@ class ExportLotsTicketView(APIView):
 class ExportJournalTicketView(APIView):
     """Génère le PDF du journal sous JWT et le renvoie directement (voir ExportLotsTicketView)."""
 
-    permission_classes = [CanViewDashboard]
+    permission_classes = [CanExportJournal]
 
     def post(self, request):
         granularite = (request.data.get('granularite') or 'jour').lower()
         if granularite not in ('jour', 'semaine', 'mois'):
             granularite = 'jour'
         date_ref = request.data.get('date')
+        filtres = _journal_filtres(request)
         try:
-            response = export_journal(granularite, date_ref, 'pdf')
+            response = export_journal(granularite, date_ref, 'pdf', **filtres)
         except Exception:
             return Response({'detail': 'Impossible de générer le PDF du journal.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='audit_logs',
             ip_adresse=ip, user_agent=ua,
-            nouvelles_valeurs={'format': 'pdf', 'granularite': granularite, 'date': date_ref},
+            nouvelles_valeurs={'format': 'pdf', 'granularite': granularite, 'date': date_ref, **filtres},
         )
         return response
 
 
-@method_decorator(xframe_options_exempt, name='dispatch')
-class ExportDownloadView(View):
-    """GET sans JWT : le navigateur ouvre le PDF (onglet), pas une iframe."""
+class ExportDownloadView(APIView):
+    """Ancien endpoint ticket sans JWT — désactivé (SEC-12). Utiliser /exports/*/ticket/."""
+
+    permission_classes = [CanViewDashboard]
 
     def get(self, request):
-        from pnlf_platform.export_ticket import ExportTicketError, pdf_attachment, pop_pdf
-
-        ticket = request.GET.get('t') or ''
-        try:
-            pdf, filename = pop_pdf(ticket)
-        except ExportTicketError as exc:
-            return HttpResponse(str(exc), status=410, content_type='text/plain; charset=utf-8')
-        return pdf_attachment(pdf, filename)
+        return Response(
+            {'detail': 'Cet endpoint a été retiré. Utilisez l’export PDF authentifié.'},
+            status=status.HTTP_410_GONE,
+        )
 
 
 class NotificationViewSet(viewsets.ModelViewSet):

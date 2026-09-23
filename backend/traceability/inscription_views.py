@@ -51,6 +51,13 @@ class InscriptionPubliqueSerializer(serializers.Serializer):
     prenoms = serializers.CharField(max_length=150, required=False, allow_blank=True)
     email = serializers.EmailField()
     telephone = serializers.CharField(max_length=30, min_length=6)
+    date_naissance = serializers.DateField(required=False, allow_null=True)
+    latitude = serializers.DecimalField(
+        max_digits=10, decimal_places=7, required=False, allow_null=True,
+    )
+    longitude = serializers.DecimalField(
+        max_digits=10, decimal_places=7, required=False, allow_null=True,
+    )
     password = serializers.CharField(write_only=True, min_length=8)
     password_confirmation = serializers.CharField(write_only=True, min_length=8)
     photo = serializers.FileField(required=False, allow_null=True)
@@ -129,6 +136,11 @@ class InscriptionPubliqueSerializer(serializers.Serializer):
             raise serializers.ValidationError({'prenoms': 'Le prénom est requis.'})
         if type_demande == 'COOPERATIVE' and not attrs.get('nom', '').strip():
             raise serializers.ValidationError({'nom': 'Le nom de la coopérative est requis.'})
+        # La date de naissance est indispensable à l'instruction du dossier (producteur/collecteur) :
+        # elle est obligatoire, contrairement à la géolocalisation (latitude/longitude) qui reste
+        # un complément optionnel à la localisation administrative (province/département/village).
+        if type_demande in ('PRODUCTEUR', 'COLLECTEUR') and not attrs.get('date_naissance'):
+            raise serializers.ValidationError({'date_naissance': 'La date de naissance est requise.'})
         if type_demande != 'ACHETEUR':
             if not attrs.get('photo'):
                 raise serializers.ValidationError({'photo': 'La photo est requise.'})
@@ -188,9 +200,11 @@ class PublicInscriptionView(generics.CreateAPIView):
                     id=entite_id,
                     code_producteur=f'PRD-{entite_id.hex[:8].upper()}',
                     nom=nom, prenoms=prenoms,
+                    date_naissance=data.get('date_naissance'),
                     telephone=data['telephone'], email=data['email'],
                     communaute=data.get('communaute') or None,
                     province=data['province'], departement=data.get('departement'), village=data.get('village'),
+                    latitude=data.get('latitude'), longitude=data.get('longitude'),
                     utilisateur_id=user.id, statut='EN_VALIDATION', notes=notes,
                     sync_statut='SYNCED', sync_version=1,
                     created_at=now, updated_at=now,
@@ -245,7 +259,7 @@ class PublicInscriptionView(generics.CreateAPIView):
                 'dès qu\'elle sera validée.'
             ),
             'email': user.email,
-            'numero_dossier': f'PNLF-{str(dossier_id).replace("-", "")[:10].upper()}',
+            'numero_dossier': f'PFNL-{str(dossier_id).replace("-", "")[:10].upper()}',
         }
         if type_demande != 'ACHETEUR':
             payload['fiche_id'] = str(dossier_id)
@@ -273,19 +287,19 @@ def _enregistrer_documents_administratifs(entite_type, entite_id, sous_dossier, 
 
 
 def _notifier_accuse_reception(user: Utilisateur, type_libelle: str) -> None:
-    sujet = "PNLF-PFNL — Accusé de réception de votre inscription"
+    sujet = "PFNL — Accusé de réception de votre inscription"
     corps = (
         f'Bonjour {user.prenoms} {user.nom},\n\n'
         f"Nous avons bien reçu votre demande d'inscription en tant que {type_libelle} sur la "
-        'plateforme PNLF-PFNL (École Nationale des Eaux et Forêts).\n'
+        'plateforme PFNL (École Nationale des Eaux et Forêts).\n'
         'Un administrateur va examiner votre dossier. Vous recevrez un email et un SMS de '
         'confirmation dès que votre compte sera validé et activé.\n\n'
-        "Cordialement,\nL'équipe PNLF-PFNL"
+        "Cordialement,\nL'équipe PFNL"
     )
     envoyer_email(destinataire_id=user.id, email=user.email, sujet=sujet, corps_texte=corps)
     envoyer_sms(
         destinataire_id=user.id, telephone=user.telephone,
-        message="PNLF-PFNL : votre demande d'inscription a ete recue et est en cours d'examen.",
+        message="PFNL : votre demande d'inscription a ete recue et est en cours d'examen.",
     )
 
 

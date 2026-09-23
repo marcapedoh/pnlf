@@ -10,6 +10,13 @@ export enum TypeActeur {
   COLLECTEUR = 'COLLECTEUR',
 }
 
+export interface DocumentInscription {
+  type_document: 'CNI' | 'FICHE_CIRCUIT' | 'AGREMENT_NAGOYA' | 'AUTRE';
+  nom_original: string | null;
+  url: string | null;
+  created_at: string;
+}
+
 export interface Producteur {
   id: string;
   code_producteur: string;
@@ -36,6 +43,7 @@ export interface Producteur {
   notes: string | null;
   visible_public?: boolean;
   photo_url?: string | null;
+  documents?: DocumentInscription[];
   client_uuid: string | null;
   created_at: string;
   updated_at: string;

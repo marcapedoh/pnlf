@@ -1,4 +1,4 @@
-"""Réponses d'erreur JSON uniformes pour l'API PNLF-PFNL.
+"""Réponses d'erreur JSON uniformes pour l'API PFNL.
 
 Ces vues sont utilisées par Django comme gestionnaires globaux (handler400,
 handler403, handler404, handler500) pour toute requête qui ne serait pas

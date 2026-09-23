@@ -1,4 +1,4 @@
-"""Génère le guide PDF de lancement des serveurs PNLF-PFNL."""
+"""Génère le guide PDF de lancement des serveurs PFNL."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -48,7 +48,7 @@ def header(canvas, doc):
     canvas.rect(0, h - 19 * mm, w, 1.2 * mm, fill=1, stroke=0)
     canvas.setFillColor(colors.white)
     canvas.setFont('Times-Bold', 11)
-    canvas.drawString(16 * mm, h - 11 * mm, 'PNLF-PFNL  ·  École Nationale des Eaux et Forêts')
+    canvas.drawString(16 * mm, h - 11 * mm, 'PFNL  ·  École Nationale des Eaux et Forêts')
     canvas.setFont('Times-Roman', 8)
     canvas.drawRightString(w - 16 * mm, h - 11 * mm, 'Guide opérateur')
     canvas.setFillColor(GREEN_DARK)
@@ -64,7 +64,7 @@ def main() -> None:
     s = styles()
     story = [
         Paragraph('Guide de lancement des serveurs', s['h1']),
-        Paragraph('Plateforme numérique de traçabilité des PFNL — comment tout démarrer, à chaque fois.', s['meta']),
+        Paragraph('Plateforme de traçabilité des PFNL — comment tout démarrer, à chaque fois.', s['meta']),
         Spacer(1, 8),
         Paragraph(
             'L’application a <b>trois pièces</b> : PostgreSQL (les données), Django (l’API, port 8000) '
@@ -155,7 +155,7 @@ def main() -> None:
         rightMargin=16 * mm,
         topMargin=24 * mm,
         bottomMargin=16 * mm,
-        title='Guide de lancement des serveurs PNLF-PFNL',
+        title='Guide de lancement des serveurs PFNL',
         author='École Nationale des Eaux et Forêts',
     )
     doc.build(story, onFirstPage=header, onLaterPages=header)

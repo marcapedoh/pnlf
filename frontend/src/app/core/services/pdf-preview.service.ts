@@ -52,13 +52,24 @@ export class PdfPreviewService {
     this.reset();
     this._state.set({ ...INITIAL_STATE, open: true, loading: true, title, filename });
     this.currentRequest = fetcher().subscribe({
-      next: (blob) => {
+      next: async (blob) => {
         if (!blob || blob.size < 8) {
           this._state.update((s) => ({ ...s, loading: false, error: 'Le document PDF généré est vide.' }));
           return;
         }
+        const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+        const isPdf =
+          head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46; // %PDF
+        if (!isPdf) {
+          this._state.update((s) => ({
+            ...s,
+            loading: false,
+            error: 'La réponse n’est pas un document PDF valide.',
+          }));
+          return;
+        }
         this.currentBlob = blob;
-        const objectUrl = URL.createObjectURL(blob);
+        const objectUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
         this._state.update((s) => ({ ...s, loading: false, objectUrl }));
       },
       error: (err) => {

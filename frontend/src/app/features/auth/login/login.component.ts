@@ -11,6 +11,15 @@ import { AuthLayoutComponent } from '../auth-layout/auth-layout.component';
 
 const REMEMBER_KEY = 'pnlf_remember_email';
 
+/** N'accepte que des chemins relatifs internes (anti open-redirect SEC-10). */
+function safeReturnUrl(raw: string | null): string {
+  const fallback = '/app/tableau-de-bord';
+  if (!raw) return fallback;
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return fallback;
+  if (raw.startsWith('/connexion') || raw.startsWith('/inscription')) return fallback;
+  return raw;
+}
+
 @Component({
   selector: 'app-login',
   imports: [
@@ -81,7 +90,7 @@ export class LoginComponent {
           return;
         }
         const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-        this.router.navigateByUrl(returnUrl || '/app/tableau-de-bord');
+        this.router.navigateByUrl(safeReturnUrl(returnUrl));
       },
       error: (err) => {
         this.loading.set(false);

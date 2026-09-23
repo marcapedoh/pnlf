@@ -48,23 +48,57 @@
   <div class="producteur-detail__grid">
     <pnlf-card title="Informations personnelles">
       <dl class="producteur-detail__dl">
-        <div><dt>Téléphone</dt><dd>{{ p.telephone || '—' }}</dd></div>
-        <div><dt>E-mail</dt><dd>{{ p.email || '—' }}</dd></div>
-        <div><dt>Date de naissance</dt><dd>{{ p.date_naissance || '—' }}</dd></div>
-        <div><dt>Communauté</dt><dd>{{ p.communaute || '—' }}</dd></div>
-        <div><dt>Pièce d'identité</dt><dd>{{ p.type_piece_identite || '—' }} {{ p.numero_piece || '' }}</dd></div>
+        <div><dt>Téléphone</dt><dd [class.is-missing]="estManquant(p.telephone)">{{ p.telephone || 'Non renseigné' }}</dd></div>
+        <div><dt>E-mail</dt><dd [class.is-missing]="estManquant(p.email)">{{ p.email || 'Non renseigné' }}</dd></div>
+        <div><dt>Date de naissance</dt><dd [class.is-missing]="estManquant(p.date_naissance)">{{ (p.date_naissance | date: 'dd/MM/yyyy') || 'Non renseignée' }}</dd></div>
+        <div><dt>Communauté</dt><dd [class.is-missing]="estManquant(p.communaute)">{{ p.communaute || 'Non renseignée' }}</dd></div>
+        <div><dt>Type de pièce d'identité</dt><dd [class.is-missing]="estManquant(p.type_piece_identite)">{{ p.type_piece_identite || 'Non renseigné' }}</dd></div>
+        <div><dt>N° de la pièce</dt><dd [class.is-missing]="estManquant(p.numero_piece)">{{ p.numero_piece || 'Non renseigné' }}</dd></div>
       </dl>
     </pnlf-card>
 
     <pnlf-card title="Localisation">
       <dl class="producteur-detail__dl">
-        <div><dt>Province</dt><dd>{{ p.province_nom }}</dd></div>
-        <div><dt>Coordonnées GPS</dt><dd>{{ p.latitude ?? '—' }}, {{ p.longitude ?? '—' }}</dd></div>
-        <div><dt>Coopérative</dt><dd>{{ p.cooperative || 'Aucune' }}</dd></div>
+        <div><dt>Province</dt><dd [class.is-missing]="estManquant(p.province_nom)">{{ p.province_nom || 'Non renseignée' }}</dd></div>
+        <div><dt>Coordonnées GPS</dt>
+          <dd [class.is-missing]="estManquant(p.latitude) || estManquant(p.longitude)">
+            {{ !estManquant(p.latitude) && !estManquant(p.longitude) ? p.latitude + ', ' + p.longitude : 'Non renseignées (optionnel)' }}
+          </dd>
+        </div>
+        <div><dt>Coopérative</dt><dd [class.is-missing]="estManquant(p.cooperative)">{{ p.cooperative || 'Aucune' }}</dd></div>
         <div><dt>Enregistré le</dt><dd>{{ p.created_at | date: 'dd/MM/yyyy' }}</dd></div>
       </dl>
     </pnlf-card>
   </div>
+
+  <pnlf-card title="Message du demandeur / notes de dossier">
+    @if (estManquant(p.notes)) {
+      <p class="producteur-detail__notes producteur-detail__notes--missing">Aucune note ni message n'a été renseigné par le demandeur.</p>
+    } @else {
+      <p class="producteur-detail__notes">{{ p.notes }}</p>
+    }
+  </pnlf-card>
+
+  <pnlf-card title="Documents administratifs joints" subtitle="Pièces déposées lors de la demande d'inscription">
+    <ul class="producteur-documents">
+      @for (attendu of typesDocumentsAttendus; track attendu.type) {
+        @if (documentPour(attendu.type); as doc) {
+          <li>
+            <span class="producteur-documents__label">{{ attendu.label }}</span>
+            <a [href]="doc.url ?? ''" target="_blank" rel="noopener" class="pnlf-table__link">
+              {{ doc.nom_original || 'Voir le document' }}
+            </a>
+            <span class="text-xs text-muted">{{ doc.created_at | date: 'dd/MM/yyyy' }}</span>
+          </li>
+        } @else {
+          <li class="is-missing">
+            <span class="producteur-documents__label">{{ attendu.label }}</span>
+            <span>{{ attendu.requis ? 'Non fourni (obligatoire)' : 'Non fourni (optionnel)' }}</span>
+          </li>
+        }
+      }
+    </ul>
+  </pnlf-card>
 
   <pnlf-card title="Lots déclarés" subtitle="10 lots les plus récents associés à ce producteur">
     @if (lots().length === 0) {

@@ -1,4 +1,4 @@
-# Backend PNLF-PFNL
+# Backend PFNL
 
 ## Prérequis
 1. Base PostgreSQL `pnlf` + scripts `database/01` à `04`

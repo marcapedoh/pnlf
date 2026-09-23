@@ -16,13 +16,13 @@ export const routes: Routes = [
         path: '',
         pathMatch: 'full',
         loadComponent: () => import('./features/public/home/home-page.component').then((m) => m.HomePageComponent),
-        title: 'PNLF-PFNL | Traçabilité des PFNL du Gabon',
+        title: 'PFNL | Traçabilité des PFNL du Gabon',
       },
       {
         path: 'annuaire',
         loadComponent: () =>
           import('./features/public/annuaire/annuaire-public.component').then((m) => m.AnnuairePublicComponent),
-        title: 'Annuaire des producteurs — PNLF-PFNL',
+        title: 'Annuaire des producteurs — PFNL',
       },
       {
         path: 'annuaire/lot/:id',
@@ -30,7 +30,7 @@ export const routes: Routes = [
           import('./features/public/lot-public/lot-public-detail.component').then(
             (m) => m.LotPublicDetailComponent,
           ),
-        title: 'Fiche du lot — PNLF-PFNL',
+        title: 'Fiche du lot — PFNL',
       },
       {
         path: 'annuaire/:id',
@@ -38,13 +38,13 @@ export const routes: Routes = [
           import('./features/public/producteur-public/producteur-public-detail.component').then(
             (m) => m.ProducteurPublicDetailComponent,
           ),
-        title: 'Fiche producteur — PNLF-PFNL',
+        title: 'Fiche producteur — PFNL',
       },
       {
         path: 'offres-demandes',
         loadComponent: () =>
           import('./features/public/offres/offres-publiques.component').then((m) => m.OffresPubliquesComponent),
-        title: 'Offres & demandes — PNLF-PFNL',
+        title: 'Offres & demandes — PFNL',
       },
       {
         path: 'offres-demandes/:id',
@@ -52,7 +52,7 @@ export const routes: Routes = [
           import('./features/public/offres/offre-publique-detail.component').then(
             (m) => m.OffrePubliqueDetailComponent,
           ),
-        title: "Fiche d'annonce — PNLF-PFNL",
+        title: "Fiche d'annonce — PFNL",
       },
       {
         path: 'inscription',
@@ -61,24 +61,24 @@ export const routes: Routes = [
           import('./features/public/inscription/inscription-publique.component').then(
             (m) => m.InscriptionPubliqueComponent,
           ),
-        title: 'Inscription — PNLF-PFNL',
+        title: 'Inscription — PFNL',
       },
       {
         path: 'verifier',
         loadComponent: () =>
           import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
-        title: 'Vérifier un produit — PNLF-PFNL',
+        title: 'Vérifier un produit — PFNL',
       },
       {
         path: 'verifier/:uuid',
         loadComponent: () =>
           import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
-        title: 'Vérifier un produit — PNLF-PFNL',
+        title: 'Vérifier un produit — PFNL',
       },
       {
         path: 'faq',
         loadComponent: () => import('./features/public/legal/faq/faq.component').then((m) => m.FaqComponent),
-        title: 'Foire aux questions — PNLF-PFNL',
+        title: 'Foire aux questions — PFNL',
       },
       {
         path: 'politique-confidentialite',
@@ -86,7 +86,7 @@ export const routes: Routes = [
           import('./features/public/legal/confidentialite/confidentialite.component').then(
             (m) => m.ConfidentialiteComponent,
           ),
-        title: 'Politique de confidentialité — PNLF-PFNL',
+        title: 'Politique de confidentialité — PFNL',
       },
       {
         path: 'conditions-utilisation',
@@ -94,7 +94,7 @@ export const routes: Routes = [
           import('./features/public/legal/conditions-utilisation/conditions-utilisation.component').then(
             (m) => m.ConditionsUtilisationComponent,
           ),
-        title: "Conditions d'utilisation — PNLF-PFNL",
+        title: "Conditions d'utilisation — PFNL",
       },
       {
         path: 'politique-cookies',
@@ -102,7 +102,7 @@ export const routes: Routes = [
           import('./features/public/legal/cookies/politique-cookies.component').then(
             (m) => m.PolitiqueCookiesComponent,
           ),
-        title: 'Politique de cookies — PNLF-PFNL',
+        title: 'Politique de cookies — PFNL',
       },
     ],
   },
@@ -110,7 +110,7 @@ export const routes: Routes = [
     path: 'connexion',
     canActivate: [guestGuard],
     loadComponent: () => import('./features/auth/login/login.component').then((m) => m.LoginComponent),
-    title: 'Connexion — PNLF-PFNL',
+    title: 'Connexion — PFNL',
   },
   {
     path: 'mot-de-passe-oublie',
@@ -119,7 +119,7 @@ export const routes: Routes = [
       import('./features/auth/forgot-password/forgot-password.component').then(
         (m) => m.ForgotPasswordComponent,
       ),
-    title: 'Mot de passe oublié — PNLF-PFNL',
+    title: 'Mot de passe oublié — PFNL',
   },
   {
     path: 'reinitialiser-mot-de-passe',
@@ -128,7 +128,7 @@ export const routes: Routes = [
       import('./features/auth/reset-password/reset-password.component').then(
         (m) => m.ResetPasswordComponent,
       ),
-    title: 'Réinitialiser le mot de passe — PNLF-PFNL',
+    title: 'Réinitialiser le mot de passe — PFNL',
   },
   {
     path: 'changer-mot-de-passe',
@@ -137,7 +137,7 @@ export const routes: Routes = [
       import('./features/auth/change-password/change-password.component').then(
         (m) => m.ChangePasswordComponent,
       ),
-    title: 'Changer le mot de passe — PNLF-PFNL',
+    title: 'Changer le mot de passe — PFNL',
   },
   {
     path: 'app',
@@ -148,14 +148,14 @@ export const routes: Routes = [
       {
         path: 'tableau-de-bord',
         loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
-        title: 'Tableau de bord — PNLF-PFNL',
+        title: 'Tableau de bord — PFNL',
       },
       {
         path: 'a-traiter',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () =>
           import('./features/validation/a-traiter.component').then((m) => m.ATraiterComponent),
-        title: 'À traiter — PNLF-PFNL',
+        title: 'À traiter — PFNL',
       },
       {
         path: 'producteurs',
@@ -169,7 +169,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteurs-list/producteurs-list.component').then(
                 (m) => m.ProducteursListComponent,
               ),
-            title: 'Producteurs & collecteurs — PNLF-PFNL',
+            title: 'Producteurs & collecteurs — PFNL',
           },
           {
             path: 'nouveau',
@@ -180,7 +180,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteur-form/producteur-form.component').then(
                 (m) => m.ProducteurFormComponent,
               ),
-            title: 'Nouvelle fiche producteur — PNLF-PFNL',
+            title: 'Nouvelle fiche producteur — PFNL',
           },
           {
             path: ':id',
@@ -188,7 +188,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteur-detail/producteur-detail.component').then(
                 (m) => m.ProducteurDetailComponent,
               ),
-            title: 'Fiche producteur — PNLF-PFNL',
+            title: 'Fiche producteur — PFNL',
           },
           {
             path: ':id/modifier',
@@ -196,7 +196,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteur-form/producteur-form.component').then(
                 (m) => m.ProducteurFormComponent,
               ),
-            title: 'Modifier la fiche producteur — PNLF-PFNL',
+            title: 'Modifier la fiche producteur — PFNL',
           },
         ],
       },
@@ -216,7 +216,7 @@ export const routes: Routes = [
           {
             path: '',
             loadComponent: () => import('./features/lots/lots-list/lots-list.component').then((m) => m.LotsListComponent),
-            title: 'Lots de produits — PNLF-PFNL',
+            title: 'Lots de produits — PFNL',
           },
           {
             path: 'nouveau',
@@ -224,13 +224,13 @@ export const routes: Routes = [
               roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.PRODUCTEUR, R.COOPERATIVE),
             ],
             loadComponent: () => import('./features/lots/lot-form/lot-form.component').then((m) => m.LotFormComponent),
-            title: 'Déclarer un lot — PNLF-PFNL',
+            title: 'Déclarer un lot — PFNL',
           },
           {
             path: ':id',
             loadComponent: () =>
               import('./features/lots/lot-detail/lot-detail.component').then((m) => m.LotDetailComponent),
-            title: 'Détail du lot — PNLF-PFNL',
+            title: 'Détail du lot — PFNL',
           },
         ],
       },
@@ -252,7 +252,7 @@ export const routes: Routes = [
               import('./features/zones-collecte/zones-collecte-list.component').then(
                 (m) => m.ZonesCollecteListComponent,
               ),
-            title: 'Zones de collecte — PNLF-PFNL',
+            title: 'Zones de collecte — PFNL',
           },
           {
             path: ':id',
@@ -260,7 +260,7 @@ export const routes: Routes = [
               import('./features/zones-collecte/zone-collecte-detail/zone-collecte-detail.component').then(
                 (m) => m.ZoneCollecteDetailComponent,
               ),
-            title: 'Détail de la zone — PNLF-PFNL',
+            title: 'Détail de la zone — PFNL',
           },
         ],
       },
@@ -279,7 +279,7 @@ export const routes: Routes = [
           import('./features/certifications/certifications-list.component').then(
             (m) => m.CertificationsListComponent,
           ),
-        title: 'Certifications — PNLF-PFNL',
+        title: 'Certifications — PFNL',
       },
       {
         path: 'cooperatives',
@@ -289,7 +289,7 @@ export const routes: Routes = [
             path: '',
             loadComponent: () =>
               import('./features/cooperatives/cooperatives-list.component').then((m) => m.CooperativesListComponent),
-            title: 'Coopératives — PNLF-PFNL',
+            title: 'Coopératives — PFNL',
           },
           {
             path: ':id',
@@ -297,7 +297,7 @@ export const routes: Routes = [
               import('./features/cooperatives/cooperative-detail/cooperative-detail.component').then(
                 (m) => m.CooperativeDetailComponent,
               ),
-            title: 'Détail de la coopérative — PNLF-PFNL',
+            title: 'Détail de la coopérative — PFNL',
           },
         ],
       },
@@ -305,7 +305,7 @@ export const routes: Routes = [
         path: 'marketplace/annuaire',
         loadComponent: () =>
           import('./features/marketplace/annuaire/annuaire.component').then((m) => m.AnnuaireComponent),
-        title: 'Annuaire de la filière — PNLF-PFNL',
+        title: 'Annuaire de la filière — PFNL',
       },
       {
         path: 'messagerie',
@@ -321,7 +321,7 @@ export const routes: Routes = [
         ],
         loadComponent: () =>
           import('./features/messagerie/messagerie.component').then((m) => m.MessagerieComponent),
-        title: 'Messagerie — PNLF-PFNL',
+        title: 'Messagerie — PFNL',
       },
       {
         path: 'marketplace/offres',
@@ -340,7 +340,7 @@ export const routes: Routes = [
             path: '',
             loadComponent: () =>
               import('./features/marketplace/offres/offres-list.component').then((m) => m.OffresListComponent),
-            title: 'Offres & demandes — PNLF-PFNL',
+            title: 'Offres & demandes — PFNL',
           },
           {
             path: ':id',
@@ -348,7 +348,7 @@ export const routes: Routes = [
               import('./features/marketplace/offres/offre-detail/offre-detail.component').then(
                 (m) => m.OffreDetailComponent,
               ),
-            title: "Détail de l'annonce — PNLF-PFNL",
+            title: "Détail de l'annonce — PFNL",
           },
         ],
       },
@@ -360,7 +360,7 @@ export const routes: Routes = [
             path: '',
             loadComponent: () =>
               import('./features/utilisateurs/utilisateurs-list.component').then((m) => m.UtilisateursListComponent),
-            title: 'Comptes utilisateurs — PNLF-PFNL',
+            title: 'Comptes utilisateurs — PFNL',
           },
           {
             path: ':id',
@@ -368,7 +368,7 @@ export const routes: Routes = [
               import('./features/utilisateurs/utilisateur-detail/utilisateur-detail.component').then(
                 (m) => m.UtilisateurDetailComponent,
               ),
-            title: 'Fiche utilisateur — PNLF-PFNL',
+            title: 'Fiche utilisateur — PFNL',
           },
         ],
       },
@@ -376,14 +376,14 @@ export const routes: Routes = [
         path: 'rapports',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () => import('./features/rapports/rapports.component').then((m) => m.RapportsComponent),
-        title: 'Rapports & exports — PNLF-PFNL',
+        title: 'Rapports & exports — PFNL',
       },
       {
         path: 'synchronisation',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () =>
           import('./features/synchronisation/synchronisation.component').then((m) => m.SynchronisationComponent),
-        title: 'Synchronisation terrain — PNLF-PFNL',
+        title: 'Synchronisation terrain — PFNL',
       },
       {
         path: 'notifications',
@@ -391,18 +391,18 @@ export const routes: Routes = [
           import('./features/notifications/notifications-page.component').then(
             (m) => m.NotificationsPageComponent,
           ),
-        title: 'Notifications — PNLF-PFNL',
+        title: 'Notifications — PFNL',
       },
       {
         path: 'parametres',
         loadComponent: () => import('./features/parametres/parametres.component').then((m) => m.ParametresComponent),
-        title: 'Mon profil — PNLF-PFNL',
+        title: 'Mon profil — PFNL',
       },
       {
         path: 'acces-refuse',
         loadComponent: () =>
           import('./features/errors/access-denied/access-denied.component').then((m) => m.AccessDeniedComponent),
-        title: 'Accès refusé — PNLF-PFNL',
+        title: 'Accès refusé — PFNL',
       },
     ],
   },
@@ -410,7 +410,7 @@ export const routes: Routes = [
     path: 'erreur-400',
     loadComponent: () =>
       import('./features/errors/bad-request/bad-request.component').then((m) => m.BadRequestComponent),
-    title: 'Requête invalide — PNLF-PFNL',
+    title: 'Requête invalide — PFNL',
   },
-  { path: '**', loadComponent: () => import('./features/errors/not-found/not-found.component').then((m) => m.NotFoundComponent), title: 'Page introuvable — PNLF-PFNL' },
+  { path: '**', loadComponent: () => import('./features/errors/not-found/not-found.component').then((m) => m.NotFoundComponent), title: 'Page introuvable — PFNL' },
 ];

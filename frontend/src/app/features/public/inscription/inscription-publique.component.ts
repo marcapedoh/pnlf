@@ -74,6 +74,11 @@ export class InscriptionPubliqueComponent {
   readonly step = signal(1);
   readonly loginQuery: Record<string, string> = {};
 
+  readonly gpsLoading = signal(false);
+  readonly gpsError = signal('');
+  readonly gpsCaptured = signal(false);
+  readonly today = new Date().toISOString().slice(0, 10);
+
   readonly form = this.fb.nonNullable.group(
     {
       type_demande: this.fb.nonNullable.control<TypeDemandeInscription>('PRODUCTEUR', Validators.required),
@@ -81,12 +86,15 @@ export class InscriptionPubliqueComponent {
       prenoms: [''],
       email: ['', [Validators.required, Validators.email]],
       telephone: ['', [Validators.required, Validators.minLength(6)]],
+      date_naissance: [''],
       password: ['', [Validators.required, Validators.minLength(8)]],
       password_confirmation: ['', Validators.required],
       province: [''],
       departement: [''],
       village: [''],
       communaute: [''],
+      latitude: [''],
+      longitude: [''],
       adresse: [''],
       numero_agrement: [''],
       message: [''],
@@ -138,6 +146,12 @@ export class InscriptionPubliqueComponent {
     return this.form.controls.type_demande.value === 'ACHETEUR';
   }
 
+  /** Producteur/collecteur : seuls ces profils portent une fiche avec date de naissance et GPS. */
+  get isPersonne(): boolean {
+    const t = this.form.controls.type_demande.value;
+    return t === 'PRODUCTEUR' || t === 'COLLECTEUR';
+  }
+
   selectType(type: TypeDemandeInscription): void {
     this.form.patchValue({ type_demande: type });
     const province = this.form.controls.province;
@@ -147,6 +161,14 @@ export class InscriptionPubliqueComponent {
       province.setValidators(Validators.required);
     }
     province.updateValueAndValidity({ emitEvent: false });
+
+    const dateNaissance = this.form.controls.date_naissance;
+    if (type === 'PRODUCTEUR' || type === 'COLLECTEUR') {
+      dateNaissance.setValidators(Validators.required);
+    } else {
+      dateNaissance.clearValidators();
+    }
+    dateNaissance.updateValueAndValidity({ emitEvent: false });
   }
 
   nextStep(): void {
@@ -163,7 +185,8 @@ export class InscriptionPubliqueComponent {
         this.form.controls.telephone.valid &&
         this.form.controls.password.valid &&
         !this.form.errors?.['mismatch'] &&
-        (this.isCooperative || !!this.form.controls.prenoms.value);
+        (this.isCooperative || !!this.form.controls.prenoms.value) &&
+        (!this.isPersonne || this.form.controls.date_naissance.valid);
       if (
         !identityOk ||
         (!this.isAcheteur && (!this.photoFile || !this.documentCniFile))
@@ -192,6 +215,35 @@ export class InscriptionPubliqueComponent {
   prevStep(): void {
     this.errorMessage.set('');
     this.step.update((s) => Math.max(1, s - 1));
+  }
+
+  obtenirPosition(): void {
+    this.gpsError.set('');
+    if (!('geolocation' in navigator)) {
+      this.gpsError.set("La géolocalisation n'est pas disponible sur cet appareil.");
+      return;
+    }
+    this.gpsLoading.set(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        this.form.patchValue({
+          latitude: position.coords.latitude.toFixed(7),
+          longitude: position.coords.longitude.toFixed(7),
+        });
+        this.gpsCaptured.set(true);
+        this.gpsLoading.set(false);
+      },
+      (error) => {
+        this.gpsLoading.set(false);
+        this.gpsCaptured.set(false);
+        this.gpsError.set(
+          error.code === error.PERMISSION_DENIED
+            ? 'Localisation refusée. Vous pouvez continuer sans cette information.'
+            : 'Impossible de récupérer votre position pour le moment.',
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   }
 
   onPhotoSelected(event: Event): void {
@@ -298,6 +350,9 @@ export class InscriptionPubliqueComponent {
         prenoms: raw.prenoms || undefined,
         email: raw.email,
         telephone: raw.telephone,
+        date_naissance: raw.date_naissance || undefined,
+        latitude: raw.latitude ? Number(raw.latitude) : undefined,
+        longitude: raw.longitude ? Number(raw.longitude) : undefined,
         password: raw.password,
         password_confirmation: raw.password_confirmation,
         photo: this.photoFile || undefined,

@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, signal } from '@angular/core';
-import { Observable, catchError, map, of, tap } from 'rxjs';
+import { Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { LoginRequest, LoginResponse, RefreshResponse } from '../models/auth.model';
@@ -32,34 +32,32 @@ export class AuthService {
 
   login(payload: LoginRequest): Observable<LoginResponse> {
     return this.http
-      .post<LoginResponse>(`${environment.apiUrl}/auth/login/`, payload)
+      .post<LoginResponse>(`${environment.apiUrl}/auth/login/`, payload, { withCredentials: true })
       .pipe(
         tap((res) => {
-          this.tokens.setTokens(res.access, res.refresh);
+          this.tokens.setTokens(res.access);
           this._currentUser.set(res.user);
         }),
       );
   }
 
   logout(): void {
+    this.http.post(`${environment.apiUrl}/auth/logout/`, {}, { withCredentials: true }).subscribe({
+      error: () => undefined,
+    });
     this.tokens.clear();
     this._currentUser.set(null);
   }
 
   refresh(): Observable<string> {
-    const refreshToken = this.tokens.getRefreshToken();
-    if (!refreshToken) {
-      return of('');
-    }
     return this.http
-      .post<RefreshResponse>(`${environment.apiUrl}/auth/refresh/`, {
-        refresh: refreshToken,
-      })
+      .post<RefreshResponse>(`${environment.apiUrl}/auth/refresh/`, {}, { withCredentials: true })
       .pipe(
         tap((res) => this.tokens.setTokens(res.access)),
         map((res) => res.access),
         catchError(() => {
-          this.logout();
+          this.tokens.clear();
+          this._currentUser.set(null);
           return of('');
         }),
       );
@@ -69,22 +67,35 @@ export class AuthService {
     return this.http.get<Utilisateur>(`${environment.apiUrl}/accounts/me/`).pipe(
       tap((user) => this._currentUser.set(user)),
       catchError(() => {
-        this.logout();
+        this.tokens.clear();
+        this._currentUser.set(null);
         return of(null);
       }),
     );
   }
 
-  /** Réhydrate la session au démarrage de l'application (rechargement de page). */
+  /** Réhydrate la session au démarrage (access en sessionStorage ou refresh cookie). */
   bootstrap(): Observable<boolean> {
-    if (!this.tokens.getAccessToken()) {
-      this._bootstrapped.set(true);
-      return of(false);
+    if (this.tokens.getAccessToken()) {
+      return this.fetchMe().pipe(
+        map((user) => {
+          this._bootstrapped.set(true);
+          return !!user;
+        }),
+      );
     }
-    return this.fetchMe().pipe(
-      map((user) => {
-        this._bootstrapped.set(true);
-        return !!user;
+    return this.refresh().pipe(
+      switchMap((access) => {
+        if (!access) {
+          this._bootstrapped.set(true);
+          return of(false);
+        }
+        return this.fetchMe().pipe(
+          map((user) => {
+            this._bootstrapped.set(true);
+            return !!user;
+          }),
+        );
       }),
     );
   }

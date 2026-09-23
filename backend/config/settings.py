@@ -1,4 +1,4 @@
-"""Configuration Django — PNLF-PFNL."""
+"""Configuration Django — PFNL."""
 
 from datetime import timedelta
 from pathlib import Path
@@ -12,7 +12,7 @@ load_dotenv(BASE_DIR / '.env')
 # En local, .env.local (PostgreSQL 127.0.0.1) prime sur .env (ex. Render)
 load_dotenv(BASE_DIR / '.env.local', override=True)
 
-DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
+DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in ('1', 'true', 'yes')
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '')
 if not SECRET_KEY or SECRET_KEY in ('insecure-dev-key', 'change-me'):
     if DEBUG:
@@ -109,13 +109,23 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Sécurité production (P3)
+# Sécurité production
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     X_FRAME_OPTIONS = 'DENY'
+    SECURE_SSL_REDIRECT = os.getenv('DJANGO_SECURE_SSL_REDIRECT', 'True').lower() in ('1', 'true', 'yes')
+    SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_SECURE_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    CSRF_TRUSTED_ORIGINS = [
+        o.strip()
+        for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+        if o.strip()
+    ]
 
 PNLF_PUBLIC_VERIFY_URL = os.getenv('PNLF_PUBLIC_VERIFY_URL', 'http://localhost:8000/api/verify/')
 PNLF_FRONTEND_URL = os.getenv('PNLF_FRONTEND_URL', 'http://localhost:4200')
@@ -128,7 +138,7 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
 EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('1', 'true', 'yes')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'PNLF-PFNL <no-reply@pnlf.ga>')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'PFNL <no-reply@pnlf.ga>')
 EMAIL_TIMEOUT = 10
 
 # --- Envoi de SMS (Twilio) -----------------------------------------------------
@@ -172,7 +182,8 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    # Rotation sans blacklist incompatible avec utilisateur métier UUID (pas AUTH_USER_MODEL)
+    # Pas de token_blacklist : AUTH_USER_MODEL n'est pas Utilisateur (UUID métier).
+    # Révocation via empreinte mot de passe (claim pwd) + cookie HttpOnly.
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
     'AUTH_HEADER_TYPES': ('Bearer',),
@@ -188,4 +199,11 @@ CORS_ALLOWED_ORIGINS = [
     ).split(',')
     if o.strip()
 ]
+CORS_ALLOW_CREDENTIALS = True
 CORS_EXPOSE_HEADERS = ['Content-Disposition']
+
+# Cookie HttpOnly pour le refresh JWT (SEC-04)
+PNLF_REFRESH_COOKIE = 'pfnl_refresh'
+PNLF_REFRESH_COOKIE_PATH = '/api/auth/'
+PNLF_REFRESH_COOKIE_SAMESITE = os.getenv('PNLF_REFRESH_COOKIE_SAMESITE', 'Lax' if DEBUG else 'None')
+PNLF_REFRESH_COOKIE_SECURE = not DEBUG

@@ -30,6 +30,15 @@
     <button type="button" class="journal-tab" [class.is-active]="granularite() === 'mois'" (click)="setGranularite('mois')">Par mois</button>
   </div>
 
+  <div class="journal-period-search">
+    <pnlf-text-field
+      label="Rechercher une période"
+      type="date"
+      [(ngModel)]="periodeDate"
+    />
+    <button pnlfButton variant="primary" type="button" (click)="allerAPeriode()">Afficher</button>
+  </div>
+
   @if (loadingPeriodes()) {
     <p class="text-sm text-muted">Chargement de l'historique…</p>
   } @else if (periodes().length === 0) {
@@ -46,18 +55,36 @@
   }
 </pnlf-card>
 
-@if (selected(); as p) {
-  <pnlf-card [title]="'Détail — ' + selectedLibelle()" subtitle="Export possible en CSV, Excel et PDF">
+@if (selected()) {
+  <pnlf-card [title]="'Détail — ' + selectedLibelle()" subtitle="Tous les événements de la période · filtrez en tapant un nom">
+    <div class="journal-user-bar">
+      <div class="journal-user-search">
+        <pnlf-text-field
+          label="Rechercher un utilisateur"
+          [(ngModel)]="userSearch"
+          (ngModelChange)="onUserSearch($event)"
+          placeholder="Nom, prénom ou e-mail…"
+        />
+      </div>
+      @if (userSearch.trim()) {
+        <div class="journal-user-bar__actions">
+          <button pnlfButton variant="ghost" type="button" (click)="clearUtilisateur()">Effacer</button>
+        </div>
+      }
+    </div>
+
     <div class="rapports-actions" style="margin-bottom: 1rem;">
-      <button pnlfButton variant="outline" [loading]="downloading() === 'journal-csv'" (click)="downloadJournal('csv')">CSV</button>
-      <button pnlfButton variant="outline" [loading]="downloading() === 'journal-xlsx'" (click)="downloadJournal('xlsx')">Excel (XLSX)</button>
-      <button pnlfButton variant="primary" (click)="downloadJournal('pdf')">PDF (aperçu)</button>
+      @if (canExportJournal()) {
+        <button pnlfButton variant="outline" [loading]="downloading() === 'journal-csv'" (click)="downloadJournal('csv')">CSV</button>
+        <button pnlfButton variant="outline" [loading]="downloading() === 'journal-xlsx'" (click)="downloadJournal('xlsx')">Excel (XLSX)</button>
+        <button pnlfButton variant="primary" (click)="downloadJournal('pdf')">Imprimer / PDF</button>
+      }
     </div>
 
     @if (loadingEvents()) {
       <p class="text-sm text-muted">Chargement…</p>
     } @else if (events().length === 0) {
-      <pnlf-empty-state icon="clock" title="Aucun événement sur cette période" />
+      <pnlf-empty-state icon="clock" title="Aucun événement" description="Aucun résultat pour cette recherche." />
     } @else {
       <div class="pnlf-table-wrapper">
         <table class="pnlf-table">

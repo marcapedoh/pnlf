@@ -14,7 +14,14 @@ import { AuthService } from '../auth/auth.service';
 import { TokenStorageService } from '../auth/token-storage.service';
 import { SKIP_AUTH_REDIRECT } from './http-context-tokens';
 
-const PUBLIC_PATHS = ['/auth/login/', '/auth/refresh/', '/verify/'];
+const PUBLIC_PATHS = [
+  '/auth/login/',
+  '/auth/refresh/',
+  '/verify/',
+  '/public/',
+  '/accounts/password-reset',
+  '/inscription',
+];
 
 let isRefreshing = false;
 const refreshedToken$ = new BehaviorSubject<string | null>(null);

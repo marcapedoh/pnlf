@@ -7,7 +7,12 @@ import {
   isDevMode,
   inject,
 } from '@angular/core';
-import { provideRouter, withComponentInputBinding, withViewTransitions } from '@angular/router';
+import {
+  provideRouter,
+  withComponentInputBinding,
+  withInMemoryScrolling,
+  withViewTransitions,
+} from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { firstValueFrom } from 'rxjs';
 
@@ -24,7 +29,15 @@ export const appConfig: ApplicationConfig = {
   providers: [
     { provide: LOCALE_ID, useValue: 'fr-FR' },
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes, withComponentInputBinding(), withViewTransitions()),
+    provideRouter(
+      routes,
+      withComponentInputBinding(),
+      withViewTransitions(),
+      // Permet aux liens de sommaire (ex. pages légales, href="#section") de faire défiler
+      // vers l'ancre ciblée au lieu de déclencher une navigation complète vers l'accueil —
+      // voir RouterLink + [fragment] dans confidentialite/conditions-utilisation.
+      withInMemoryScrolling({ anchorScrolling: 'enabled', scrollPositionRestoration: 'enabled' }),
+    ),
     provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor, errorInterceptor])),
     provideAppInitializer(() => {
       const auth = inject(AuthService);

@@ -15,6 +15,7 @@ from accounts.audit import request_meta, write_audit
 from accounts.messaging import envoyer_email, envoyer_sms
 from accounts.models import Utilisateur
 from accounts.permissions import (
+    CanImportZones,
     CanManageCertifications,
     CanManageCooperatives,
     CanManageLots,
@@ -93,19 +94,19 @@ def _activer_compte_lie(utilisateur_id, *, type_libelle: str) -> None:
     user.save(update_fields=['statut', 'updated_at'])
 
     lien = f'{settings.PNLF_FRONTEND_URL}/connexion'
-    sujet = 'PNLF-PFNL — Votre inscription a été validée'
+    sujet = 'PFNL — Votre inscription a été validée'
     corps = (
         f'Bonjour {user.prenoms} {user.nom},\n\n'
-        f'Votre inscription en tant que {type_libelle} sur la plateforme PNLF-PFNL a été validée '
+        f'Votre inscription en tant que {type_libelle} sur la plateforme PFNL a été validée '
         'par un administrateur.\n'
         'Vous pouvez désormais vous connecter avec votre adresse email et le mot de passe choisi '
         f'lors de votre inscription :\n{lien}\n\n'
-        "Cordialement,\nL'équipe PNLF-PFNL — École Nationale des Eaux et Forêts"
+        "Cordialement,\nL'équipe PFNL — École Nationale des Eaux et Forêts"
     )
     envoyer_email(destinataire_id=user.id, email=user.email, sujet=sujet, corps_texte=corps)
     envoyer_sms(
         destinataire_id=user.id, telephone=user.telephone,
-        message=f'PNLF-PFNL : votre inscription a ete validee. Connectez-vous sur {lien}',
+        message=f'PFNL : votre inscription a ete validee. Connectez-vous sur {lien}',
     )
 
 
@@ -121,19 +122,19 @@ def _rejeter_compte_lie(utilisateur_id, *, type_libelle: str, motif: str) -> Non
         return
 
     motif_txt = motif or 'les informations fournies ne permettent pas de valider votre dossier.'
-    sujet = "PNLF-PFNL — Votre demande d'inscription n'a pas été retenue"
+    sujet = "PFNL — Votre demande d'inscription n'a pas été retenue"
     corps = (
         f'Bonjour {user.prenoms} {user.nom},\n\n'
-        f"Votre demande d'inscription en tant que {type_libelle} sur la plateforme PNLF-PFNL "
+        f"Votre demande d'inscription en tant que {type_libelle} sur la plateforme PFNL "
         "n'a pas pu être validée.\n"
         f'Motif : {motif_txt}\n\n'
         'Vous pouvez soumettre une nouvelle demande en corrigeant les éléments concernés.\n\n'
-        "Cordialement,\nL'équipe PNLF-PFNL"
+        "Cordialement,\nL'équipe PFNL"
     )
     envoyer_email(destinataire_id=user.id, email=user.email, sujet=sujet, corps_texte=corps)
     envoyer_sms(
         destinataire_id=user.id, telephone=user.telephone,
-        message=f"PNLF-PFNL : votre demande d'inscription n'a pas ete retenue. Motif : {motif_txt[:100]}",
+        message=f"PFNL : votre demande d'inscription n'a pas ete retenue. Motif : {motif_txt[:100]}",
     )
 
     # Suppression définitive (et non un simple soft-delete) : le compte n'a jamais été
@@ -547,7 +548,7 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
             enregistrement_id=zone.id, ip_adresse=ip, user_agent=ua,
         )
 
-    @action(detail=False, methods=['post'], url_path='import')
+    @action(detail=False, methods=['post'], url_path='import', permission_classes=[CanImportZones])
     def import_fichier(self, request):
         """Import en masse de zones de collecte depuis un fichier CSV ou XLSX.
 
@@ -555,6 +556,7 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
         ``code``, ``libelle``, ``province`` (code ou nom de la province),
         ``description`` (optionnel), ``latitude`` (optionnel), ``longitude`` (optionnel).
         Une ligne existante (même ``code``) est mise à jour plutôt que dupliquée.
+        Réservé aux administrateurs et agents (SEC-06).
         """
         fichier = request.FILES.get('fichier')
         if not fichier:
@@ -682,6 +684,11 @@ class ProducteurViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Vous ne pouvez modifier que votre propre fiche.')
         if user.role == Utilisateur.Role.ACHETEUR:
             raise PermissionDenied('Lecture seule.')
+        # SEC-15 : un producteur ne peut pas s'auto-rattacher à une coopérative.
+        if user.role == Utilisateur.Role.PRODUCTEUR and 'cooperative' in serializer.validated_data:
+            raise PermissionDenied(
+                'Le rattachement à une coopérative se fait via le workflow d’adhésion.'
+            )
         obj = serializer.save(updated_at=timezone.now())
         ip, ua = request_meta(self.request)
         write_audit(
@@ -898,6 +905,15 @@ class LotViewSet(viewsets.ModelViewSet):
         if user.role == Utilisateur.Role.PRODUCTEUR:
             if not producteur or producteur.utilisateur_id != user.id:
                 raise PermissionDenied('Lot autorisé uniquement pour votre profil.')
+        elif user.role == Utilisateur.Role.COOPERATIVE:
+            if not producteur:
+                raise PermissionDenied('Indiquez le producteur membre concerné.')
+            from .models import Cooperative
+            coop_ids = set(
+                Cooperative.objects.filter(utilisateur_id=user.id).values_list('id', flat=True)
+            )
+            if producteur.cooperative_id not in coop_ids:
+                raise PermissionDenied('Ce producteur n’appartient pas à votre coopérative.')
         extra = {}
         if not serializer.validated_data.get('cooperative') and producteur and producteur.cooperative_id:
             extra['cooperative_id'] = producteur.cooperative_id
@@ -935,6 +951,14 @@ class LotViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         if self.request.user.role == Utilisateur.Role.ACHETEUR:
             raise PermissionDenied('Lecture seule.')
+        # Interdit de réaffecter producteur / coopérative après création (SEC-05).
+        instance = serializer.instance
+        for field in ('producteur', 'cooperative'):
+            if field in serializer.validated_data and serializer.validated_data[field] != getattr(instance, field):
+                raise PermissionDenied(
+                    f'Le champ « {field} » ne peut pas être modifié après la création du lot.'
+                )
+            serializer.validated_data.pop(field, None)
         serializer.save(updated_at=timezone.now())
 
     def perform_destroy(self, instance):

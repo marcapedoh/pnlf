@@ -549,7 +549,7 @@ def run():
 
 
 if __name__ == '__main__':
-    print('PARCOURS ROLES & CAS D’USAGE — PNLF-PFNL')
+    print('PARCOURS ROLES & CAS D’USAGE — PFNL')
     print('=' * 64)
     try:
         with override_settings(

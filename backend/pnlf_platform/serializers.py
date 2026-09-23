@@ -75,13 +75,12 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
 
     def get_qr_image_url(self, obj):
         from traceability.db_utils import get_optional_column
+        from config.media_views import build_media_url
 
         path = get_optional_column('offres_demandes', 'qr_image_path', obj.id)
         if not path:
             return None
-        request = self.context.get('request')
-        media = f'/media/{path}'
-        return request.build_absolute_uri(media) if request else media
+        return build_media_url(path, self.context.get('request'))
 
     def get_uuid_public(self, obj):
         from traceability.db_utils import get_optional_column

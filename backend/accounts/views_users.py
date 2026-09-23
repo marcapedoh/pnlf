@@ -29,7 +29,16 @@ class PasswordResetThrottle(AnonRateThrottle):
 
 def _lien_reinitialisation(token: str) -> str:
     base = (getattr(settings, 'PNLF_FRONTEND_URL', None) or 'http://localhost:4200').rstrip('/')
-    return f'{base}/reinitialiser-mot-de-passe?token={token}'
+    # Fragment plutôt que query : évite fuite via Referer / logs proxy.
+    return f'{base}/reinitialiser-mot-de-passe#token={token}'
+
+
+def _interdit_mutation_admin(acteur, cible: Utilisateur) -> None:
+    """Seul un administrateur peut modifier un compte administrateur."""
+    if cible.role == Utilisateur.Role.ADMINISTRATEUR and getattr(acteur, 'role', None) != Utilisateur.Role.ADMINISTRATEUR:
+        raise PermissionDenied(
+            'Seul un administrateur peut modifier un compte administrateur.'
+        )
 
 
 class MeView(generics.RetrieveAPIView):
@@ -60,6 +69,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
+        _interdit_mutation_admin(self.request.user, serializer.instance)
         user = serializer.save()
         ip, ua = request_meta(self.request)
         write_audit(
@@ -68,6 +78,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
+        _interdit_mutation_admin(self.request.user, instance)
         if instance.role == Utilisateur.Role.ADMINISTRATEUR:
             raise PermissionDenied('Impossible de supprimer un administrateur.')
         instance.deleted_at = timezone.now()
@@ -78,6 +89,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def activer(self, request, pk=None):
         u = self.get_object()
+        _interdit_mutation_admin(request.user, u)
         if u.statut == Utilisateur.Statut.EN_ATTENTE:
             from traceability.views import _activer_compte_lie
             libelles = {
@@ -96,6 +108,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def suspendre(self, request, pk=None):
         u = self.get_object()
+        _interdit_mutation_admin(request.user, u)
         u.statut = Utilisateur.Statut.SUSPENDU
         u.updated_at = timezone.now()
         u.save(update_fields=['statut', 'updated_at'])
@@ -107,6 +120,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
         from traceability.services import enregistrer_photo
 
         user = self.get_object()
+        _interdit_mutation_admin(request.user, user)
         fichier = request.FILES.get('photo')
         if not fichier:
             raise ValidationError({'photo': 'Aucune image reçue.'})
@@ -122,6 +136,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='envoyer-reinitialisation')
     def envoyer_reinitialisation(self, request, pk=None):
         user = self.get_object()
+        _interdit_mutation_admin(request.user, user)
         import hashlib
         import secrets
         token = secrets.token_urlsafe(32)
@@ -134,7 +149,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
         lien = _lien_reinitialisation(token)
         envoyer_email(
             destinataire_id=user.id, email=user.email,
-            sujet='PNLF-PFNL — Réinitialisation de mot de passe',
+            sujet='PFNL — Réinitialisation de mot de passe',
             corps_texte=(
                 f'Bonjour {user.prenoms} {user.nom},\n\n'
                 'Un administrateur a demandé la réinitialisation de votre mot de passe. '
@@ -193,7 +208,7 @@ class PasswordResetRequestView(APIView):
         lien = _lien_reinitialisation(token)
         envoyer_email(
             destinataire_id=user.id, email=user.email,
-            sujet='PNLF-PFNL — Réinitialisation de mot de passe',
+            sujet='PFNL — Réinitialisation de mot de passe',
             corps_texte=(
                 f'Bonjour {user.prenoms} {user.nom},\n\n'
                 'Une demande de réinitialisation de mot de passe a été faite pour votre compte. '

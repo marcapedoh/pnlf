@@ -1,26 +1,22 @@
 from django.contrib import admin
-from django.conf import settings
-from django.conf.urls.static import static
 from django.urls import include, path
-from rest_framework_simplejwt.views import TokenRefreshView
 
-from accounts.views import PnlfTokenObtainPairView
+from accounts.views import LogoutView, PnlfTokenObtainPairView, PnlfTokenRefreshView
+from config.media_views import AuthenticatedMediaView, PublicMediaView, SecureMediaView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/login/', PnlfTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/refresh/', PnlfTokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/logout/', LogoutView.as_view(), name='token_logout'),
     path('api/accounts/', include('accounts.urls')),
     path('api/', include('traceability.urls')),
     path('api/', include('pnlf_platform.urls')),
+    path('api/media/public/<path:relpath>', PublicMediaView.as_view(), name='media-public'),
+    path('api/media/secure/<str:token>/', SecureMediaView.as_view(), name='media-secure'),
+    path('api/media/auth/<path:relpath>', AuthenticatedMediaView.as_view(), name='media-auth'),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
-# Réponses JSON uniformes en production (DEBUG=False) pour les requêtes non
-# prises en charge par un ViewSet DRF (URL inconnue, hôte invalide, erreur
-# non interceptée). Voir config/error_views.py.
 handler400 = 'config.error_views.bad_request'
 handler403 = 'config.error_views.permission_denied'
 handler404 = 'config.error_views.not_found'

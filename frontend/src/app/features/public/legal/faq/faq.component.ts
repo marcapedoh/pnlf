@@ -29,9 +29,9 @@ export class FaqComponent {
       titre: 'À propos de la plateforme',
       items: [
         {
-          question: "Qu'est-ce que la plateforme PNLF-PFNL ?",
+          question: "Qu'est-ce que la plateforme PFNL ?",
           reponse:
-            "PNLF-PFNL est la plateforme officielle de traçabilité des Produits Forestiers Non Ligneux (PFNL) du Gabon, portée par l'École Nationale des Eaux et Forêts (ENEF). Elle permet de suivre un produit de sa récolte jusqu'à sa commercialisation, de mettre en relation producteurs et acheteurs, et de vérifier l'authenticité d'un produit via un QR code.",
+            "PFNL est la plateforme officielle de traçabilité des Produits Forestiers Non Ligneux (PFNL) du Gabon, portée par l'École Nationale des Eaux et Forêts (ENEF). Elle permet de suivre un produit de sa récolte jusqu'à sa commercialisation, de mettre en relation producteurs et acheteurs, et de vérifier l'authenticité d'un produit via un QR code.",
         },
         {
           question: "L'utilisation de la plateforme est-elle gratuite ?",

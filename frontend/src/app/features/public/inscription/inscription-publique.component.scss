@@ -228,6 +228,20 @@
   margin-bottom: var(--space-2);
 }
 
+.gps-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.gps-picker__ok {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--color-success);
+}
+
 .document-picker-row {
   display: flex;
   flex-wrap: wrap;

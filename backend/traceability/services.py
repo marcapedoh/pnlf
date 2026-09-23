@@ -112,13 +112,33 @@ def photo_url(sous_dossier: str, entite_id, request=None, suffixe: str = '') -> 
     if not chemin_photo(sous_dossier, entite_id, suffixe).exists():
         return None
     rel = f'photos/{sous_dossier}/{entite_id}{suffixe}.jpg'
-    if request:
-        return request.build_absolute_uri(f'/media/{rel}')
-    return f'/media/{rel}'
+    from config.media_views import build_media_url
+    return build_media_url(rel, request)
 
 
 DOCUMENT_MAX_SIZE_BYTES = 8 * 1024 * 1024
 DOCUMENT_ALLOWED_EXT = {'.pdf', '.jpg', '.jpeg', '.png'}
+DOCUMENT_MAGIC = {
+    '.pdf': (b'%PDF',),
+    '.jpg': (b'\xff\xd8\xff',),
+    '.jpeg': (b'\xff\xd8\xff',),
+    '.png': (b'\x89PNG\r\n\x1a\n',),
+}
+
+
+def _valider_magic_document(fichier, ext: str) -> None:
+    """Vérifie les magic bytes ; refuse les polyglottes basiques."""
+    expected = DOCUMENT_MAGIC.get(ext)
+    if not expected:
+        raise ValidationError({'document': 'Formats acceptés : PDF, JPG, PNG.'})
+    pos = fichier.tell()
+    try:
+        fichier.seek(0)
+        head = fichier.read(16)
+    finally:
+        fichier.seek(pos)
+    if not any(head.startswith(sig) for sig in expected):
+        raise ValidationError({'document': 'Contenu du fichier incohérent avec l’extension déclarée.'})
 
 
 def enregistrer_document(fichier, sous_dossier: str, entite_id) -> str:
@@ -133,6 +153,7 @@ def enregistrer_document(fichier, sous_dossier: str, entite_id) -> str:
     ext = Path(fichier.name or '').suffix.lower()
     if ext not in DOCUMENT_ALLOWED_EXT:
         raise ValidationError({'document': 'Formats acceptés : PDF, JPG, PNG.'})
+    _valider_magic_document(fichier, ext)
     doc_dir = Path(settings.MEDIA_ROOT) / 'documents' / sous_dossier
     doc_dir.mkdir(parents=True, exist_ok=True)
     # Supprime toute variante d'extension précédente pour éviter les doublons.
@@ -149,15 +170,11 @@ def enregistrer_document(fichier, sous_dossier: str, entite_id) -> str:
 
 
 def document_url(document_path: str | None, request=None) -> str | None:
-    """Résout l'URL absolue d'un document déjà enregistré (chemin relatif media)."""
+    """Résout l'URL d'un document déjà enregistré (chemin relatif media)."""
     if not document_path:
         return None
-    if document_path.startswith('http://') or document_path.startswith('https://'):
-        return document_path
-    rel = document_path.lstrip('/')
-    if request:
-        return request.build_absolute_uri(f'/media/{rel}')
-    return f'/media/{rel}'
+    from config.media_views import build_media_url
+    return build_media_url(document_path, request)
 
 
 def photos_urls_lot(lot_id, request=None) -> list[str]:

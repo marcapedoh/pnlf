@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from django.db import connection
 from django.http import HttpResponse
@@ -109,7 +109,7 @@ def export_lots_xlsx(queryset) -> HttpResponse:
 
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Lots PNLF'
+    ws.title = 'Lots PFNL'
     ws.append(['code_lot', 'uuid_public', 'produit', 'producteur', 'date_collecte', 'quantite', 'unite', 'statut'])
     for lot in queryset.select_related('produit', 'producteur'):
         ws.append([
@@ -166,43 +166,89 @@ def _periode_bornes(granularite: str, date_ref):
     return debut, fin, libelle
 
 
-def _audit_rows(*, debut, fin, limit=2000, offset=0):
+def _audit_rows(*, debut, fin, limit=2000, offset=0, utilisateur_id=None, action=None, q=None):
+    """Liste paginée des événements d'audit, avec filtres optionnels (utilisateur, action, texte libre)."""
+    where = ['a.created_at >= %s', 'a.created_at < %s']
+    params: list = [debut, fin]
+    if utilisateur_id:
+        where.append('a.utilisateur_id = %s')
+        params.append(utilisateur_id)
+    if action:
+        where.append('a.action = %s')
+        params.append(action)
+    if q:
+        like = f'%{q.strip()}%'
+        where.append(
+            '(a.action ILIKE %s OR COALESCE(a.table_cible, \'\') ILIKE %s '
+            'OR COALESCE(u.nom, \'\') ILIKE %s OR COALESCE(u.prenoms, \'\') ILIKE %s '
+            'OR COALESCE(u.email::text, \'\') ILIKE %s)'
+        )
+        params.extend([like, like, like, like, like])
+    where_sql = ' AND '.join(where)
+
     with connection.cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT a.id, a.created_at, a.action, a.table_cible, a.enregistrement_id,
-                   a.ip_adresse::text, u.nom, u.prenoms, u.email
+                   a.ip_adresse::text, u.nom, u.prenoms, u.email, a.utilisateur_id
             FROM audit_logs a
             LEFT JOIN utilisateurs u ON u.id = a.utilisateur_id
-            WHERE a.created_at >= %s AND a.created_at < %s
+            WHERE {where_sql}
             ORDER BY a.created_at DESC
             LIMIT %s OFFSET %s
             """,
-            [debut, fin, limit, offset],
+            [*params, limit, offset],
         )
-        cols = ['id', 'created_at', 'action', 'table_cible', 'enregistrement_id', 'ip_adresse', 'nom', 'prenoms', 'email']
+        cols = [
+            'id', 'created_at', 'action', 'table_cible', 'enregistrement_id',
+            'ip_adresse', 'nom', 'prenoms', 'email', 'utilisateur_id',
+        ]
         rows = []
         for raw in cur.fetchall():
             item = dict(zip(cols, raw))
             nom = item.pop('nom')
             prenoms = item.pop('prenoms')
             email = item.pop('email')
+            uid = item.pop('utilisateur_id')
             item['utilisateur'] = f'{prenoms or ""} {nom or ""}'.strip() or email or 'Système'
+            item['utilisateur_id'] = str(uid) if uid else None
             if item['created_at']:
                 item['created_at'] = timezone.localtime(item['created_at']).isoformat()
             if item['enregistrement_id']:
                 item['enregistrement_id'] = str(item['enregistrement_id'])
             rows.append(item)
         cur.execute(
-            'SELECT COUNT(*) FROM audit_logs WHERE created_at >= %s AND created_at < %s',
-            [debut, fin],
+            f"""
+            SELECT COUNT(*)
+            FROM audit_logs a
+            LEFT JOIN utilisateurs u ON u.id = a.utilisateur_id
+            WHERE {where_sql}
+            """,
+            params,
         )
         total = cur.fetchone()[0]
     return rows, total
 
 
-def journal_periodes(granularite: str) -> list[dict]:
+def journal_periodes(granularite: str, *, date_debut=None, date_fin=None, q=None) -> list[dict]:
+    """Périodes disponibles ; filtres optionnels par plage de dates ou recherche textuelle sur le libellé."""
+    from django.utils.dateparse import parse_date
+
     trunc = {'jour': 'day', 'semaine': 'week', 'mois': 'month'}.get(granularite, 'day')
+    where = ['TRUE']
+    params: list = [trunc]
+    if date_debut:
+        d = parse_date(date_debut) if isinstance(date_debut, str) else date_debut
+        if d:
+            where.append("(created_at AT TIME ZONE 'Africa/Libreville')::date >= %s")
+            params.append(d)
+    if date_fin:
+        d = parse_date(date_fin) if isinstance(date_fin, str) else date_fin
+        if d:
+            where.append("(created_at AT TIME ZONE 'Africa/Libreville')::date <= %s")
+            params.append(d)
+    where_sql = ' AND '.join(where)
+
     with connection.cursor() as cur:
         cur.execute(
             f"""
@@ -210,45 +256,106 @@ def journal_periodes(granularite: str) -> list[dict]:
                    COUNT(*) AS nb_evenements,
                    COUNT(DISTINCT utilisateur_id) AS nb_utilisateurs
             FROM audit_logs
+            WHERE {where_sql}
             GROUP BY 1
             ORDER BY 1 DESC
-            LIMIT 36
+            LIMIT 120
             """,
-            [trunc],
+            params,
         )
         out = []
+        q_norm = (q or '').strip().lower()
         for periode, nb, nb_users in cur.fetchall():
             debut, fin, libelle = _periode_bornes(granularite, periode)
+            if q_norm and q_norm not in libelle.lower() and q_norm not in debut.isoformat():
+                continue
             out.append({
                 'date': debut.isoformat(),
                 'libelle': libelle,
                 'nb_evenements': nb,
                 'nb_utilisateurs': nb_users,
             })
-    return out
+    return out[:36]
 
 
-def journal_detail(granularite: str, date_ref, *, page=1, page_size=25):
-    debut, fin, libelle = _periode_bornes(granularite, date_ref)
+def _resolve_journal_bornes(granularite, date_ref, date_debut=None, date_fin=None):
+    """Résout la plage [debut, fin) et le libellé : plage libre ou granularité classique."""
+    from django.utils.dateparse import parse_date
+
+    if date_debut or date_fin:
+        d0 = parse_date(date_debut) if isinstance(date_debut, str) else date_debut
+        d1 = parse_date(date_fin) if isinstance(date_fin, str) else date_fin
+        if d0 is None and d1 is None:
+            return _periode_bornes(granularite, date_ref)
+        if d0 is None:
+            d0 = d1
+        if d1 is None:
+            d1 = d0
+        if d1 < d0:
+            d0, d1 = d1, d0
+        # fin exclusive = lendemain de la date de fin inclusive
+        fin = d1 + timedelta(days=1)
+        if d0 == d1:
+            libelle = f'{d0:%d/%m/%Y}'
+        else:
+            libelle = f'Du {d0:%d/%m/%Y} au {d1:%d/%m/%Y}'
+        return d0, fin, libelle
+    return _periode_bornes(granularite, date_ref)
+
+
+def journal_detail(
+    granularite: str,
+    date_ref,
+    *,
+    page=1,
+    page_size=25,
+    utilisateur_id=None,
+    action=None,
+    q=None,
+    date_debut=None,
+    date_fin=None,
+):
+    debut, fin, libelle = _resolve_journal_bornes(granularite, date_ref, date_debut, date_fin)
     debut_dt = timezone.make_aware(datetime.combine(debut, datetime.min.time()))
     fin_dt = timezone.make_aware(datetime.combine(fin, datetime.min.time()))
     offset = (page - 1) * page_size
-    rows, total = _audit_rows(debut=debut_dt, fin=fin_dt, limit=page_size, offset=offset)
+    rows, total = _audit_rows(
+        debut=debut_dt, fin=fin_dt, limit=page_size, offset=offset,
+        utilisateur_id=utilisateur_id, action=action, q=q,
+    )
     return {
         'granularite': granularite,
         'date': debut.isoformat(),
+        'date_fin': (fin - timedelta(days=1)).isoformat(),
         'libelle': libelle,
         'count': total,
         'results': rows,
+        'filtres': {
+            'utilisateur_id': str(utilisateur_id) if utilisateur_id else None,
+            'action': action or None,
+            'q': q or None,
+        },
     }
 
 
-def export_journal(granularite: str, date_ref, fmt: str) -> HttpResponse:
-    debut, fin, libelle = _periode_bornes(granularite, date_ref)
+def export_journal(
+    granularite: str,
+    date_ref,
+    fmt: str,
+    *,
+    utilisateur_id=None,
+    action=None,
+    q=None,
+    date_debut=None,
+    date_fin=None,
+) -> HttpResponse:
+    debut, fin, libelle = _resolve_journal_bornes(granularite, date_ref, date_debut, date_fin)
     debut_dt = timezone.make_aware(datetime.combine(debut, datetime.min.time()))
     fin_dt = timezone.make_aware(datetime.combine(fin, datetime.min.time()))
-    rows, _total = _audit_rows(debut=debut_dt, fin=fin_dt, limit=5000, offset=0)
-    slug = f'journal_{granularite}_{debut.isoformat()}'
+    rows, _total = _audit_rows(
+        debut=debut_dt, fin=fin_dt, limit=5000, offset=0,
+        utilisateur_id=utilisateur_id, action=action, q=q,
+    )
     headers = ['Date/heure', 'Action', 'Table', 'Enregistrement', 'Utilisateur', 'IP']
 
     def _line(r):

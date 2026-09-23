@@ -176,7 +176,7 @@ def scope_mouvements_qs(qs, user):
 
 
 class CanManageUsers(RolePermission):
-    """CRUD utilisateurs — admin + agent ministère."""
+    """CRUD utilisateurs — admin + agent ministère (mutations sur ADMIN réservées aux admins)."""
     read_roles = {Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE}
     write_roles = {Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE}
 
@@ -222,6 +222,8 @@ class CanManageCooperatives(RolePermission):
 
 class CanManageZones(RolePermission):
     read_roles = CanReadGeo.read_roles
+    # Création unitaire possible pour producteur/coop (formulaire lot) ;
+    # l'import massif est réservé aux agents (voir ZoneViewSet.import_fichier).
     write_roles = {
         Utilisateur.Role.ADMINISTRATEUR,
         Utilisateur.Role.AGENT_MINISTERE,
@@ -229,6 +231,19 @@ class CanManageZones(RolePermission):
         Utilisateur.Role.PRODUCTEUR,
         Utilisateur.Role.COOPERATIVE,
     }
+
+
+class CanImportZones(BasePermission):
+    """Import CSV/XLSX du référentiel national — agents uniquement."""
+
+    def has_permission(self, request, view):
+        if not getattr(request.user, 'is_authenticated', False):
+            return False
+        return request.user.role in (
+            Utilisateur.Role.ADMINISTRATEUR,
+            Utilisateur.Role.AGENT_MINISTERE,
+            Utilisateur.Role.AGENT_FORESTIER,
+        )
 
 
 class CanManageCertifications(RolePermission):
@@ -281,6 +296,18 @@ class CanViewDashboard(BasePermission):
             Utilisateur.Role.ADMINISTRATEUR,
             Utilisateur.Role.AGENT_MINISTERE,
             Utilisateur.Role.AGENT_FORESTIER,
+        )
+
+
+class CanExportJournal(BasePermission):
+    """Export CSV/PDF du journal d'audit — admin et ministère uniquement (SEC-15)."""
+
+    def has_permission(self, request, view):
+        if not getattr(request.user, 'is_authenticated', False):
+            return False
+        return request.user.role in (
+            Utilisateur.Role.ADMINISTRATEUR,
+            Utilisateur.Role.AGENT_MINISTERE,
         )
 
 

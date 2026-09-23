@@ -24,14 +24,25 @@ export interface JournalEvent {
   enregistrement_id: string | null;
   ip_adresse: string | null;
   utilisateur: string;
+  utilisateur_id?: string | null;
+}
+
+export interface JournalFiltres {
+  utilisateur_id?: string;
+  action?: string;
+  q?: string;
+  date_debut?: string;
+  date_fin?: string;
 }
 
 export interface JournalDetail {
   granularite: JournalGranularite;
   date: string;
+  date_fin?: string;
   libelle: string;
   count: number;
   results: JournalEvent[];
+  filtres?: JournalFiltres;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -46,21 +57,51 @@ export class DashboardService {
     return `${environment.apiUrl}/exports/lots/?export_format=${format}`;
   }
 
-  journalPeriodes(granularite: JournalGranularite): Observable<{ granularite: string; results: JournalPeriode[] }> {
+  journalPeriodes(
+    granularite: JournalGranularite,
+    filtres: Pick<JournalFiltres, 'date_debut' | 'date_fin' | 'q'> = {},
+  ): Observable<{ granularite: string; results: JournalPeriode[] }> {
+    const params: Record<string, string> = { granularite };
+    if (filtres.date_debut) params['date_debut'] = filtres.date_debut;
+    if (filtres.date_fin) params['date_fin'] = filtres.date_fin;
+    if (filtres.q) params['q'] = filtres.q;
     return this.http.get<{ granularite: string; results: JournalPeriode[] }>(
       `${environment.apiUrl}/rapports/journal/`,
-      { params: { granularite } },
+      { params },
     );
   }
 
-  journalDetail(granularite: JournalGranularite, date: string, page = 1, pageSize = 25): Observable<JournalDetail> {
-    return this.http.get<JournalDetail>(`${environment.apiUrl}/rapports/journal/detail/`, {
-      params: { granularite, date, page: String(page), page_size: String(pageSize) },
-    });
+  journalDetail(
+    granularite: JournalGranularite,
+    date: string | null,
+    page = 1,
+    pageSize = 25,
+    filtres: JournalFiltres = {},
+  ): Observable<JournalDetail> {
+    const params: Record<string, string> = {
+      granularite,
+      page: String(page),
+      page_size: String(pageSize),
+    };
+    if (date) params['date'] = date;
+    this._appendFiltres(params, filtres);
+    return this.http.get<JournalDetail>(`${environment.apiUrl}/rapports/journal/detail/`, { params });
   }
 
-  journalExportUrl(granularite: JournalGranularite, date: string, format: ExportFormat): string {
-    return `${environment.apiUrl}/exports/journal/?granularite=${granularite}&date=${date}&export_format=${format}`;
+  journalExportUrl(
+    granularite: JournalGranularite,
+    date: string | null,
+    format: ExportFormat,
+    filtres: JournalFiltres = {},
+  ): string {
+    const params = new URLSearchParams({ granularite, export_format: format });
+    if (date) params.set('date', date);
+    if (filtres.utilisateur_id) params.set('utilisateur_id', filtres.utilisateur_id);
+    if (filtres.action) params.set('action', filtres.action);
+    if (filtres.q) params.set('q', filtres.q);
+    if (filtres.date_debut) params.set('date_debut', filtres.date_debut);
+    if (filtres.date_fin) params.set('date_fin', filtres.date_fin);
+    return `${environment.apiUrl}/exports/journal/?${params.toString()}`;
   }
 
   /** Récupère le PDF des lots en Blob authentifié (pour aperçu via PdfPreviewService). */
@@ -73,16 +114,35 @@ export class DashboardService {
   }
 
   /** Récupère le PDF du journal en Blob authentifié (pour aperçu via PdfPreviewService). */
-  journalPdfBlob(granularite: JournalGranularite, date: string): Observable<Blob> {
+  journalPdfBlob(
+    granularite: JournalGranularite,
+    date: string | null,
+    filtres: JournalFiltres = {},
+  ): Observable<Blob> {
+    const body: Record<string, string> = { granularite };
+    if (date) body['date'] = date;
+    if (filtres.utilisateur_id) body['utilisateur_id'] = filtres.utilisateur_id;
+    if (filtres.action) body['action'] = filtres.action;
+    if (filtres.q) body['q'] = filtres.q;
+    if (filtres.date_debut) body['date_debut'] = filtres.date_debut;
+    if (filtres.date_fin) body['date_fin'] = filtres.date_fin;
     return this.http.post(
       `${environment.apiUrl}/exports/journal/ticket/`,
-      { granularite, date },
+      body,
       { responseType: 'blob', headers: AJAX_EXPORT_HEADERS },
     );
   }
 
   aTraiter(): Observable<InboxValidation> {
     return this.http.get<InboxValidation>(`${environment.apiUrl}/dashboard/a-traiter/`);
+  }
+
+  private _appendFiltres(params: Record<string, string>, filtres: JournalFiltres): void {
+    if (filtres.utilisateur_id) params['utilisateur_id'] = filtres.utilisateur_id;
+    if (filtres.action) params['action'] = filtres.action;
+    if (filtres.q) params['q'] = filtres.q;
+    if (filtres.date_debut) params['date_debut'] = filtres.date_debut;
+    if (filtres.date_fin) params['date_fin'] = filtres.date_fin;
   }
 }
 
