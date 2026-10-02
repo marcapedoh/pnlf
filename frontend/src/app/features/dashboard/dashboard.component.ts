@@ -3,6 +3,8 @@ import { RouterLink } from '@angular/router';
 import { NgApexchartsModule, ApexOptions } from 'ng-apexcharts';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { displayName } from '../../core/auth/display-name.util';
+import { PnlfQuantitePipe } from '../../shared/pipes/format.pipes';
 import { unwrapCount, unwrapList } from '../../core/models/common.model';
 import { DashboardStats } from '../../core/models/dashboard.model';
 import { Lot, STATUT_LOT_LABELS, StatutLot } from '../../core/models/lot.model';
@@ -33,6 +35,7 @@ const CHART_PALETTE = ['#146b3f', '#e4b91a', '#3260a3', '#6bc48a', '#a4650a', '#
     EmptyStateComponent,
     ButtonComponent,
     StatusBadgeComponent,
+    PnlfQuantitePipe,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -89,6 +92,8 @@ export class DashboardComponent {
       [...byStatus.keys()].map((s) => this.statutLotLabels[s as StatutLot] ?? s),
       [...byStatus.values()],
       'Lots',
+      false,
+      { categories: 'Statut du lot', valeurs: 'Nombre de lots' },
     );
   });
 
@@ -100,7 +105,17 @@ export class DashboardComponent {
       byProvince.set(key, (byProvince.get(key) ?? 0) + (row.nombre ?? 0));
     }
     const entries = [...byProvince.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-    return this.barOptions(entries.map(([k]) => k), entries.map(([, v]) => v), 'Producteurs', true);
+    return this.barOptions(entries.map(([k]) => k), entries.map(([, v]) => v), 'Producteurs', true, {
+      categories: 'Province',
+      valeurs: 'Nombre de producteurs',
+    });
+  });
+
+  readonly salutation = computed(() => {
+    const u = this.user();
+    if (!u) return 'Bonjour';
+    if (u.role === RoleUtilisateur.COOPERATIVE || !u.prenoms?.trim()) return `Bonjour, ${displayName(u)}`;
+    return `Bonjour, ${u.prenoms.trim()}`;
   });
 
   readonly showOnboarding = computed(() => this.isProducteur && this.lotsTotal() === 0);
@@ -155,11 +170,26 @@ export class DashboardComponent {
     }
   }
 
-  private barOptions(labels: string[], series: number[], name: string, horizontal = false): ApexOptions {
+  private barOptions(
+    labels: string[],
+    series: number[],
+    name: string,
+    horizontal: boolean,
+    titres: { categories: string; valeurs: string },
+  ): ApexOptions {
+    const titreStyle = { fontSize: '12px', fontWeight: 600, color: '#5b6670' };
+    // En barres horizontales, ApexCharts place les catégories sur l'axe vertical.
+    const titreX = horizontal ? titres.valeurs : titres.categories;
+    const titreY = horizontal ? titres.categories : titres.valeurs;
     return {
       chart: { type: 'bar', height: 280, toolbar: { show: false }, fontFamily: 'Public Sans, sans-serif' },
       series: [{ name, data: series }],
-      xaxis: { categories: labels, labels: { style: { fontSize: '11px' } } },
+      xaxis: {
+        categories: labels,
+        labels: { style: { fontSize: '11px' } },
+        title: { text: titreX, style: titreStyle },
+      },
+      yaxis: { title: { text: titreY, style: titreStyle } },
       plotOptions: { bar: { borderRadius: 6, horizontal, columnWidth: '55%' } },
       colors: CHART_PALETTE,
       dataLabels: { enabled: false },

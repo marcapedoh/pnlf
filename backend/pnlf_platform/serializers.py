@@ -40,6 +40,14 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
             'auteur_id', 'statut', 'uuid_public', 'created_at', 'updated_at',
         )
 
+    def validate_quantite(self, valeur):
+        from config.validators import valider_quantite_positive
+        return valider_quantite_positive(valeur)
+
+    def validate_prix_unitaire(self, valeur):
+        from config.validators import valider_montant_positif
+        return valider_montant_positif(valeur, 'Le prix unitaire ne peut pas être négatif.')
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         from pnlf_platform.offre_statut import read_statut
@@ -61,7 +69,7 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
     def get_auteur_nom(self, obj):
         from accounts.models import Utilisateur
         u = Utilisateur.objects.filter(pk=obj.auteur_id).first()
-        return f'{u.prenoms} {u.nom}' if u else None
+        return f'{u.prenoms} {u.nom}'.strip() if u else None
 
     def get_photos_urls(self, obj):
         from traceability.services import photo_url

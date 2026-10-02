@@ -1,11 +1,14 @@
 from datetime import timedelta
 
-import bcrypt
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from config.validators import TelephoneField
 
 from .models import Utilisateur
 
@@ -16,7 +19,28 @@ def _utilisateur_photo_url(user, request=None):
     return _photo_url('utilisateurs', user.id, request)
 
 
+def valider_mot_de_passe(valeur: str, user=None) -> str:
+    """Applique AUTH_PASSWORD_VALIDATORS et renvoie des messages en français."""
+    try:
+        validate_password(valeur, user=user)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError(list(exc.messages)) from exc
+    return valeur
+
+
+_MDP_ERREURS = {
+    'required': 'Le mot de passe est requis.',
+    'blank': 'Le mot de passe est requis.',
+    'min_length': 'Le mot de passe doit contenir au moins 8 caractères.',
+}
+
+
+def _telephone_field():
+    return TelephoneField(required=False, allow_blank=True, allow_null=True)
+
+
 class UtilisateurSerializer(serializers.ModelSerializer):
+    telephone = _telephone_field()
     photo_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -35,7 +59,10 @@ class UtilisateurSerializer(serializers.ModelSerializer):
 
 class UtilisateurAdminSerializer(serializers.ModelSerializer):
     """Création / édition comptes par admin."""
-    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    password = serializers.CharField(
+        write_only=True, required=False, min_length=8, error_messages=_MDP_ERREURS,
+    )
+    telephone = _telephone_field()
     photo_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -46,9 +73,19 @@ class UtilisateurAdminSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         )
         read_only_fields = ('id', 'derniere_connexion', 'created_at', 'updated_at')
+        extra_kwargs = {'prenoms': {'required': False, 'allow_blank': True}}
 
     def get_photo_url(self, obj):
         return _utilisateur_photo_url(obj, self.context.get('request'))
+
+    def validate(self, attrs):
+        role = attrs.get('role', getattr(self.instance, 'role', None))
+        prenoms = attrs.get('prenoms', getattr(self.instance, 'prenoms', '') or '')
+        if role != Utilisateur.Role.COOPERATIVE and not (prenoms or '').strip():
+            raise serializers.ValidationError({'prenoms': 'Les prénoms sont requis.'})
+        if role == Utilisateur.Role.COOPERATIVE and 'prenoms' not in attrs and self.instance is None:
+            attrs['prenoms'] = ''
+        return attrs
 
     def validate_role(self, value):
         request = self.context.get('request')
@@ -59,10 +96,15 @@ class UtilisateurAdminSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_password(self, value):
+        return valider_mot_de_passe(value, user=self.instance)
+
     def create(self, validated_data):
         password = validated_data.pop('password', None)
         if not password:
-            raise serializers.ValidationError({'password': 'Mot de passe requis.'})
+            raise serializers.ValidationError({'password': 'Le mot de passe est requis.'})
+        # Mot de passe provisoire communiqué par un tiers : changement exigé à la 1re connexion.
+        validated_data['doit_changer_mdp'] = True
         now = timezone.now()
         user = Utilisateur(**validated_data, created_at=now, updated_at=now)
         user.set_password(password)
@@ -87,8 +129,23 @@ class UtilisateurAdminSerializer(serializers.ModelSerializer):
 
 
 class ChangePasswordSerializer(serializers.Serializer):
-    ancien_mot_de_passe = serializers.CharField(write_only=True)
-    nouveau_mot_de_passe = serializers.CharField(write_only=True, min_length=8)
+    ancien_mot_de_passe = serializers.CharField(write_only=True, error_messages={
+        'required': 'Le mot de passe actuel est requis.',
+        'blank': 'Le mot de passe actuel est requis.',
+    })
+    nouveau_mot_de_passe = serializers.CharField(
+        write_only=True, min_length=8, error_messages=_MDP_ERREURS,
+    )
+
+    def validate_nouveau_mot_de_passe(self, value):
+        return valider_mot_de_passe(value, user=self.context.get('user'))
+
+    def validate(self, attrs):
+        if attrs.get('ancien_mot_de_passe') == attrs.get('nouveau_mot_de_passe'):
+            raise serializers.ValidationError({
+                'nouveau_mot_de_passe': 'Le nouveau mot de passe doit être différent de l’actuel.',
+            })
+        return attrs
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
@@ -97,7 +154,10 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
     token = serializers.CharField()
-    nouveau_mot_de_passe = serializers.CharField(min_length=8)
+    nouveau_mot_de_passe = serializers.CharField(min_length=8, error_messages=_MDP_ERREURS)
+
+    def validate_nouveau_mot_de_passe(self, value):
+        return valider_mot_de_passe(value)
 
 
 class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):

@@ -23,6 +23,9 @@ const PUBLIC_PATHS = [
   '/inscription',
 ];
 
+/** Code renvoyé par l'API tant que le mot de passe provisoire n'a pas été changé. */
+const PASSWORD_CHANGE_REQUIRED = 'password_change_required';
+
 let isRefreshing = false;
 const refreshedToken$ = new BehaviorSubject<string | null>(null);
 
@@ -49,6 +52,18 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(authorizedReq).pipe(
     catchError((error: unknown) => {
+      if (
+        error instanceof HttpErrorResponse &&
+        error.status === 403 &&
+        isApi &&
+        error.error?.code === PASSWORD_CHANGE_REQUIRED
+      ) {
+        auth.updateCurrentUser({ doit_changer_mdp: true });
+        if (!router.url.startsWith('/changer-mot-de-passe')) {
+          router.navigate(['/changer-mot-de-passe']);
+        }
+        return throwError(() => error);
+      }
       if (
         error instanceof HttpErrorResponse &&
         error.status === 401 &&

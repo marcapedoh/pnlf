@@ -95,14 +95,14 @@ def _activer_compte_lie(utilisateur_id, *, type_libelle: str) -> None:
     user.save(update_fields=['statut', 'updated_at'])
 
     lien = f'{settings.PNLF_FRONTEND_URL}/connexion'
-    sujet = 'PFNL — Votre inscription a été validée'
+    sujet = 'PFNL : votre inscription a été validée'
     corps = (
         f'Bonjour {user.prenoms} {user.nom},\n\n'
         f'Votre inscription en tant que {type_libelle} sur la plateforme PFNL a été validée '
         'par un administrateur.\n'
-        'Vous pouvez désormais vous connecter avec votre adresse email et le mot de passe choisi '
+        'Vous pouvez désormais vous connecter avec votre adresse e-mail et le mot de passe choisi '
         f'lors de votre inscription :\n{lien}\n\n'
-        "Cordialement,\nL'équipe PFNL — École Nationale des Eaux et Forêts"
+        "Cordialement,\nL'équipe PFNL, École Nationale des Eaux et Forêts"
     )
     envoyer_email(destinataire_id=user.id, email=user.email, sujet=sujet, corps_texte=corps)
     envoyer_sms(
@@ -123,7 +123,7 @@ def _rejeter_compte_lie(utilisateur_id, *, type_libelle: str, motif: str) -> Non
         return
 
     motif_txt = motif or 'les informations fournies ne permettent pas de valider votre dossier.'
-    sujet = "PFNL — Votre demande d'inscription n'a pas été retenue"
+    sujet = "PFNL : votre demande d'inscription n'a pas été retenue"
     corps = (
         f'Bonjour {user.prenoms} {user.nom},\n\n'
         f"Votre demande d'inscription en tant que {type_libelle} sur la plateforme PFNL "
@@ -516,9 +516,10 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
 
         # Pas de Content-Disposition : fichier récupéré en Blob XHR (voir export_lots_csv).
         response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response.write('\ufeff')
         writer = csv.writer(response)
         writer.writerow(['code', 'libelle', 'province_code', 'description', 'latitude', 'longitude'])
-        writer.writerow(['ZC-EXEMPLE', 'Forêt de Minkébé — secteur nord', 'WOL', 'Zone d’exemple', '-0.5546', '11.6642'])
+        writer.writerow(['ZC-EXEMPLE', 'Forêt de Minkébé (secteur nord)', 'WOL', 'Zone d’exemple', '-0.5546', '11.6642'])
         return response
 
     def perform_create(self, serializer):
@@ -648,7 +649,7 @@ class ProducteurViewSet(viewsets.ModelViewSet):
     filterset_fields = ('province', 'statut', 'cooperative')
 
     def get_queryset(self):
-        qs = Producteur.objects.filter(deleted_at__isnull=True).select_related('province')
+        qs = Producteur.objects.filter(deleted_at__isnull=True).select_related('province', 'cooperative')
         user = self.request.user
         if self.request.query_params.get('candidats_adhesion') == '1' and user.role in (
             Utilisateur.Role.ADMINISTRATEUR,
@@ -685,11 +686,17 @@ class ProducteurViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Vous ne pouvez modifier que votre propre fiche.')
         if user.role == Utilisateur.Role.ACHETEUR:
             raise PermissionDenied('Lecture seule.')
-        # SEC-15 : un producteur ne peut pas s'auto-rattacher à une coopérative.
-        if user.role == Utilisateur.Role.PRODUCTEUR and 'cooperative' in serializer.validated_data:
-            raise PermissionDenied(
-                'Le rattachement à une coopérative se fait via le workflow d’adhésion.'
-            )
+        # SEC-15 : ni un producteur ni une coopérative ne modifient directement le rattachement
+        # (workflow d'adhésion / gestion des membres). Renvoyer la valeur actuelle reste permis.
+        if user.role in (Utilisateur.Role.PRODUCTEUR, Utilisateur.Role.COOPERATIVE) and (
+            'cooperative' in serializer.validated_data
+        ):
+            nouvelle = serializer.validated_data['cooperative']
+            if getattr(nouvelle, 'pk', None) != instance.cooperative_id:
+                raise PermissionDenied(
+                    'Le rattachement à une coopérative se fait via le workflow d’adhésion.'
+                )
+            serializer.validated_data.pop('cooperative')
         obj = serializer.save(updated_at=timezone.now())
         ip, ua = request_meta(self.request)
         write_audit(

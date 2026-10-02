@@ -1,8 +1,9 @@
-import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Title } from '@angular/platform-browser';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { toApiError } from '../../../core/http/api-error.util';
 import { unwrapList } from '../../../core/models/common.model';
 import { Lot, STATUT_LOT_LABELS } from '../../../core/models/lot.model';
 import {
@@ -17,6 +18,7 @@ import { LotsService } from '../../../core/services/lots.service';
 import { PdfPreviewService } from '../../../core/services/pdf-preview.service';
 import { ProducteursService } from '../../../core/services/producteurs.service';
 import { lotStatusTone, producteurStatusTone } from '../../../core/ui/status-tone.util';
+import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { CardComponent } from '../../../design-system/card/card.component';
 import { EmptyStateComponent } from '../../../design-system/empty-state/empty-state.component';
@@ -24,10 +26,32 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
 import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
+import { PnlfDatePipe, PnlfQuantitePipe, PnlfTelephonePipe } from '../../../shared/pipes/format.pipes';
+
+type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer';
+
+const DIALOG_MESSAGES: Record<DialogKind, { ok: string; ko: string }> = {
+  valider: { ok: 'Fiche validée', ko: 'Échec de la validation' },
+  rejeter: { ok: 'Fiche rejetée', ko: 'Échec du rejet' },
+  desactiver: { ok: 'Fiche désactivée', ko: 'Échec de la désactivation' },
+  activer: { ok: 'Fiche réactivée', ko: 'Échec de la réactivation' },
+};
 
 @Component({
   selector: 'app-producteur-detail',
-  imports: [RouterLink, DatePipe, CardComponent, StatusBadgeComponent, ButtonComponent, SkeletonComponent, EmptyStateComponent, ConfirmDialogComponent],
+  imports: [
+    RouterLink,
+    PnlfDatePipe,
+    PnlfQuantitePipe,
+    PnlfTelephonePipe,
+    CardComponent,
+    StatusBadgeComponent,
+    ButtonComponent,
+    SkeletonComponent,
+    EmptyStateComponent,
+    ConfirmDialogComponent,
+    AlertBannerComponent,
+  ],
   templateUrl: './producteur-detail.component.html',
   styleUrl: './producteur-detail.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -37,14 +61,16 @@ export class ProducteurDetailComponent {
   private readonly lotsService = inject(LotsService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly title = inject(Title);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly producteur = signal<Producteur | null>(null);
   readonly lots = signal<Lot[]>([]);
+  readonly lotsError = signal('');
   readonly messages = signal<MessagePublic[]>([]);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly statutLabels = STATUT_PRODUCTEUR_LABELS;
   readonly statutLotLabels = STATUT_LOT_LABELS;
   readonly tone = producteurStatusTone;
@@ -58,13 +84,21 @@ export class ProducteurDetailComponent {
     RoleUtilisateur.PRODUCTEUR,
     RoleUtilisateur.COOPERATIVE,
   );
+  /** L'API refuse le changement de photo aux coopératives et acheteurs. */
+  readonly canEditPhoto = this.auth.hasRole(
+    RoleUtilisateur.ADMINISTRATEUR,
+    RoleUtilisateur.AGENT_MINISTERE,
+    RoleUtilisateur.AGENT_FORESTIER,
+    RoleUtilisateur.PRODUCTEUR,
+  );
   readonly canValidate = this.auth.hasRole(
     RoleUtilisateur.ADMINISTRATEUR,
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.AGENT_FORESTIER,
   );
+  readonly isProducteurRole = this.auth.hasRole(RoleUtilisateur.PRODUCTEUR);
   readonly uploadingPhoto = signal(false);
-  readonly dialog = signal<{ kind: 'rejeter' | 'desactiver' } | null>(null);
+  readonly dialog = signal<{ kind: DialogKind } | null>(null);
   readonly dialogLoading = signal(false);
   private readonly pdfPreview = inject(PdfPreviewService);
 
@@ -85,18 +119,23 @@ export class ProducteurDetailComponent {
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.service.get(this.id).subscribe({
       next: (p) => {
         this.producteur.set(p);
+        this.title.setTitle(`${p.prenoms} ${p.nom} (${p.code_producteur}) | PFNL`);
         this.loading.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.router.navigate(['/app/producteurs']);
+        this.producteur.set(null);
+        this.loadError.set(toApiError(err).message);
       },
     });
-    this.lotsService.list({ producteur: this.id, page_size: 10 }).subscribe((res) => {
-      this.lots.set(unwrapList(res));
+    this.lotsError.set('');
+    this.lotsService.list({ producteur: this.id, page_size: 10 }).subscribe({
+      next: (res) => this.lots.set(unwrapList(res)),
+      error: (err) => this.lotsError.set(toApiError(err).message),
     });
     this.service.messagesPublics(this.id).subscribe({
       next: (res) => this.messages.set(unwrapList(res)),
@@ -104,50 +143,29 @@ export class ProducteurDetailComponent {
     });
   }
 
-  valider(): void {
-    this.service.valider(this.id).subscribe({
-      next: () => {
-        this.toast.success('Fiche validée avec succès');
-        this.load();
-      },
-      error: () => this.toast.error('Échec de la validation'),
-    });
-  }
-
-  rejeter(): void {
-    this.dialog.set({ kind: 'rejeter' });
-  }
-
-  desactiver(): void {
-    this.dialog.set({ kind: 'desactiver' });
-  }
-
   onDialogConfirm(value: string): void {
     const d = this.dialog();
     if (!d) return;
     this.dialogLoading.set(true);
-    const req$ = d.kind === 'rejeter' ? this.service.rejeter(this.id, value.trim()) : this.service.desactiver(this.id);
+    const req$ =
+      d.kind === 'rejeter'
+        ? this.service.rejeter(this.id, value.trim())
+        : d.kind === 'valider'
+          ? this.service.valider(this.id)
+          : d.kind === 'activer'
+            ? this.service.activer(this.id)
+            : this.service.desactiver(this.id);
     req$.subscribe({
       next: () => {
         this.dialogLoading.set(false);
         this.dialog.set(null);
-        this.toast.success(d.kind === 'rejeter' ? 'Fiche rejetée' : 'Fiche désactivée');
+        this.toast.success(DIALOG_MESSAGES[d.kind].ok);
         this.load();
       },
-      error: () => {
+      error: (err) => {
         this.dialogLoading.set(false);
-        this.toast.error(d.kind === 'rejeter' ? 'Échec du rejet' : 'Échec de la désactivation');
+        this.toast.error(DIALOG_MESSAGES[d.kind].ko, toApiError(err).message);
       },
-    });
-  }
-
-  activer(): void {
-    this.service.activer(this.id).subscribe({
-      next: () => {
-        this.toast.success('Fiche réactivée');
-        this.load();
-      },
-      error: () => this.toast.error('Échec de la réactivation'),
     });
   }
 
@@ -165,8 +183,8 @@ export class ProducteurDetailComponent {
       },
       error: (err) => {
         this.uploadingPhoto.set(false);
-        const msg = err?.error?.photo?.[0] || err?.error?.detail || 'Échec du téléversement';
-        this.toast.error(msg);
+        const apiError = toApiError(err);
+        this.toast.error('Échec du téléversement', apiError.fieldErrors?.['photo']?.[0] ?? apiError.message);
         input.value = '';
       },
     });
@@ -176,9 +194,14 @@ export class ProducteurDetailComponent {
     return `${p.prenoms.charAt(0)}${p.nom.charAt(0)}`.toUpperCase();
   }
 
-  /** Un champ est considéré manquant s'il est vide/nul — mis en évidence dans la fiche. */
+  /** Un champ est considéré manquant s'il est vide/nul : mis en évidence dans la fiche. */
   estManquant(valeur: unknown): boolean {
     return valeur === null || valeur === undefined || valeur === '';
+  }
+
+  /** Les champs privés sont absents de la réponse quand l'utilisateur n'a pas le droit de les lire. */
+  aLaCle(p: Producteur, champ: keyof Producteur): boolean {
+    return champ in p;
   }
 
   documentPour(type: DocumentInscription['type_document']): DocumentInscription | null {
@@ -197,7 +220,7 @@ export class ProducteurDetailComponent {
         this.messages.set(this.messages().map((x) => (x.id === updated.id ? updated : x)));
         this.toast.success('Message marqué comme traité');
       },
-      error: () => this.toast.error('Impossible de marquer ce message'),
+      error: (err) => this.toast.error('Impossible de marquer ce message', toApiError(err).message),
     });
   }
 }

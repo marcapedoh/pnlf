@@ -12,18 +12,20 @@
 
   <pnlf-card title="Nouvelle demande de certification">
     @if (errorMessage()) {
-      <pnlf-alert tone="error" class="pnlf-mb-4">{{ errorMessage() }}</pnlf-alert>
+      <pnlf-alert tone="error" class="pnlf-mb-4" role="alert">{{ errorMessage() }}</pnlf-alert>
     }
-    <form [formGroup]="form" (ngSubmit)="submit()" class="cert-form">
-      <pnlf-select-field label="Type de certification" formControlName="type_certification" [options]="types()" [required]="true" />
+    <form [formGroup]="form" (ngSubmit)="submit()" class="cert-form" novalidate>
+      <pnlf-select-field label="Type de certification" formControlName="type_certification" [options]="types()" [required]="true" [errorMessage]="err('type_certification', 'Sélectionnez le type de certification.')" />
       @if (needsProducteurChoice) {
-        <pnlf-select-field label="Producteur / collecteur" formControlName="producteur" [options]="producteurs()" [required]="true" />
+        <pnlf-select-field label="Producteur / collecteur" formControlName="producteur" [options]="producteurs()" [required]="true" [errorMessage]="err('producteur', 'Sélectionnez le producteur concerné.')" />
       }
-      <pnlf-select-field label="Lot concerné (optionnel)" formControlName="lot" [options]="lots()" placeholder="Aucun lot spécifique" />
-      <pnlf-text-field label="Date de la demande" type="date" formControlName="date_demande" [required]="true" />
+      <pnlf-select-field label="Lot concerné (facultatif)" formControlName="lot" [options]="lots()" [placeholder]="lotPlaceholder" />
+      <pnlf-text-field label="Date de la demande" type="date" formControlName="date_demande" [required]="true" [max]="today" [errorMessage]="err('date_demande', 'Indiquez la date de la demande.')" />
       <pnlf-text-field label="Observations" formControlName="observations" placeholder="Précisez le contexte, un justificatif, etc." />
-      <div></div>
-      <button pnlfButton type="submit" variant="primary" [loading]="saving()">Envoyer la demande</button>
+      <div class="cert-form__actions">
+        <button pnlfButton type="button" variant="ghost" (click)="showForm.set(false)">Annuler</button>
+        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Envoyer la demande</button>
+      </div>
     </form>
   </pnlf-card>
 } @else {
@@ -36,14 +38,14 @@
       </p>
     </div>
     @if (canRequest) {
-      <button pnlfButton variant="primary" (click)="showForm.set(true)">
+      <button pnlfButton variant="primary" (click)="ouvrirFormulaire()">
         + Demander une certification
       </button>
     }
   </div>
 
   @if (loading()) {
-    <div class="pnlf-table-wrapper">
+    <div class="pnlf-table-wrapper" role="status" aria-label="Chargement des certifications">
       <table class="pnlf-table">
         <tbody>
           @for (i of [1, 2, 3, 4, 5]; track i) {
@@ -52,41 +54,47 @@
         </tbody>
       </table>
     </div>
+  } @else if (loadError()) {
+    <pnlf-alert tone="error" title="Impossible de charger les certifications">
+      {{ loadError() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+    </pnlf-alert>
   } @else if (items().length === 0) {
     <pnlf-empty-state icon="shield-check" title="Aucune certification" description="Les demandes et certifications obtenues apparaîtront ici.">
       @if (canRequest) {
-        <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Demander une certification</button>
+        <button pnlfButton variant="primary" type="button" (click)="ouvrirFormulaire()">Demander une certification</button>
       }
     </pnlf-empty-state>
   } @else {
     <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
+        <caption class="pnlf-visually-hidden">Liste des certifications</caption>
         <thead>
           <tr>
-            <th>Type</th>
-            <th>Producteur</th>
-            <th>N° certificat</th>
-            <th>Date demande</th>
-            <th>Expiration</th>
-            <th>Statut</th>
-            <th></th>
+            <th scope="col">Type</th>
+            <th scope="col">Producteur</th>
+            <th scope="col">N° de certificat</th>
+            <th scope="col">Date de demande</th>
+            <th scope="col">Expiration</th>
+            <th scope="col">Statut</th>
+            <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
           </tr>
         </thead>
         <tbody>
           @for (c of items(); track c.id) {
             <tr>
               <td data-label="Type">{{ c.type_libelle }}</td>
-              <td data-label="Producteur">{{ c.producteur_nom || '—' }}</td>
-              <td class="pnlf-table__muted" data-label="N° certificat">{{ c.numero_certificat || '—' }}</td>
-              <td data-label="Date demande">{{ c.date_demande | date: 'dd/MM/yyyy' }}</td>
-              <td data-label="Expiration">{{ c.date_expiration ? (c.date_expiration | date: 'dd/MM/yyyy') : '—' }}</td>
+              <td data-label="Producteur">{{ c.producteur_nom || '-' }}</td>
+              <td class="pnlf-table__muted" data-label="N° de certificat">{{ c.numero_certificat || '-' }}</td>
+              <td data-label="Date de demande">{{ (c.date_demande | pnlfDate) || '-' }}</td>
+              <td data-label="Expiration">{{ (c.date_expiration | pnlfDate) || '-' }}</td>
               <td data-label="Statut"><pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" /></td>
-              <td data-label="">
+              <td data-label="Actions">
                 <div class="cert-actions">
-                  <button pnlfButton variant="ghost" type="button" (click)="verDetail(c)">Détails</button>
+                  <button pnlfButton variant="ghost" type="button" (click)="verDetail(c)" [attr.aria-label]="'Voir le détail : ' + c.type_libelle + (c.producteur_nom ? ', ' + c.producteur_nom : '')">Détails</button>
                   @if (canValidate && (c.statut === StatutCertification.DEMANDEE || c.statut === StatutCertification.EN_COURS)) {
-                    <button pnlfButton variant="outline" type="button" [loading]="actionId() === c.id" (click)="valider(c)">Accepter</button>
-                    <button pnlfButton variant="ghost" type="button" [disabled]="actionId() === c.id" (click)="refuser(c)">Refuser</button>
+                    <button pnlfButton variant="outline" type="button" [loading]="actionId() === c.id" (click)="valider(c)">Valider</button>
+                    <button pnlfButton variant="ghost" type="button" [disabled]="actionId() === c.id" (click)="refuser(c)">Rejeter</button>
                   }
                 </div>
               </td>
@@ -96,16 +104,16 @@
       </table>
     </div>
 
-    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" label="Pagination des certifications" (pageChange)="goToPage($event)" />
   }
 }
 
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'valider'"
-  title="Accepter la certification"
+  title="Valider la certification"
   message="Un e-mail et un SMS seront envoyés au demandeur. Vous pouvez indiquer un numéro de certificat."
-  confirmLabel="Accepter"
-  inputLabel="Numéro de certificat (optionnel)"
+  confirmLabel="Valider"
+  inputLabel="Numéro de certificat (facultatif)"
   inputPlaceholder="ex : CERT-2026-014"
   inputHint="Laissez vide si le numéro n’est pas encore attribué."
   [loading]="dialogLoading()"
@@ -114,12 +122,12 @@
 />
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'refuser'"
-  title="Refuser la demande"
+  title="Rejeter la demande"
   message="Le motif sera communiqué au demandeur par e-mail et SMS."
-  confirmLabel="Refuser"
+  confirmLabel="Rejeter"
   [danger]="true"
   [inputRequired]="true"
-  inputLabel="Motif du refus"
+  inputLabel="Motif du rejet"
   inputPlaceholder="Expliquez pourquoi la demande ne peut pas être acceptée…"
   [loading]="dialogLoading()"
   (confirmed)="onDialogConfirm($event)"
@@ -128,17 +136,25 @@
 
 @if (detail(); as d) {
   <div class="cert-detail-backdrop" (click)="fermerDetail()" role="presentation">
-    <div class="cert-detail-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <div
+      class="cert-detail-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cert-detail-title"
+      pnlfModal
+      (pnlfModalClose)="fermerDetail()"
+      (click)="$event.stopPropagation()"
+    >
       <div class="cert-detail-modal__head">
         <div>
           <p class="text-eyebrow">Certification</p>
-          <h2>{{ d.type_libelle }}</h2>
+          <h2 id="cert-detail-title">{{ d.type_libelle }}</h2>
         </div>
         <pnlf-status-badge [label]="statutLabels[d.statut]" [tone]="tone(d.statut)" />
       </div>
 
       <dl class="cert-detail-dl">
-        <div><dt>Producteur / collecteur</dt><dd>{{ d.producteur_nom || '—' }}</dd></div>
+        <div><dt>Producteur / collecteur</dt><dd>{{ d.producteur_nom || 'Non renseigné' }}</dd></div>
         @if (d.type_organisme) {
           <div><dt>Organisme certificateur</dt><dd>{{ d.type_organisme }}</dd></div>
         }
@@ -151,13 +167,13 @@
         @if (d.lot_code) {
           <div><dt>Lot concerné</dt><dd>{{ d.lot_code }}</dd></div>
         }
-        <div><dt>N° de certificat</dt><dd>{{ d.numero_certificat || '—' }}</dd></div>
-        <div><dt>Date de la demande</dt><dd>{{ d.date_demande | date: 'dd/MM/yyyy' }}</dd></div>
+        <div><dt>N° de certificat</dt><dd>{{ d.numero_certificat || 'Non renseigné' }}</dd></div>
+        <div><dt>Date de la demande</dt><dd>{{ (d.date_demande | pnlfDate) || 'Non renseignée' }}</dd></div>
         @if (d.date_obtention) {
-          <div><dt>Date d'obtention</dt><dd>{{ d.date_obtention | date: 'dd/MM/yyyy' }}</dd></div>
+          <div><dt>Date d'obtention</dt><dd>{{ d.date_obtention | pnlfDate }}</dd></div>
         }
         @if (d.date_expiration) {
-          <div><dt>Date d'expiration</dt><dd>{{ d.date_expiration | date: 'dd/MM/yyyy' }}</dd></div>
+          <div><dt>Date d'expiration</dt><dd>{{ d.date_expiration | pnlfDate }}</dd></div>
         }
         @if (d.observations) {
           <div><dt>Observations</dt><dd>{{ d.observations }}</dd></div>
@@ -168,7 +184,7 @@
         <p class="cert-detail-doc__label">Document justificatif</p>
         @if (d.document_url) {
           <a [href]="d.document_url" target="_blank" rel="noopener" pnlfButton variant="outline" size="sm">
-            Consulter le document
+            Consulter le document<span class="pnlf-visually-hidden"> (nouvel onglet)</span>
           </a>
         } @else {
           <p class="text-sm text-muted">Aucun document joint pour le moment.</p>
@@ -177,14 +193,14 @@
           <label class="cert-detail-doc__upload">
             <input type="file" accept=".pdf,.jpg,.jpeg,.png" class="pnlf-visually-hidden" [disabled]="uploadingDoc()" (change)="onDocumentSelected($event)" />
             <span pnlfButton variant="ghost" size="sm">
-              {{ uploadingDoc() ? 'Envoi en cours…' : (d.document_url ? 'Remplacer le document' : 'Joindre un document (PDF/JPG/PNG)') }}
+              {{ uploadingDoc() ? 'Envoi en cours…' : (d.document_url ? 'Remplacer le document' : 'Joindre un document (PDF, JPG ou PNG)') }}
             </span>
           </label>
         }
       </div>
 
       <div class="cert-detail-modal__actions">
-        <button pnlfButton variant="ghost" type="button" (click)="fermerDetail()">Fermer</button>
+        <button pnlfButton variant="ghost" type="button" data-autofocus (click)="fermerDetail()">Fermer</button>
       </div>
     </div>
   </div>

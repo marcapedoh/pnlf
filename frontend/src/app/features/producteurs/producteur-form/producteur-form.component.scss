@@ -14,6 +14,25 @@
   }
 }
 
+.producteur-form__state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) 0;
+  color: var(--text-secondary);
+}
+
+.producteur-form__readonly {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+
+  p {
+    margin: 0;
+    font-weight: 600;
+  }
+}
+
 .producteur-form__actions {
   display: flex;
   justify-content: flex-end;

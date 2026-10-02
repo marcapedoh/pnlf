@@ -90,9 +90,15 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Coopératives',
         route: '/app/cooperatives',
         icon: 'building',
-        roles: [R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.COOPERATIVE],
+        roles: [R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.PRODUCTEUR],
       },
-      { label: 'Annuaire filière', route: '/app/marketplace/annuaire', icon: 'globe' },
+      {
+        label: 'Ma coopérative',
+        route: '/app/cooperatives',
+        icon: 'building',
+        roles: [R.COOPERATIVE],
+      },
+      { label: 'Annuaire', route: '/app/marketplace/annuaire', icon: 'globe' },
       {
         label: 'Messagerie',
         route: '/app/messagerie',
@@ -137,7 +143,7 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: [R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER],
       },
       {
-        label: 'Synchronisation terrain',
+        label: 'Synchronisation',
         route: '/app/synchronisation',
         icon: 'refresh-cw',
         roles: [R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER],
@@ -148,7 +154,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Mon compte',
     items: [
       { label: 'Notifications', route: '/app/notifications', icon: 'bell' },
-      { label: 'Paramètres', route: '/app/parametres', icon: 'settings' },
+      { label: 'Mon profil', route: '/app/parametres', icon: 'settings' },
     ],
   },
 ];

@@ -24,6 +24,7 @@ import { EmptyStateComponent } from '../../design-system/empty-state/empty-state
 import { IconComponent } from '../../design-system/icon/icon.component';
 import { SkeletonComponent } from '../../design-system/skeleton/skeleton.component';
 import { ToastService } from '../../design-system/toast/toast.service';
+import { ModalA11yDirective } from '../../design-system/modal/modal-a11y.directive';
 
 @Component({
   selector: 'app-messagerie',
@@ -36,6 +37,7 @@ import { ToastService } from '../../design-system/toast/toast.service';
     EmptyStateComponent,
     IconComponent,
     SkeletonComponent,
+    ModalA11yDirective,
   ],
   templateUrl: './messagerie.component.html',
   styleUrl: './messagerie.component.scss',
@@ -379,7 +381,7 @@ export class MessagerieComponent implements OnDestroy {
       // Tous les membres cochés par défaut
       this.groupeSelected.set(new Set(coop.membres.map((m) => m.id)));
       if (!this.groupeSujet().trim()) {
-        this.groupeSujet.set(`Groupe — ${coop.nom}`);
+        this.groupeSujet.set(`Groupe : ${coop.nom}`);
       }
     } else {
       this.groupeSelected.set(new Set());

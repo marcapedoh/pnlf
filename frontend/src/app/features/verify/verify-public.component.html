@@ -91,8 +91,8 @@
           <div><dt>Produit</dt><dd>{{ r.produit_nom }}</dd></div>
           <div><dt>Producteur / collecteur</dt><dd>{{ r.producteur_nom }}</dd></div>
           <div><dt>Province d'origine</dt><dd>{{ r.province_nom }}</dd></div>
-          <div><dt>Date de collecte</dt><dd>{{ r.date_collecte | date: 'dd/MM/yyyy' }}</dd></div>
-          <div><dt>Quantité déclarée</dt><dd>{{ r.quantite }} {{ r.unite }}</dd></div>
+          <div><dt>Date de collecte</dt><dd>{{ r.date_collecte | pnlfDate }}</dd></div>
+          <div><dt>Quantité déclarée</dt><dd>{{ r.quantite | pnlfQuantite: r.unite }}</dd></div>
           <div><dt>Statut actuel</dt><dd><pnlf-status-badge [label]="r.statut_libelle || statutLabels[r.statut]" [tone]="tone(r.statut)" /></dd></div>
           <div><dt>Étapes de traçabilité</dt><dd>{{ r.mouvements_count }} mouvement(s) enregistré(s)</dd></div>
         </dl>
@@ -110,7 +110,7 @@
             @for (m of r.mouvements; track $index) {
               <li>
                 <strong>{{ m.type_libelle }}</strong>
-                <span>{{ m.date_mouvement | date: 'dd/MM/yyyy' }}@if (m.lieu_libelle) { · {{ m.lieu_libelle }} }</span>
+                <span>{{ m.date_mouvement | pnlfDate }}@if (m.lieu_libelle) { · {{ m.lieu_libelle }} }</span>
               </li>
             }
           </ol>

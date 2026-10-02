@@ -18,7 +18,7 @@ export class ParametresComponent {
   readonly roleLabels = ROLE_LABELS;
 
   statutLabel(statut: string | undefined): string {
-    if (!statut) return '—';
+    if (!statut) return 'Non renseigné';
     return STATUT_COMPTE_LABELS[statut as StatutCompte] ?? statut;
   }
 }

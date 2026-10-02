@@ -1,16 +1,20 @@
-import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { toApiError } from '../../core/http/api-error.util';
 import { AuthService } from '../../core/auth/auth.service';
+import { todayIso } from '../../core/format/format.util';
+import { controlError, handleFormApiError, revealFormErrors } from '../../core/forms/form-errors.util';
 import { unwrapList } from '../../core/models/common.model';
 import { Certification, STATUT_CERTIFICATION_LABELS, StatutCertification } from '../../core/models/certification.model';
 import { RoleUtilisateur } from '../../core/models/user.model';
 import { CertificationsService } from '../../core/services/certifications.service';
 import { LotsService } from '../../core/services/lots.service';
 import { ProducteursService } from '../../core/services/producteurs.service';
+import { dateNotFutureValidator } from '../../core/validators/pnlf.validators';
 import { ConfirmDialogComponent } from '../../design-system/confirm-dialog/confirm-dialog.component';
+import { ModalA11yDirective } from '../../design-system/modal/modal-a11y.directive';
 import { TextFieldComponent } from '../../design-system/text-field/text-field.component';
 import { certificationStatusTone } from '../../core/ui/status-tone.util';
 import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
@@ -23,12 +27,15 @@ import { SkeletonComponent } from '../../design-system/skeleton/skeleton.compone
 import { StatusBadgeComponent } from '../../design-system/badge/status-badge.component';
 import { ToastService } from '../../design-system/toast/toast.service';
 import { unwrapCount } from '../../core/models/common.model';
+import { PnlfDatePipe } from '../../shared/pipes/format.pipes';
+
+type FormKey = 'type_certification' | 'producteur' | 'date_demande';
 
 @Component({
   selector: 'app-certifications-list',
   imports: [
     ReactiveFormsModule,
-    DatePipe,
+    PnlfDatePipe,
     CardComponent,
     StatusBadgeComponent,
     ButtonComponent,
@@ -37,6 +44,7 @@ import { unwrapCount } from '../../core/models/common.model';
     AlertBannerComponent,
     PaginationComponent,
     ConfirmDialogComponent,
+    ModalA11yDirective,
     TextFieldComponent,
     SkeletonComponent,
   ],
@@ -51,12 +59,16 @@ export class CertificationsListComponent {
   private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly toast = inject(ToastService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
+  readonly today = todayIso();
   readonly items = signal<Certification[]>([]);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly types = signal<SelectOption[]>([]);
   readonly producteurs = signal<SelectOption[]>([]);
   readonly lots = signal<SelectOption[]>([]);
+  readonly loadingLots = signal(false);
   readonly showForm = signal(false);
   readonly saving = signal(false);
   readonly errorMessage = signal('');
@@ -89,11 +101,13 @@ export class CertificationsListComponent {
 
   readonly form = this.fb.nonNullable.group({
     type_certification: ['', Validators.required],
-    producteur: [''],
+    producteur: ['', this.needsProducteurChoice ? Validators.required : []],
     lot: [''],
-    date_demande: [new Date().toISOString().slice(0, 10), Validators.required],
+    date_demande: [this.today, [Validators.required, dateNotFutureValidator]],
     observations: [''],
   });
+
+  readonly err = (name: FormKey, required?: string) => controlError(this.form.controls[name], required);
 
   readonly dialog = signal<{ kind: 'valider' | 'refuser'; id: string } | null>(null);
   readonly dialogLoading = signal(false);
@@ -110,20 +124,49 @@ export class CertificationsListComponent {
         this.producteurs.set(
           unwrapList(res).map((p) => ({
             value: p.id,
-            label: `${p.prenoms} ${p.nom} — ${p.code_producteur}`,
+            label: `${p.prenoms} ${p.nom} (${p.code_producteur})`,
           })),
         );
       });
+      // Les lots proposés sont ceux du producteur choisi.
+      this.form.controls.producteur.valueChanges.pipe(takeUntilDestroyed()).subscribe((id) => {
+        this.form.patchValue({ lot: '' }, { emitEvent: false });
+        this.loadLots(id || null);
+      });
+    } else {
+      this.loadLots(null);
     }
-    this.lotsService.list({ page_size: 50 }).subscribe((res) => {
-      this.lots.set(
-        unwrapList(res).map((l) => ({
-          value: l.id,
-          label: `${l.code_lot} — ${l.produit_nom}`,
-        })),
-      );
-    });
     this.load();
+  }
+
+  private loadLots(producteurId: string | null): void {
+    if (this.needsProducteurChoice && !producteurId) {
+      this.lots.set([]);
+      return;
+    }
+    this.loadingLots.set(true);
+    this.lotsService.list({ page_size: 100, ...(producteurId ? { producteur: producteurId } : {}) }).subscribe({
+      next: (res) => {
+        this.loadingLots.set(false);
+        this.lots.set(unwrapList(res).map((l) => ({ value: l.id, label: `${l.code_lot} : ${l.produit_nom}` })));
+      },
+      error: () => {
+        this.loadingLots.set(false);
+        this.lots.set([]);
+      },
+    });
+  }
+
+  get lotPlaceholder(): string {
+    if (this.needsProducteurChoice && !this.form.controls.producteur.value) return 'Choisissez d’abord le producteur';
+    if (this.loadingLots()) return 'Chargement des lots…';
+    return this.lots().length ? 'Aucun lot spécifique' : 'Aucun lot pour ce producteur';
+  }
+
+  ouvrirFormulaire(): void {
+    this.errorMessage.set('');
+    this.form.reset();
+    this.showForm.set(true);
   }
 
   goToPage(page: number): void {
@@ -133,24 +176,27 @@ export class CertificationsListComponent {
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.service.list({ page: String(this.page()), page_size: String(this.pageSize) }).subscribe({
       next: (res) => {
         this.items.set(unwrapList(res));
         this.total.set(unwrapCount(res));
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: (err) => {
+        this.loading.set(false);
+        this.loadError.set(toApiError(err).message);
+      },
     });
   }
 
   submit(): void {
-    if (this.form.invalid) return;
-    if (this.needsProducteurChoice && !this.form.controls.producteur.value) {
-      this.errorMessage.set('Veuillez sélectionner le producteur concerné.');
+    this.errorMessage.set('');
+    if (this.form.invalid) {
+      this.errorMessage.set(revealFormErrors(this.form, this.host));
       return;
     }
     this.saving.set(true);
-    this.errorMessage.set('');
     const raw = this.form.getRawValue();
     const payload: Record<string, string> = {
       type_certification: raw.type_certification,
@@ -172,7 +218,7 @@ export class CertificationsListComponent {
       },
       error: (err) => {
         this.saving.set(false);
-        this.errorMessage.set(toApiError(err).message);
+        this.errorMessage.set(handleFormApiError(this.form, toApiError(err), this.host));
       },
     });
   }
@@ -203,7 +249,8 @@ export class CertificationsListComponent {
       },
       error: (err) => {
         this.uploadingDoc.set(false);
-        this.toast.error(toApiError(err).message);
+        const apiError = toApiError(err);
+        this.toast.error('Échec de l’envoi du document', Object.values(apiError.fieldErrors ?? {}).flat()[0] ?? apiError.message);
         input.value = '';
       },
     });
@@ -231,13 +278,14 @@ export class CertificationsListComponent {
         this.dialogLoading.set(false);
         this.dialog.set(null);
         this.actionId.set(null);
-        this.toast.success(d.kind === 'valider' ? 'Demande de certification acceptée' : 'Demande refusée');
+        this.toast.success(d.kind === 'valider' ? 'Certification validée' : 'Demande rejetée');
         this.load();
       },
       error: (err) => {
         this.dialogLoading.set(false);
+        this.dialog.set(null);
         this.actionId.set(null);
-        this.toast.error(toApiError(err).message);
+        this.toast.error(d.kind === 'valider' ? 'Échec de la validation' : 'Échec du rejet', toApiError(err).message);
       },
     });
   }

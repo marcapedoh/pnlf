@@ -575,16 +575,30 @@ class PublicContactOffreView(APIView):
         email = (request.data.get('email') or '').strip()
         telephone = (request.data.get('telephone') or '').strip()
         message = (request.data.get('message') or '').strip()
-        if not nom or not email or not message:
-            return Response({'detail': 'Nom, e-mail et message sont requis.'}, status=400)
+        from config.validators import normaliser_telephone
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        erreurs = {}
+        if not nom:
+            erreurs['nom'] = ['Votre nom est requis.']
+        if not email:
+            erreurs['email'] = ['Votre adresse e-mail est requise.']
+        else:
+            try:
+                validate_email(email)
+            except DjangoValidationError:
+                erreurs['email'] = ['Adresse e-mail invalide.']
+        if not message:
+            erreurs['message'] = ['Votre message est requis.']
+        elif len(message) < 10:
+            erreurs['message'] = ['Votre message est trop court (10 caractères minimum).']
+        elif len(message) > 2000:
+            erreurs['message'] = ['Message trop long (2000 caractères maximum).']
         try:
-            validate_email(email)
-        except DjangoValidationError:
-            return Response({'detail': 'Adresse e-mail invalide.'}, status=400)
-        if len(message) < 10:
-            return Response({'detail': 'Votre message est trop court (10 caractères minimum).'}, status=400)
-        if len(message) > 2000:
-            return Response({'detail': 'Message trop long (2000 caractères maximum).'}, status=400)
+            telephone = normaliser_telephone(telephone) or ''
+        except DRFValidationError as exc:
+            erreurs['telephone'] = exc.detail
+        if erreurs:
+            return Response(erreurs, status=400)
         creer_notification(
             obj.auteur_id,
             'Message sur votre annonce',
@@ -940,7 +954,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
                     'participants': 'Ajoutez au moins un autre membre de la coopérative.',
                 })
             now = timezone.now()
-            sujet = sujet or f'Groupe — {coop.nom}'
+            sujet = sujet or f'Groupe : {coop.nom}'
             # Réutiliser un groupe existant avec exactement les mêmes participants si possible
             existing_group = _trouver_groupe_identique(
                 request.user.id, cooperative_id, selected,
@@ -961,6 +975,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 _ajouter_participant(conv, uid, now)
             ser = self.get_serializer(conv)
             return Response(ser.data, status=status.HTTP_201_CREATED)
+
+        if offre_id and not (producteur_id or cooperative_id or destinataire_id):
+            if OffreDemande.objects.filter(pk=offre_id, auteur_id=request.user.id).exists():
+                raise ValidationError({
+                    'offre_id': 'Vous êtes l’auteur de cette annonce : répondez depuis les échanges reçus.',
+                })
 
         existing = _trouver_fil_existant(
             request.user.id,

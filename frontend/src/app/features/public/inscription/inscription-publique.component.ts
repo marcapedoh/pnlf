@@ -1,8 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
+import { applyServerErrors, controlError, focusFirstInvalid } from '../../../core/forms/form-errors.util';
+import { todayIso } from '../../../core/format/format.util';
 import { toApiError } from '../../../core/http/api-error.util';
+import { datePastValidator, normaliserTelephone, telephoneValidator } from '../../../core/validators/pnlf.validators';
 import { TypeDemandeInscription } from '../../../core/models/public.model';
 import { PublicService } from '../../../core/services/public.service';
 import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
@@ -13,6 +16,30 @@ import { SelectFieldComponent, SelectOption } from '../../../design-system/selec
 import { TextFieldComponent } from '../../../design-system/text-field/text-field.component';
 
 const TYPES_VALIDES: TypeDemandeInscription[] = ['PRODUCTEUR', 'COLLECTEUR', 'COOPERATIVE', 'ACHETEUR'];
+
+/** Étape du parcours où se trouve chaque champ (pour y revenir quand l'API le signale en erreur). */
+const ETAPE_DU_CHAMP: Record<string, number> = {
+  type_demande: 1,
+  nom: 1,
+  prenoms: 1,
+  email: 1,
+  telephone: 1,
+  date_naissance: 1,
+  password: 1,
+  password_confirmation: 1,
+  numero_agrement: 1,
+  photo: 1,
+  document_cni: 1,
+  province: 2,
+  departement: 2,
+  village: 2,
+  communaute: 2,
+  latitude: 2,
+  longitude: 2,
+  adresse: 2,
+};
+
+const CHAMPS_ETAPE_1 = ['nom', 'prenoms', 'email', 'telephone', 'date_naissance', 'password', 'password_confirmation'];
 
 function motsDePasseIdentiques(group: AbstractControl): ValidationErrors | null {
   const password = group.get('password')?.value;
@@ -43,10 +70,13 @@ export class InscriptionPubliqueComponent {
   private readonly fb = inject(FormBuilder);
   private readonly publicService = inject(PublicService);
   private readonly route = inject(ActivatedRoute);
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  @ViewChild('stepTitle') private stepTitle?: ElementRef<HTMLElement>;
 
   readonly types: { value: TypeDemandeInscription; label: string; description: string; icon: 'leaf' | 'map-pin' | 'users' | 'shopping-bag' }[] = [
     { value: 'PRODUCTEUR', label: 'Producteur', description: 'Vous cultivez ou exploitez des PFNL de façon régulière.', icon: 'leaf' },
-    { value: 'COLLECTEUR', label: 'Collecteur / récolteur', description: 'Vous collectez des PFNL en forêt.', icon: 'map-pin' },
+    { value: 'COLLECTEUR', label: 'Collecteur', description: 'Vous collectez des PFNL en forêt.', icon: 'map-pin' },
     { value: 'COOPERATIVE', label: 'Coopérative', description: 'Vous représentez un groupement de producteurs.', icon: 'users' },
     { value: 'ACHETEUR', label: 'Acheteur', description: 'Vous achetez des PFNL et souhaitez discuter avec les acteurs.', icon: 'shopping-bag' },
   ];
@@ -77,16 +107,17 @@ export class InscriptionPubliqueComponent {
   readonly gpsLoading = signal(false);
   readonly gpsError = signal('');
   readonly gpsCaptured = signal(false);
-  readonly today = new Date().toISOString().slice(0, 10);
+  readonly today = todayIso();
+  readonly stepTitles = ['Identité', 'Localisation', 'Confirmation'];
 
   readonly form = this.fb.nonNullable.group(
     {
       type_demande: this.fb.nonNullable.control<TypeDemandeInscription>('PRODUCTEUR', Validators.required),
       nom: ['', Validators.required],
-      prenoms: [''],
+      prenoms: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
-      telephone: ['', [Validators.required, Validators.minLength(6)]],
-      date_naissance: [''],
+      telephone: ['', [Validators.required, telephoneValidator]],
+      date_naissance: ['', [Validators.required, datePastValidator]],
       password: ['', [Validators.required, Validators.minLength(8)]],
       password_confirmation: ['', Validators.required],
       province: [''],
@@ -108,9 +139,11 @@ export class InscriptionPubliqueComponent {
     const typeParam = this.route.snapshot.queryParamMap.get('type');
     const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
     if (returnUrl) this.loginQuery['returnUrl'] = returnUrl;
-    if (typeParam && TYPES_VALIDES.includes(typeParam as TypeDemandeInscription)) {
-      this.selectType(typeParam as TypeDemandeInscription);
-    }
+    this.selectType(
+      typeParam && TYPES_VALIDES.includes(typeParam as TypeDemandeInscription)
+        ? (typeParam as TypeDemandeInscription)
+        : 'PRODUCTEUR',
+    );
 
     this.publicService.provinces().subscribe((res) => {
       this.provinces.set(res.map((p) => ({ value: p.id, label: p.nom })));
@@ -164,57 +197,85 @@ export class InscriptionPubliqueComponent {
 
     const dateNaissance = this.form.controls.date_naissance;
     if (type === 'PRODUCTEUR' || type === 'COLLECTEUR') {
-      dateNaissance.setValidators(Validators.required);
+      dateNaissance.setValidators([Validators.required, datePastValidator]);
     } else {
-      dateNaissance.clearValidators();
+      dateNaissance.setValidators([datePastValidator]);
     }
     dateNaissance.updateValueAndValidity({ emitEvent: false });
+
+    const prenoms = this.form.controls.prenoms;
+    prenoms.setValidators(type === 'COOPERATIVE' ? [] : [Validators.required]);
+    prenoms.updateValueAndValidity({ emitEvent: false });
+  }
+
+  err(champ: string): string {
+    const requis: Record<string, string> = {
+      nom: this.isCooperative ? 'Le nom de la coopérative est requis.' : 'Le nom est requis.',
+      prenoms: 'Les prénoms sont requis.',
+      email: 'L’adresse e-mail est requise.',
+      telephone: 'Le numéro de téléphone est requis.',
+      date_naissance: 'La date de naissance est requise.',
+      password: 'Le mot de passe est requis.',
+      password_confirmation: 'Confirmez votre mot de passe.',
+      province: 'La province est requise.',
+    };
+    const control = this.form.get(champ);
+    if (champ === 'password' && control?.errors?.['minlength'] && control.touched) {
+      return 'Le mot de passe doit contenir au moins 8 caractères.';
+    }
+    return controlError(control, requis[champ]);
+  }
+
+  confirmationError(): string {
+    const own = this.err('password_confirmation');
+    if (own) return own;
+    const c = this.form.controls.password_confirmation;
+    return c.touched && this.form.errors?.['mismatch'] ? 'Les mots de passe ne correspondent pas.' : '';
+  }
+
+  private allerAEtape(n: number): void {
+    this.step.set(n);
+    setTimeout(() => this.stepTitle?.nativeElement.focus());
   }
 
   nextStep(): void {
     this.submitted.set(true);
     this.errorMessage.set('');
     if (this.step() === 1) {
-      if (!this.isAcheteur && !this.photoFile) this.photoError.set('Merci d’ajouter une photo.');
+      for (const champ of CHAMPS_ETAPE_1) this.form.get(champ)?.markAsTouched();
+      if (!this.isAcheteur && !this.photoFile) this.photoError.set('Ajoutez une photo.');
       if (!this.isAcheteur && !this.documentCniFile) {
         this.documentCniError.set("La copie de votre pièce d'identité (CNI) est requise.");
       }
-      const identityOk =
-        this.form.controls.nom.valid &&
-        this.form.controls.email.valid &&
-        this.form.controls.telephone.valid &&
-        this.form.controls.password.valid &&
-        !this.form.errors?.['mismatch'] &&
-        (this.isCooperative || !!this.form.controls.prenoms.value) &&
-        (!this.isPersonne || this.form.controls.date_naissance.valid);
-      if (
-        !identityOk ||
-        (!this.isAcheteur && (!this.photoFile || !this.documentCniFile))
-      ) {
+      const identityOk = CHAMPS_ETAPE_1.every((champ) => this.form.get(champ)?.valid) && !this.form.errors?.['mismatch'];
+      if (!identityOk || (!this.isAcheteur && (!this.photoFile || !this.documentCniFile))) {
         this.errorMessage.set(
           this.isAcheteur
-            ? 'Complétez l’identité et le mot de passe avant de continuer.'
-            : "Complétez l’identité, la photo, la pièce d'identité et le mot de passe avant de continuer.",
+            ? 'Complétez les champs signalés avant de continuer.'
+            : "Complétez les champs signalés, la photo et la pièce d'identité avant de continuer.",
         );
+        focusFirstInvalid(this.host);
         return;
       }
       this.submitted.set(false);
-      this.step.set(2);
+      this.allerAEtape(2);
       return;
     }
     if (this.step() === 2) {
+      this.form.controls.province.markAsTouched();
       if (!this.isAcheteur && this.form.controls.province.invalid) {
         this.errorMessage.set('Indiquez votre province.');
+        focusFirstInvalid(this.host);
         return;
       }
       this.submitted.set(false);
-      this.step.set(3);
+      this.allerAEtape(3);
     }
   }
 
   prevStep(): void {
     this.errorMessage.set('');
-    this.step.update((s) => Math.max(1, s - 1));
+    this.allerAEtape(Math.max(1, this.step() - 1));
   }
 
   obtenirPosition(): void {
@@ -327,17 +388,23 @@ export class InscriptionPubliqueComponent {
     this.submitted.set(true);
     this.errorMessage.set('');
 
+    this.form.markAllAsTouched();
     if (!this.isAcheteur && !this.photoFile) {
-      this.photoError.set('Merci d’ajouter une photo.');
+      this.photoError.set('Ajoutez une photo.');
     }
     if (!this.isAcheteur && !this.documentCniFile) {
       this.documentCniError.set("La copie de votre pièce d'identité (CNI) est requise.");
     }
-    if (
-      this.form.invalid ||
-      (!this.isAcheteur && (!this.photoFile || !this.documentCniFile))
-    ) {
-      this.errorMessage.set('Merci de vérifier les champs signalés en rouge ci-dessous.');
+    if (this.form.invalid || (!this.isAcheteur && (!this.photoFile || !this.documentCniFile))) {
+      const champEnErreur = Object.keys(this.form.controls).find((k) => this.form.get(k)?.invalid);
+      const etape = Math.min(
+        champEnErreur ? (ETAPE_DU_CHAMP[champEnErreur] ?? 3) : 3,
+        !this.isAcheteur && (!this.photoFile || !this.documentCniFile) ? 1 : 3,
+        this.form.errors?.['mismatch'] ? 1 : 3,
+      );
+      this.errorMessage.set('Vérifiez les champs signalés en rouge.');
+      if (etape !== this.step()) this.allerAEtape(etape);
+      else focusFirstInvalid(this.host);
       return;
     }
 
@@ -348,8 +415,8 @@ export class InscriptionPubliqueComponent {
         type_demande: raw.type_demande,
         nom: raw.nom,
         prenoms: raw.prenoms || undefined,
-        email: raw.email,
-        telephone: raw.telephone,
+        email: raw.email.trim(),
+        telephone: normaliserTelephone(raw.telephone),
         date_naissance: raw.date_naissance || undefined,
         latitude: raw.latitude ? Number(raw.latitude) : undefined,
         longitude: raw.longitude ? Number(raw.longitude) : undefined,
@@ -376,8 +443,34 @@ export class InscriptionPubliqueComponent {
         },
         error: (err) => {
           this.loading.set(false);
-          this.errorMessage.set(toApiError(err).message);
+          this.afficherErreursServeur(toApiError(err));
         },
       });
+  }
+
+  /** Rattache les erreurs de l'API aux champs et revient à l'étape du premier champ concerné. */
+  private afficherErreursServeur(apiError: ReturnType<typeof toApiError>): void {
+    const champs = Object.keys(apiError.fieldErrors ?? {});
+    const fichiers: Record<string, (m: string) => void> = {
+      photo: (m) => this.photoError.set(m),
+      document_cni: (m) => this.documentCniError.set(m),
+    };
+    for (const champ of champs) {
+      const message = apiError.fieldErrors![champ].join(' ');
+      fichiers[champ]?.(message);
+    }
+    const restants = applyServerErrors(this.form, apiError).filter(
+      (m) => !champs.some((c) => fichiers[c] && apiError.fieldErrors![c].join(' ') === m),
+    );
+    const etapes = champs.map((c) => ETAPE_DU_CHAMP[c]).filter((e): e is number => !!e);
+    this.submitted.set(true);
+    if (etapes.length) {
+      this.errorMessage.set(restants[0] ?? 'Certaines informations sont invalides. Corrigez les champs signalés.');
+      const etape = Math.min(...etapes);
+      if (etape !== this.step()) this.allerAEtape(etape);
+      else focusFirstInvalid(this.host);
+      return;
+    }
+    this.errorMessage.set(restants[0] ?? apiError.message);
   }
 }

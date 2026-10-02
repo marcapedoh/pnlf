@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
+import { initialesStructure } from '../../../core/auth/display-name.util';
+import { toApiError } from '../../../core/http/api-error.util';
 import { TypeActeur } from '../../../core/models/producteur.model';
 import {
   PublicProducteur,
@@ -39,6 +41,7 @@ export class AnnuairePublicComponent {
   readonly producteurs = signal<PublicProducteur[]>([]);
   readonly provinces = signal<PublicProvince[]>([]);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly page = signal(1);
   readonly total = signal(0);
   readonly pageSize = 12;
@@ -69,6 +72,7 @@ export class AnnuairePublicComponent {
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.publicService
       .producteurs({
         province: this.province || undefined,
@@ -84,7 +88,10 @@ export class AnnuairePublicComponent {
           this.total.set(res.count ?? res.results.length);
           this.loading.set(false);
         },
-        error: () => this.loading.set(false),
+        error: (err) => {
+          this.loadError.set(toApiError(err).message);
+          this.loading.set(false);
+        },
       });
   }
 
@@ -107,6 +114,16 @@ export class AnnuairePublicComponent {
   }
 
   initials(p: PublicProducteur): string {
+    if (!p.prenoms?.trim()) return initialesStructure(p.nom);
     return `${p.prenoms.charAt(0)}${p.nom.charAt(0)}`.toUpperCase();
+  }
+
+  localisation(p: PublicProducteur): string {
+    const province = (p.province_nom ?? '').trim();
+    const communaute = (p.communaute ?? '').trim();
+    if (!communaute || communaute.localeCompare(province, 'fr', { sensitivity: 'base' }) === 0) {
+      return province || 'Province non renseignée';
+    }
+    return province ? `${province} · ${communaute}` : communaute;
   }
 }

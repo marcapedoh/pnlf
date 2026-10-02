@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  HostListener,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { interval, startWith } from 'rxjs';
@@ -46,6 +55,8 @@ export class HeaderComponent {
 
   readonly userMenuOpen = signal(false);
   readonly notifMenuOpen = signal(false);
+  private readonly userTrigger = viewChild<ElementRef<HTMLButtonElement>>('userTrigger');
+  private readonly notifTrigger = viewChild<ElementRef<HTMLButtonElement>>('notifTrigger');
 
   readonly isValidator = computed(() => {
     const role = this.user()?.role;
@@ -75,6 +86,14 @@ export class HeaderComponent {
       this.userMenuOpen.set(false);
       this.notifMenuOpen.set(false);
     }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    const trigger = this.userMenuOpen() ? this.userTrigger() : this.notifMenuOpen() ? this.notifTrigger() : null;
+    this.userMenuOpen.set(false);
+    this.notifMenuOpen.set(false);
+    trigger?.nativeElement.focus();
   }
 
   toggleUserMenu(): void {

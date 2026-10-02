@@ -112,15 +112,14 @@
       <h2>9. Contact</h2>
       <p>
         Pour toute question relative à cette politique de confidentialité ou pour exercer vos droits,
-        vous pouvez contacter le support technique de la plateforme :
+        vous pouvez contacter le service d'assistance de la plateforme :
       </p>
       <div class="legal-contact-card">
         <pnlf-icon name="mail" [size]="20" />
         <div>
           <p style="margin:0;">
-            <a href="mailto:Wadricempambou@outlook.com">Wadricempambou&#64;outlook.com</a>
-            &nbsp;·&nbsp;
-            <a href="tel:+24174054315">+241 74 05 43 15</a>
+            {{ assistance.nom }} :
+            <a [href]="'mailto:' + assistance.email">{{ assistance.email }}</a>
           </p>
         </div>
       </div>

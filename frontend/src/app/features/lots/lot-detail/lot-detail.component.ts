@@ -1,15 +1,17 @@
-import { DatePipe } from '@angular/common';
+import { formatDate } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Title } from '@angular/platform-browser';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { APP_LOCALE } from '../../../core/format/format.util';
+import { toApiError } from '../../../core/http/api-error.util';
 import { environment } from '../../../../environments/environment';
 import {
   Lot,
   STATUT_LOT_LABELS,
-  STATUT_LOT_ORDRE,
   StatutLot,
   TypeMouvement,
   TYPE_MOUVEMENT_LABELS,
@@ -18,26 +20,52 @@ import { RoleUtilisateur } from '../../../core/models/user.model';
 import { LotsService } from '../../../core/services/lots.service';
 import { lotStatusTone } from '../../../core/ui/status-tone.util';
 import { triggerBrowserDownload } from '../../../core/http/download-file.util';
+import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { CardComponent } from '../../../design-system/card/card.component';
+import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
 import { EmptyStateComponent } from '../../../design-system/empty-state/empty-state.component';
 import { IconComponent } from '../../../design-system/icon/icon.component';
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
 import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
+import { PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe } from '../../../shared/pipes/format.pipes';
+
+/** Ordre des statuts appliqué par le serveur (traceability/services.py, STATUT_ORDRE). */
+const ORDRE_SERVEUR: Record<StatutLot, number> = {
+  [StatutLot.BROUILLON]: 0,
+  [StatutLot.DECLARE]: 1,
+  [StatutLot.VALIDE]: 2,
+  [StatutLot.EN_TRANSIT]: 3,
+  [StatutLot.TRANSFORME]: 4,
+  [StatutLot.COMMERCIALISE]: 5,
+  [StatutLot.ARCHIVE]: 6,
+  [StatutLot.ANNULE]: 7,
+};
+
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+function maintenantLocal(): string {
+  return formatDate(new Date(), "yyyy-MM-dd'T'HH:mm", APP_LOCALE);
+}
 
 @Component({
   selector: 'app-lot-detail',
   imports: [
     RouterLink,
-    DatePipe,
     FormsModule,
+    PnlfDatePipe,
+    PnlfQuantitePipe,
+    PnlfMontantPipe,
+    PnlfUnitePipe,
     CardComponent,
     StatusBadgeComponent,
     ButtonComponent,
     SkeletonComponent,
     EmptyStateComponent,
     IconComponent,
+    ConfirmDialogComponent,
+    AlertBannerComponent,
   ],
   templateUrl: './lot-detail.component.html',
   styleUrl: './lot-detail.component.scss',
@@ -48,19 +76,26 @@ export class LotDetailComponent {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly title = inject(Title);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly lot = signal<Lot | null>(null);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly changingStatus = signal(false);
   readonly nextStatut = signal('');
+  readonly confirmStatut = signal(false);
+  readonly photoToRemove = signal<string | null>(null);
+  readonly removingPhoto = signal(false);
   readonly uploadingPhotos = signal(false);
+  readonly downloadingQr = signal(false);
   readonly showMouvementForm = signal(false);
   readonly savingMouvement = signal(false);
+  readonly mouvementError = signal('');
   readonly mouvementType = signal<string>(TypeMouvement.TRANSFERT);
-  readonly mouvementDate = signal(new Date().toISOString().slice(0, 16));
+  readonly mouvementDate = signal(maintenantLocal());
+  readonly mouvementMax = signal(maintenantLocal());
   readonly mouvementLieu = signal('');
   readonly mouvementQuantite = signal('');
   readonly mouvementCommentaire = signal('');
@@ -84,6 +119,36 @@ export class LotDetailComponent {
     RoleUtilisateur.PRODUCTEUR,
     RoleUtilisateur.COOPERATIVE,
   );
+  /**
+   * L'API n'expose aux producteurs et coopératives que leurs propres lots : la photo est donc
+   * modifiable par les agents et par le producteur ou la coopérative titulaire du lot.
+   */
+  readonly canEditPhotos = this.auth.hasRole(
+    RoleUtilisateur.ADMINISTRATEUR,
+    RoleUtilisateur.AGENT_MINISTERE,
+    RoleUtilisateur.AGENT_FORESTIER,
+    RoleUtilisateur.PRODUCTEUR,
+    RoleUtilisateur.COOPERATIVE,
+  );
+
+  /** Statuts proposés : uniquement les transitions acceptées par le serveur. */
+  readonly nextStatusOptions = computed<StatutLot[]>(() => {
+    const current = this.lot()?.statut as StatutLot | undefined;
+    if (!current) return [];
+    const ordre = ORDRE_SERVEUR[current] ?? 0;
+    return (Object.keys(ORDRE_SERVEUR) as StatutLot[]).filter(
+      (s) => s !== current && (ORDRE_SERVEUR[s] >= ordre || s === StatutLot.ANNULE || s === StatutLot.ARCHIVE),
+    );
+  });
+
+  readonly confirmStatutMessage = computed(() => {
+    const lot = this.lot();
+    const cible = this.nextStatut() as StatutLot;
+    if (!lot || !cible) return '';
+    const base = `Le lot ${lot.code_lot} passera de « ${this.statutLabels[lot.statut]} » à « ${this.statutLabels[cible]} ».`;
+    if (cible === StatutLot.ANNULE) return `${base} Un lot annulé ne peut plus évoluer, sauf vers « Archivé ».`;
+    return `${base} Ce changement ne pourra pas être annulé.`;
+  });
 
   constructor() {
     this.load();
@@ -91,23 +156,23 @@ export class LotDetailComponent {
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.service.get(this.id).subscribe({
       next: (lot) => {
         this.lot.set(lot);
+        this.title.setTitle(`Lot ${lot.code_lot} | PFNL`);
         this.loading.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.router.navigate(['/app/lots']);
+        this.lot.set(null);
+        this.loadError.set(toApiError(err).message);
       },
     });
   }
 
-  nextStatusOptions(): StatutLot[] {
-    const current = this.lot()?.statut;
-    if (!current) return [];
-    const idx = STATUT_LOT_ORDRE.indexOf(current as StatutLot);
-    return idx >= 0 ? STATUT_LOT_ORDRE.slice(idx + 1) : [];
+  demanderChangementStatut(): void {
+    if (this.nextStatut()) this.confirmStatut.set(true);
   }
 
   changerStatut(): void {
@@ -117,12 +182,15 @@ export class LotDetailComponent {
       next: (lot) => {
         this.lot.set(lot);
         this.changingStatus.set(false);
+        this.confirmStatut.set(false);
         this.nextStatut.set('');
-        this.toast.success('Statut mis à jour', `Le lot est désormais "${this.statutLabels[lot.statut]}".`);
+        this.toast.success('Statut mis à jour', `Le lot est désormais « ${this.statutLabels[lot.statut]} ».`);
       },
-      error: () => {
+      error: (err) => {
         this.changingStatus.set(false);
-        this.toast.error('Échec de la mise à jour du statut');
+        this.confirmStatut.set(false);
+        const apiError = toApiError(err);
+        this.toast.error('Échec de la mise à jour du statut', apiError.fieldErrors?.['statut']?.[0] ?? apiError.message);
       },
     });
   }
@@ -134,10 +202,15 @@ export class LotDetailComponent {
     const lot = this.lot();
     if (!files.length || !lot) return;
 
+    const invalide = files.find((f) => !['image/jpeg', 'image/png', 'image/webp'].includes(f.type) || f.size > PHOTO_MAX_BYTES);
+    if (invalide) {
+      this.toast.error('Photo refusée', `« ${invalide.name} » doit être une image JPEG, PNG ou WEBP de 5 Mo maximum.`);
+      return;
+    }
     const disponibles = 2 - lot.photos_urls.length;
     const aEnvoyer = files.slice(0, Math.max(disponibles, 0));
     if (!aEnvoyer.length) {
-      this.toast.info('2 photos maximum par lot. Supprimez-en une avant d\'en ajouter une nouvelle.');
+      this.toast.info('2 photos maximum par lot', 'Supprimez-en une avant d’en ajouter une nouvelle.');
       return;
     }
 
@@ -146,42 +219,80 @@ export class LotDetailComponent {
       next: (updated) => {
         this.lot.set(updated);
         this.uploadingPhotos.set(false);
-        this.toast.success('Photo(s) ajoutée(s) avec succès');
+        this.toast.success(aEnvoyer.length > 1 ? 'Photos ajoutées' : 'Photo ajoutée');
       },
-      error: () => {
+      error: (err) => {
         this.uploadingPhotos.set(false);
-        this.toast.error('Échec de l\'envoi de la photo');
+        const apiError = toApiError(err);
+        this.toast.error('Échec de l’envoi de la photo', apiError.fieldErrors?.['photos']?.[0] ?? apiError.message);
       },
     });
   }
 
-  removePhoto(url: string): void {
+  confirmerSuppressionPhoto(): void {
     const lot = this.lot();
-    if (!lot) return;
+    const url = this.photoToRemove();
+    if (!lot || !url) return;
+    this.removingPhoto.set(true);
     this.service.deletePhoto(lot.id, url).subscribe({
       next: (updated) => {
         this.lot.set(updated);
-        this.toast.info('Photo retirée');
+        this.removingPhoto.set(false);
+        this.photoToRemove.set(null);
+        this.toast.success('Photo retirée');
       },
-      error: () => this.toast.error('Échec de la suppression de la photo'),
+      error: (err) => {
+        this.removingPhoto.set(false);
+        this.photoToRemove.set(null);
+        this.toast.error('Échec de la suppression de la photo', toApiError(err).message);
+      },
     });
   }
 
   copyVerifyLink(uuid: string): void {
-    navigator.clipboard?.writeText(this.verifyUrl(uuid));
-    this.toast.info('Lien copié', "Le lien de vérification publique a été copié.");
+    const url = this.verifyUrl(uuid);
+    if (!navigator.clipboard) {
+      this.toast.warning('Copie impossible', `Copiez ce lien manuellement : ${url}`);
+      return;
+    }
+    navigator.clipboard.writeText(url).then(
+      () => this.toast.success('Lien copié', 'Le lien de vérification publique a été copié.'),
+      () => this.toast.warning('Copie impossible', `Copiez ce lien manuellement : ${url}`),
+    );
+  }
+
+  ouvrirMouvementForm(): void {
+    const ouvert = !this.showMouvementForm();
+    this.showMouvementForm.set(ouvert);
+    this.mouvementError.set('');
+    if (ouvert) {
+      const now = maintenantLocal();
+      this.mouvementDate.set(now);
+      this.mouvementMax.set(now);
+    }
   }
 
   enregistrerMouvement(): void {
     const lot = this.lot();
     if (!lot) return;
+    this.mouvementError.set('');
+    const quantite = this.mouvementQuantite() ? Number(String(this.mouvementQuantite()).replace(',', '.')) : null;
+    if (quantite !== null && !(quantite > 0)) {
+      this.mouvementError.set('La quantité doit être supérieure à 0.');
+      return;
+    }
+    if (this.mouvementDate() && this.mouvementDate() > maintenantLocal()) {
+      this.mouvementError.set('La date de l’étape ne peut pas être dans le futur.');
+      return;
+    }
     this.savingMouvement.set(true);
     this.service
       .ajouterMouvement(lot.id, {
         type_mouvement: this.mouvementType() as TypeMouvement,
+        // La saisie datetime-local est en heure locale : conversion explicite en ISO UTC.
         date_mouvement: this.mouvementDate() ? new Date(this.mouvementDate()).toISOString() : undefined,
         lieu_libelle: this.mouvementLieu() || null,
-        quantite: this.mouvementQuantite() ? Number(this.mouvementQuantite()) : null,
+        quantite,
         commentaire: this.mouvementCommentaire() || null,
       })
       .subscribe({
@@ -194,9 +305,11 @@ export class LotDetailComponent {
           this.toast.success('Étape de traçabilité enregistrée');
           this.load();
         },
-        error: () => {
+        error: (err) => {
           this.savingMouvement.set(false);
-          this.toast.error("Impossible d'enregistrer cette étape.");
+          const apiError = toApiError(err);
+          const champs = Object.values(apiError.fieldErrors ?? {}).flat();
+          this.mouvementError.set(champs[0] ?? apiError.message);
         },
       });
   }
@@ -204,8 +317,16 @@ export class LotDetailComponent {
   downloadQr(): void {
     const lot = this.lot();
     if (!lot) return;
-    this.http.get(this.service.qrDownloadUrl(lot.id), { responseType: 'blob' }).subscribe((blob) => {
-      triggerBrowserDownload(blob, `${lot.code_lot}-qr.png`);
+    this.downloadingQr.set(true);
+    this.http.get(this.service.qrDownloadUrl(lot.id), { responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        this.downloadingQr.set(false);
+        triggerBrowserDownload(blob, `${lot.code_lot}-qr.png`);
+      },
+      error: (err) => {
+        this.downloadingQr.set(false);
+        this.toast.error('Téléchargement du QR code impossible', toApiError(err).message);
+      },
     });
   }
 }

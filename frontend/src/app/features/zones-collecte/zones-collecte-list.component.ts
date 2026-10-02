@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -6,6 +6,8 @@ import { Subject, debounceTime } from 'rxjs';
 
 import { toApiError } from '../../core/http/api-error.util';
 import { AuthService } from '../../core/auth/auth.service';
+import { controlError, handleFormApiError, revealFormErrors } from '../../core/forms/form-errors.util';
+import { latitudeGabonValidator, longitudeGabonValidator } from '../../core/validators/pnlf.validators';
 import { unwrapCount, unwrapList } from '../../core/models/common.model';
 import { ZoneCollecte } from '../../core/models/reference.model';
 import { RoleUtilisateur } from '../../core/models/user.model';
@@ -46,11 +48,13 @@ export class ZonesCollecteListComponent {
   private readonly fb = inject(FormBuilder);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly search$ = new Subject<void>();
   readonly modeleUrl = '#';
 
   readonly items = signal<ZoneCollecte[]>([]);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly provinces = signal<SelectOption[]>([]);
   readonly showForm = signal(false);
   readonly showImport = signal(false);
@@ -79,9 +83,12 @@ export class ZonesCollecteListComponent {
     libelle: ['', Validators.required],
     province: ['', Validators.required],
     description: [''],
-    latitude: [''],
-    longitude: [''],
+    latitude: ['', latitudeGabonValidator],
+    longitude: ['', longitudeGabonValidator],
   });
+
+  readonly err = (name: 'code' | 'libelle' | 'province' | 'latitude' | 'longitude', required?: string) =>
+    controlError(this.form.controls[name], required);
 
   constructor() {
     this.referenceService.provinces().subscribe((res) => {
@@ -106,6 +113,7 @@ export class ZonesCollecteListComponent {
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.referenceService
       .zonesCollecte({ page: String(this.page()), page_size: String(this.pageSize), search: this.search() })
       .subscribe({
@@ -114,7 +122,10 @@ export class ZonesCollecteListComponent {
           this.total.set(unwrapCount(res));
           this.loading.set(false);
         },
-        error: () => this.loading.set(false),
+        error: (err) => {
+          this.loading.set(false);
+          this.loadError.set(toApiError(err).message);
+        },
       });
   }
 
@@ -122,15 +133,26 @@ export class ZonesCollecteListComponent {
     this.router.navigate(['/app/zones-collecte', zone.id]);
   }
 
-  submit(): void {
-    if (this.form.invalid) return;
-    this.saving.set(true);
+  ouvrirFormulaire(): void {
     this.errorMessage.set('');
+    this.form.reset();
+    this.showImport.set(false);
+    this.showForm.set(true);
+  }
+
+  submit(): void {
+    this.errorMessage.set('');
+    if (this.form.invalid) {
+      this.errorMessage.set(revealFormErrors(this.form, this.host));
+      return;
+    }
+    this.saving.set(true);
     const raw = this.form.getRawValue();
+    const nombre = (v: string) => (v.trim() ? Number(v.trim().replace(',', '.')) : null);
     const payload = {
       ...raw,
-      latitude: raw.latitude ? Number(raw.latitude) : null,
-      longitude: raw.longitude ? Number(raw.longitude) : null,
+      latitude: nombre(raw.latitude),
+      longitude: nombre(raw.longitude),
     };
     this.referenceService.creerZoneCollecte(payload).subscribe({
       next: () => {
@@ -142,7 +164,7 @@ export class ZonesCollecteListComponent {
       },
       error: (err) => {
         this.saving.set(false);
-        this.errorMessage.set(toApiError(err).message);
+        this.errorMessage.set(handleFormApiError(this.form, toApiError(err), this.host));
       },
     });
   }
@@ -162,7 +184,7 @@ export class ZonesCollecteListComponent {
       next: (blob) => {
         triggerBrowserDownload(blob, 'modele-zones-collecte.csv');
       },
-      error: () => this.toast.error('Impossible de télécharger le modèle.'),
+      error: (err) => this.toast.error('Impossible de télécharger le modèle', toApiError(err).message),
     });
   }
 
@@ -180,7 +202,10 @@ export class ZonesCollecteListComponent {
         this.importResult.set(res);
         this.importFile = null;
         this.importFileName.set('');
-        this.toast.success(`Import terminé : ${res.crees} créée(s), ${res.mis_a_jour} mise(s) à jour.`);
+        this.toast.success(
+          'Import terminé',
+          `${res.crees} ${res.crees > 1 ? 'zones créées' : 'zone créée'}, ${res.mis_a_jour} ${res.mis_a_jour > 1 ? 'zones mises à jour' : 'zone mise à jour'}.`,
+        );
         this.load();
       },
       error: (err) => {

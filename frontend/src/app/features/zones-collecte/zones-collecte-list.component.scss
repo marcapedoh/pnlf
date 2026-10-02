@@ -12,6 +12,12 @@
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.zone-import__file:focus-within {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .zone-page__actions {

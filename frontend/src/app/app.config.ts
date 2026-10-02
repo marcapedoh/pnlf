@@ -27,7 +27,7 @@ registerLocaleFr();
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    { provide: LOCALE_ID, useValue: 'fr-FR' },
+    { provide: LOCALE_ID, useValue: 'fr' },
     provideBrowserGlobalErrorListeners(),
     provideRouter(
       routes,

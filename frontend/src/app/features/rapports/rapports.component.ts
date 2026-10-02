@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { PnlfDatePipe } from '../../shared/pipes/format.pipes';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
@@ -24,17 +24,68 @@ import { FileDownloadService, messageFromDownloadError, triggerBrowserDownload }
 import { AuthService } from '../../core/auth/auth.service';
 import { RoleUtilisateur } from '../../core/models/user.model';
 import { PdfPreviewService } from '../../core/services/pdf-preview.service';
+import { STATUT_PRODUCTEUR_LABELS, StatutProducteur } from '../../core/models/producteur.model';
+import { STATUT_CERTIFICATION_LABELS, StatutCertification } from '../../core/models/certification.model';
+import { formatDateFr } from '../../core/format/format.util';
+import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
+
+const ACTION_LABELS: Record<string, string> = {
+  CREATE: 'Création',
+  UPDATE: 'Modification',
+  DELETE: 'Suppression',
+  SOFT_DELETE: 'Suppression',
+  LOGIN: 'Connexion',
+  LOGOUT: 'Déconnexion',
+  EXPORT: 'Export',
+  IMPORT: 'Import',
+  PASSWORD_CHANGE: 'Changement de mot de passe',
+  VALIDATE: 'Validation',
+  REJECT: 'Rejet',
+  ACTIVATE: 'Activation',
+  DEACTIVATE: 'Désactivation',
+  UPDATE_PHOTO: 'Mise à jour de photo',
+  DELETE_PHOTO: 'Suppression de photo',
+  UPDATE_IMAGE: 'Mise à jour d’image',
+  INSCRIPTION_PUBLIQUE: 'Inscription publique',
+  SYNC: 'Synchronisation',
+};
+
+const TABLE_LABELS: Record<string, string> = {
+  lots: 'Lots',
+  utilisateurs: 'Utilisateurs',
+  audit_logs: 'Journal d’audit',
+  producteurs: 'Producteurs',
+  cooperatives: 'Coopératives',
+  certifications: 'Certifications',
+  offres_demandes: 'Offres et demandes',
+  produits: 'Produits',
+  acheteurs: 'Acheteurs',
+  zones_collecte: 'Zones de collecte',
+  mouvements: 'Mouvements',
+  notifications: 'Notifications',
+};
+
+/** Cellule CSV séparée par des points-virgules (Excel en français), guillemets échappés. */
+function celluleCsv(valeur: unknown): string {
+  const s = valeur === null || valeur === undefined ? '' : String(valeur);
+  return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function ligneCsv(valeurs: unknown[]): string {
+  return valeurs.map(celluleCsv).join(';');
+}
 
 @Component({
   selector: 'app-rapports',
   imports: [
-    DatePipe,
+    PnlfDatePipe,
     FormsModule,
     CardComponent,
     ButtonComponent,
     EmptyStateComponent,
     PaginationComponent,
     TextFieldComponent,
+    AlertBannerComponent,
   ],
   templateUrl: './rapports.component.html',
   styleUrl: './rapports.component.scss',
@@ -65,6 +116,8 @@ export class RapportsComponent {
   readonly eventsPageSize = 25;
   readonly loadingEvents = signal(false);
   readonly selectedLibelle = signal('');
+  readonly periodesError = signal('');
+  readonly eventsError = signal('');
 
   /** Une seule date pour aller à une période précise. */
   periodeDate = '';
@@ -94,6 +147,7 @@ export class RapportsComponent {
 
   loadPeriodes(): void {
     this.loadingPeriodes.set(true);
+    this.periodesError.set('');
     this.dashboardService.journalPeriodes(this.granularite()).subscribe({
       next: (res) => {
         this.periodes.set(res.results);
@@ -106,7 +160,7 @@ export class RapportsComponent {
       error: () => {
         this.periodes.set([]);
         this.loadingPeriodes.set(false);
-        this.toast.error('Impossible de charger le journal d’activité.');
+        this.periodesError.set('Impossible de charger le journal d’activité. Vérifiez votre connexion puis réessayez.');
       },
     });
   }
@@ -144,6 +198,7 @@ export class RapportsComponent {
     if (!p) return;
 
     this.loadingEvents.set(true);
+    this.eventsError.set('');
     this.dashboardService
       .journalDetail(
         this.granularite(),
@@ -161,7 +216,8 @@ export class RapportsComponent {
         },
         error: () => {
           this.loadingEvents.set(false);
-          this.toast.error('Impossible de charger le détail du journal.');
+          this.events.set([]);
+          this.eventsError.set('Impossible de charger le détail du journal.');
         },
       });
   }
@@ -178,6 +234,16 @@ export class RapportsComponent {
     this.loadEvents();
   }
 
+  actionLabel(action: string | null | undefined): string {
+    if (!action) return '-';
+    return ACTION_LABELS[action] ?? action.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+  }
+
+  tableLabel(table: string | null | undefined): string {
+    if (!table) return '-';
+    return TABLE_LABELS[table] ?? table;
+  }
+
   downloadLots(format: ExportFormat): void {
     if (format === 'pdf') {
       this._openPdf('lots');
@@ -192,11 +258,18 @@ export class RapportsComponent {
       next: (res) => {
         const rows = unwrapList(res);
         const csv = [
-          'code;nom;prenoms;province;statut;telephone',
+          ligneCsv(['Code', 'Nom', 'Prénoms', 'Province', 'Statut', 'Téléphone']),
           ...rows.map((p) =>
-            [p.code_producteur, p.nom, p.prenoms, p.province_nom, p.statut, p.telephone || ''].join(';'),
+            ligneCsv([
+              p.code_producteur,
+              p.nom,
+              p.prenoms,
+              p.province_nom,
+              STATUT_PRODUCTEUR_LABELS[p.statut as StatutProducteur] ?? p.statut,
+              p.telephone || '',
+            ]),
           ),
-        ].join('\n');
+        ].join('\r\n');
         this._saveBlob(csv, 'pfnl-producteurs.csv', 'text/csv');
         this.downloading.set(null);
         this.toast.success('Export producteurs téléchargé');
@@ -214,11 +287,17 @@ export class RapportsComponent {
       next: (res) => {
         const rows = unwrapList(res);
         const csv = [
-          'type;producteur;numero;statut;date_demande',
+          ligneCsv(['Type', 'Producteur', 'Numéro de certificat', 'Statut', 'Date de demande']),
           ...rows.map((c) =>
-            [c.type_libelle, c.producteur_nom || '', c.numero_certificat || '', c.statut, c.date_demande].join(';'),
+            ligneCsv([
+              c.type_libelle,
+              c.producteur_nom || '',
+              c.numero_certificat || '',
+              STATUT_CERTIFICATION_LABELS[c.statut as StatutCertification] ?? c.statut,
+              formatDateFr(c.date_demande),
+            ]),
           ),
-        ].join('\n');
+        ].join('\r\n');
         this._saveBlob(csv, 'pfnl-certifications.csv', 'text/csv');
         this.downloading.set(null);
         this.toast.success('Export certifications téléchargé');
@@ -231,7 +310,8 @@ export class RapportsComponent {
   }
 
   private _saveBlob(content: string, filename: string, mime: string): void {
-    triggerBrowserDownload(new Blob([content], { type: mime }), filename);
+    // BOM UTF-8 : sans lui, Excel affiche les accents de travers.
+    triggerBrowserDownload(new Blob(['\ufeff' + content], { type: `${mime};charset=utf-8` }), filename);
   }
 
   downloadJournal(format: ExportFormat): void {
@@ -261,7 +341,7 @@ export class RapportsComponent {
     if (!p) return;
     const filtres = this.currentFiltres();
     const title = filtres.q
-      ? `Journal d’audit — recherche « ${filtres.q} »`
+      ? `Journal d’audit : recherche « ${filtres.q} »`
       : 'Journal d’audit (PDF)';
     const filename = `pfnl-journal-${this.granularite()}-${p.date}.pdf`;
     this.pdfPreview.open(title, filename, () =>

@@ -1,5 +1,5 @@
-import { DatePipe, DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { PublicLotDetail } from '../../../core/models/public.model';
@@ -11,10 +11,11 @@ import { lotStatusTone } from '../../../core/ui/status-tone.util';
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
 import { IconComponent } from '../../../design-system/icon/icon.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
+import { PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe } from '../../../shared/pipes/format.pipes';
 
 @Component({
   selector: 'app-lot-public-detail',
-  imports: [RouterLink, DatePipe, DecimalPipe, ButtonComponent, SkeletonComponent, IconComponent, StatusBadgeComponent],
+  imports: [RouterLink, PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe, ButtonComponent, SkeletonComponent, IconComponent, StatusBadgeComponent],
   templateUrl: './lot-public-detail.component.html',
   styleUrl: './lot-public-detail.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,6 +24,7 @@ export class LotPublicDetailComponent {
   private readonly publicService = inject(PublicService);
   private readonly route = inject(ActivatedRoute);
   private readonly toast = inject(ToastService);
+  private readonly title = inject(Title);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly lot = signal<PublicLotDetail | null>(null);
@@ -34,6 +36,7 @@ export class LotPublicDetailComponent {
     this.publicService.lot(this.id).subscribe({
       next: (l) => {
         this.lot.set(l);
+        this.title.setTitle(`Lot ${l.code_lot} | PFNL`);
         this.loading.set(false);
       },
       error: () => {
@@ -66,7 +69,7 @@ export class LotPublicDetailComponent {
   partager(l: PublicLotDetail): void {
     const url = l.uuid_public ? `${window.location.origin}/verifier/${l.uuid_public}` : window.location.href;
     if (navigator.share) {
-      navigator.share({ title: `Lot ${l.code_lot} — ${l.produit_nom}`, url }).catch(() => {});
+      navigator.share({ title: `Lot ${l.code_lot} : ${l.produit_nom}`, url }).catch(() => {});
       return;
     }
     navigator.clipboard?.writeText(url).then(

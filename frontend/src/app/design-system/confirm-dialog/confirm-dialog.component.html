@@ -1,9 +1,16 @@
 @if (open()) {
   <div class="pnlf-dialog-backdrop" (click)="onBackdrop($event)" role="presentation">
-    <div class="pnlf-dialog" role="dialog" aria-modal="true" [attr.aria-labelledby]="'pnlf-dialog-title'">
-      <h2 id="pnlf-dialog-title" class="pnlf-dialog__title">{{ title() }}</h2>
+    <div
+      class="pnlf-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      [attr.aria-labelledby]="titleId"
+      [attr.aria-describedby]="message() ? messageId : null"
+      (keydown)="onKeydown($event)"
+    >
+      <h2 [id]="titleId" class="pnlf-dialog__title">{{ title() }}</h2>
       @if (message()) {
-        <p class="pnlf-dialog__message">{{ message() }}</p>
+        <p [id]="messageId" class="pnlf-dialog__message">{{ message() }}</p>
       }
       @if (showInput()) {
         <label class="pnlf-dialog__field">
@@ -12,6 +19,7 @@
             class="pnlf-dialog__textarea"
             [placeholder]="inputPlaceholder()"
             [value]="inputValue()"
+            [required]="inputRequired()"
             (input)="inputValue.set($any($event.target).value)"
             rows="4"
           ></textarea>
@@ -21,7 +29,7 @@
         </label>
       }
       <div class="pnlf-dialog__actions">
-        <button pnlfButton type="button" variant="ghost" (click)="onCancel()" [disabled]="loading()">
+        <button pnlfButton type="button" variant="ghost" data-autofocus (click)="onCancel()" [disabled]="loading()">
           {{ cancelLabel() }}
         </button>
         <button

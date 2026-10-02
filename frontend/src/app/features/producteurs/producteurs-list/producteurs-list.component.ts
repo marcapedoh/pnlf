@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { toApiError } from '../../../core/http/api-error.util';
 import { unwrapCount, unwrapList } from '../../../core/models/common.model';
 import {
   Producteur,
@@ -24,12 +25,25 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
 import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
+import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
+import { PnlfTelephonePipe } from '../../../shared/pipes/format.pipes';
+
+type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer';
+
+const DIALOG_MESSAGES: Record<DialogKind, { ok: string; ko: string }> = {
+  valider: { ok: 'Fiche validée', ko: 'Échec de la validation' },
+  rejeter: { ok: 'Fiche rejetée', ko: 'Échec du rejet' },
+  desactiver: { ok: 'Fiche désactivée', ko: 'Échec de la désactivation' },
+  activer: { ok: 'Fiche réactivée', ko: 'Échec de la réactivation' },
+};
 
 @Component({
   selector: 'app-producteurs-list',
   imports: [
     RouterLink,
     FormsModule,
+    PnlfTelephonePipe,
+    AlertBannerComponent,
     ButtonComponent,
     StatusBadgeComponent,
     PaginationComponent,
@@ -53,6 +67,7 @@ export class ProducteursListComponent {
 
   readonly items = signal<Producteur[]>([]);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly page = signal(1);
   readonly total = signal(0);
   readonly pageSize = 10;
@@ -79,7 +94,11 @@ export class ProducteursListComponent {
     RoleUtilisateur.AGENT_FORESTIER,
   );
   readonly isProducteur = this.auth.hasRole(RoleUtilisateur.PRODUCTEUR);
-  readonly dialog = signal<{ kind: 'desactiver' | 'rejeter'; item: Producteur } | null>(null);
+  readonly dialog = signal<{ kind: DialogKind; item: Producteur } | null>(null);
+  readonly dialogNom = computed(() => {
+    const item = this.dialog()?.item;
+    return item ? `${item.prenoms} ${item.nom}` : '';
+  });
   readonly dialogLoading = signal(false);
 
   constructor() {
@@ -133,6 +152,7 @@ export class ProducteursListComponent {
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.service
       .list({
         page: this.page(),
@@ -147,55 +167,37 @@ export class ProducteursListComponent {
           this.total.set(unwrapCount(res));
           this.loading.set(false);
         },
-        error: () => this.loading.set(false),
+        error: (err) => {
+          this.loading.set(false);
+          this.loadError.set(toApiError(err).message);
+        },
       });
-  }
-
-  valider(p: Producteur): void {
-    this.service.valider(p.id).subscribe({
-      next: () => {
-        this.toast.success('Fiche validée', `${p.prenoms} ${p.nom} est désormais actif(ve).`);
-        this.load();
-      },
-      error: () => this.toast.error('Échec de la validation'),
-    });
-  }
-
-  rejeter(p: Producteur): void {
-    this.dialog.set({ kind: 'rejeter', item: p });
-  }
-
-  desactiver(p: Producteur): void {
-    this.dialog.set({ kind: 'desactiver', item: p });
   }
 
   onDialogConfirm(value: string): void {
     const d = this.dialog();
     if (!d) return;
     this.dialogLoading.set(true);
+    const id = d.item.id;
     const req$ =
-      d.kind === 'rejeter' ? this.service.rejeter(d.item.id, value.trim()) : this.service.desactiver(d.item.id);
+      d.kind === 'rejeter'
+        ? this.service.rejeter(id, value.trim())
+        : d.kind === 'valider'
+          ? this.service.valider(id)
+          : d.kind === 'activer'
+            ? this.service.activer(id)
+            : this.service.desactiver(id);
     req$.subscribe({
       next: () => {
         this.dialogLoading.set(false);
         this.dialog.set(null);
-        this.toast.success(d.kind === 'rejeter' ? 'Fiche rejetée' : 'Fiche désactivée');
+        this.toast.success(DIALOG_MESSAGES[d.kind].ok, `${d.item.prenoms} ${d.item.nom}`);
         this.load();
       },
-      error: () => {
+      error: (err) => {
         this.dialogLoading.set(false);
-        this.toast.error('Échec de l’opération');
+        this.toast.error(DIALOG_MESSAGES[d.kind].ko, toApiError(err).message);
       },
-    });
-  }
-
-  activer(p: Producteur): void {
-    this.service.activer(p.id).subscribe({
-      next: () => {
-        this.toast.success('Fiche réactivée', `${p.prenoms} ${p.nom} est de nouveau actif(ve).`);
-        this.load();
-      },
-      error: () => this.toast.error('Échec de la réactivation'),
     });
   }
 

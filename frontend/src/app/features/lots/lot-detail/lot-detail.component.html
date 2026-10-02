@@ -12,7 +12,7 @@
       <h1 class="pnlf-page-header__title">{{ l.produit_nom }}</h1>
       <div class="lot-detail__badges">
         <pnlf-status-badge [label]="statutLabels[l.statut]" [tone]="tone(l.statut)" />
-        <span class="text-sm text-muted">Déclaré le {{ l.created_at | date: 'dd/MM/yyyy' }}</span>
+        <span class="text-sm text-muted">Déclaré le {{ l.created_at | pnlfDate }}</span>
       </div>
     </div>
     <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
@@ -23,12 +23,12 @@
       <pnlf-card title="Informations du lot">
         <dl class="lot-detail__dl">
           <div><dt>Producteur / collecteur</dt><dd><a class="pnlf-table__link" [routerLink]="['/app/producteurs', l.producteur]">{{ l.producteur_nom }}</a></dd></div>
-          <div><dt>Zone de collecte</dt><dd>{{ l.zone_collecte_nom || '—' }}</dd></div>
-          <div><dt>Date de collecte</dt><dd>{{ l.date_collecte }}</dd></div>
-          <div><dt>Quantité</dt><dd>{{ l.quantite }} {{ l.unite }}</dd></div>
-          <div><dt>Qualité</dt><dd>{{ l.qualite_indicateur || '—' }}</dd></div>
-          <div><dt>Prix indicatif</dt><dd>{{ l.prix_indicatif ? (l.prix_indicatif + ' ' + l.devise) : '—' }}</dd></div>
-          <div><dt>Observations</dt><dd>{{ l.observations || '—' }}</dd></div>
+          <div><dt>Zone de collecte</dt><dd>{{ l.zone_collecte_nom || 'Non renseignée' }}</dd></div>
+          <div><dt>Date de collecte</dt><dd>{{ (l.date_collecte | pnlfDate) || 'Non renseignée' }}</dd></div>
+          <div><dt>Quantité</dt><dd>{{ l.quantite | pnlfQuantite: l.unite }}</dd></div>
+          <div><dt>Qualité</dt><dd>{{ l.qualite_indicateur || 'Non renseignée' }}</dd></div>
+          <div><dt>Prix indicatif</dt><dd>{{ (l.prix_indicatif | pnlfMontant: l.devise) || 'Non renseigné' }}</dd></div>
+          <div><dt>Observations</dt><dd>{{ l.observations || 'Aucune observation' }}</dd></div>
           <div>
             <dt>Coordonnées GPS (lieu de production/récolte)</dt>
             <dd>
@@ -40,10 +40,10 @@
                   target="_blank"
                   rel="noopener"
                   style="margin-left: 0.5rem;"
-                  >Voir sur la carte ↗</a
+                  >Voir sur la carte<span class="pnlf-visually-hidden"> (nouvel onglet)</span> ↗</a
                 >
               } @else {
-                —
+                Non renseignées
               }
             </dd>
           </div>
@@ -52,18 +52,20 @@
 
       <pnlf-card title="Photos de la marchandise" subtitle="Visibles dans l'annuaire public et sur la vérification QR">
         <div class="lot-photos-detail">
-          @for (url of l.photos_urls; track url) {
+          @for (url of l.photos_urls; track url; let i = $index) {
             <div class="lot-photos-detail__thumb">
-              <img [src]="url" alt="Photo du lot {{ l.code_lot }}" />
-              <button type="button" class="lot-photos-detail__remove" (click)="removePhoto(url)" aria-label="Retirer cette photo">
-                <pnlf-icon name="x" [size]="14" />
-              </button>
+              <img [src]="url" [alt]="'Photo ' + (i + 1) + ' du lot ' + l.code_lot" />
+              @if (canEditPhotos) {
+                <button type="button" class="lot-photos-detail__remove" (click)="photoToRemove.set(url)" [attr.aria-label]="'Retirer la photo ' + (i + 1)">
+                  <pnlf-icon name="x" [size]="14" />
+                </button>
+              }
             </div>
           }
-          @if (l.photos_urls.length < 2) {
+          @if (canEditPhotos && l.photos_urls.length < 2) {
             <label class="lot-photos-detail__add">
-              <input type="file" accept="image/*" [multiple]="true" (change)="onPhotosSelected($event)" hidden />
-              <span>{{ uploadingPhotos() ? 'Envoi…' : '+ Ajouter' }}</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" [multiple]="true" (change)="onPhotosSelected($event)" class="pnlf-visually-hidden" [disabled]="uploadingPhotos()" />
+              <span>{{ uploadingPhotos() ? 'Envoi…' : '+ Ajouter une photo' }}</span>
             </label>
           }
         </div>
@@ -75,13 +77,16 @@
       <pnlf-card title="Frise de traçabilité" subtitle="Historique chronologique des mouvements du lot">
         @if (canAddMouvement) {
           <div class="lot-mvt-actions">
-            <button pnlfButton type="button" variant="outline" size="sm" (click)="showMouvementForm.set(!showMouvementForm())">
+            <button pnlfButton type="button" variant="outline" size="sm" (click)="ouvrirMouvementForm()" [attr.aria-expanded]="showMouvementForm()" aria-controls="lot-mvt-form">
               {{ showMouvementForm() ? 'Annuler' : 'Enregistrer une étape' }}
             </button>
           </div>
         }
         @if (showMouvementForm()) {
-          <form class="lot-mvt-form" (ngSubmit)="enregistrerMouvement()">
+          <form class="lot-mvt-form" id="lot-mvt-form" (ngSubmit)="enregistrerMouvement()" novalidate>
+            @if (mouvementError()) {
+              <pnlf-alert tone="error" class="lot-mvt-form__full" role="alert">{{ mouvementError() }}</pnlf-alert>
+            }
             <label>
               Type d’étape
               <select class="pnlf-select" [ngModel]="mouvementType()" (ngModelChange)="mouvementType.set($event)" name="type">
@@ -91,16 +96,16 @@
               </select>
             </label>
             <label>
-              Date
-              <input class="pnlf-select" type="datetime-local" [ngModel]="mouvementDate()" (ngModelChange)="mouvementDate.set($event)" name="date" />
+              Date et heure (heure locale)
+              <input class="pnlf-select" type="datetime-local" [max]="mouvementMax()" [ngModel]="mouvementDate()" (ngModelChange)="mouvementDate.set($event)" name="date" />
             </label>
             <label>
               Lieu
               <input class="pnlf-select" type="text" placeholder="Village, marché, entrepôt…" [ngModel]="mouvementLieu()" (ngModelChange)="mouvementLieu.set($event)" name="lieu" />
             </label>
             <label>
-              Quantité (optionnel)
-              <input class="pnlf-select" type="number" [ngModel]="mouvementQuantite()" (ngModelChange)="mouvementQuantite.set($event)" name="qte" />
+              Quantité en {{ l.unite | pnlfUnite: 2 }} (facultatif)
+              <input class="pnlf-select" type="number" min="0" step="any" inputmode="decimal" [ngModel]="mouvementQuantite()" (ngModelChange)="mouvementQuantite.set($event)" name="qte" />
             </label>
             <label class="lot-mvt-form__full">
               Commentaire
@@ -111,19 +116,19 @@
         }
         @if (l.mouvements.length === 0) {
           <pnlf-empty-state icon="clock" title="Aucun mouvement enregistré" description="Les étapes de collecte, transfert et transformation apparaîtront ici.">
-            @if (canAddMouvement) {
-              <button pnlfButton type="button" variant="primary" (click)="showMouvementForm.set(true)">Enregistrer une étape</button>
+            @if (canAddMouvement && !showMouvementForm()) {
+              <button pnlfButton type="button" variant="primary" (click)="ouvrirMouvementForm()">Enregistrer une étape</button>
             }
           </pnlf-empty-state>
         } @else {
           <ol class="lot-timeline">
             @for (m of l.mouvements; track m.id) {
               <li class="lot-timeline__item">
-                <span class="lot-timeline__dot"></span>
+                <span class="lot-timeline__dot" aria-hidden="true"></span>
                 <div class="lot-timeline__content">
                   <p class="lot-timeline__type">{{ typeMouvementLabels[m.type_mouvement] }}</p>
                   <p class="lot-timeline__meta">
-                    {{ m.date_mouvement | date: 'dd/MM/yyyy HH:mm' }}
+                    <time [attr.datetime]="m.date_mouvement">{{ m.date_mouvement | pnlfDate: 'datetime' }}</time>
                     @if (m.lieu_libelle) { · {{ m.lieu_libelle }} }
                   </p>
                   @if (m.commentaire) {
@@ -145,7 +150,7 @@
           <pnlf-empty-state icon="camera" title="QR code en cours de génération" />
         }
         <div class="lot-detail__qr-actions">
-          <button pnlfButton variant="outline" size="sm" [fullWidth]="true" (click)="downloadQr()">Télécharger le QR</button>
+          <button pnlfButton variant="outline" size="sm" [fullWidth]="true" [loading]="downloadingQr()" (click)="downloadQr()">Télécharger le QR code</button>
           <button pnlfButton variant="ghost" size="sm" [fullWidth]="true" (click)="copyVerifyLink(l.uuid_public)">Copier le lien public</button>
         </div>
         <p class="lot-detail__qr-hint">
@@ -157,15 +162,16 @@
       @if (canChangeStatus) {
         <pnlf-card title="Faire évoluer le statut">
           @if (nextStatusOptions().length === 0) {
-            <p class="text-sm text-muted">Ce lot a atteint son statut final dans le flux standard.</p>
+            <p class="text-sm text-muted">Ce lot a atteint son statut final : aucun changement n'est possible.</p>
           } @else {
-            <select class="pnlf-select" style="width:100%; margin-bottom: 0.75rem;" [ngModel]="nextStatut()" (ngModelChange)="nextStatut.set($event)">
+            <label class="pnlf-visually-hidden" for="lot-next-statut">Nouveau statut</label>
+            <select id="lot-next-statut" class="pnlf-select" style="width:100%; margin-bottom: 0.75rem;" [ngModel]="nextStatut()" (ngModelChange)="nextStatut.set($event)">
               <option value="" disabled>Choisir le nouveau statut…</option>
               @for (s of nextStatusOptions(); track s) {
                 <option [value]="s">{{ statutLabels[s] }}</option>
               }
             </select>
-            <button pnlfButton variant="primary" size="sm" [fullWidth]="true" [loading]="changingStatus()" [disabled]="!nextStatut()" (click)="changerStatut()">
+            <button pnlfButton variant="primary" size="sm" [fullWidth]="true" [disabled]="!nextStatut()" (click)="demanderChangementStatut()">
               Appliquer le changement
             </button>
           }
@@ -173,6 +179,32 @@
       }
     </div>
   </div>
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible d’afficher ce lot">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
 } @else {
   <pnlf-empty-state icon="package" title="Lot introuvable" />
 }
+
+<pnlf-confirm-dialog
+  [open]="confirmStatut()"
+  title="Changer le statut du lot ?"
+  [message]="confirmStatutMessage()"
+  [confirmLabel]="nextStatut() === 'ANNULE' ? 'Annuler le lot' : 'Confirmer le changement'"
+  [danger]="nextStatut() === 'ANNULE' || nextStatut() === 'ARCHIVE'"
+  [loading]="changingStatus()"
+  (confirmed)="changerStatut()"
+  (cancelled)="confirmStatut.set(false)"
+/>
+<pnlf-confirm-dialog
+  [open]="!!photoToRemove()"
+  title="Retirer cette photo ?"
+  message="La photo ne sera plus visible dans l’annuaire public ni sur la vérification QR."
+  confirmLabel="Retirer la photo"
+  [danger]="true"
+  [loading]="removingPhoto()"
+  (confirmed)="confirmerSuppressionPhoto()"
+  (cancelled)="photoToRemove.set(null)"
+/>

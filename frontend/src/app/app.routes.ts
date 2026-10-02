@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { authGuard, guestGuard } from './core/auth/auth.guard';
+import { authGuard, guestGuard, mustChangePasswordGuard } from './core/auth/auth.guard';
 import { roleGuard } from './core/auth/role.guard';
 import { RoleUtilisateur } from './core/models/user.model';
 
@@ -22,7 +22,7 @@ export const routes: Routes = [
         path: 'annuaire',
         loadComponent: () =>
           import('./features/public/annuaire/annuaire-public.component').then((m) => m.AnnuairePublicComponent),
-        title: 'Annuaire des producteurs — PFNL',
+        title: 'Annuaire de la filière | PFNL',
       },
       {
         path: 'annuaire/lot/:id',
@@ -30,7 +30,7 @@ export const routes: Routes = [
           import('./features/public/lot-public/lot-public-detail.component').then(
             (m) => m.LotPublicDetailComponent,
           ),
-        title: 'Fiche du lot — PFNL',
+        title: 'Fiche du lot | PFNL',
       },
       {
         path: 'annuaire/:id',
@@ -38,13 +38,13 @@ export const routes: Routes = [
           import('./features/public/producteur-public/producteur-public-detail.component').then(
             (m) => m.ProducteurPublicDetailComponent,
           ),
-        title: 'Fiche producteur — PFNL',
+        title: 'Fiche producteur | PFNL',
       },
       {
         path: 'offres-demandes',
         loadComponent: () =>
           import('./features/public/offres/offres-publiques.component').then((m) => m.OffresPubliquesComponent),
-        title: 'Offres & demandes — PFNL',
+        title: 'Offres & demandes | PFNL',
       },
       {
         path: 'offres-demandes/:id',
@@ -52,7 +52,7 @@ export const routes: Routes = [
           import('./features/public/offres/offre-publique-detail.component').then(
             (m) => m.OffrePubliqueDetailComponent,
           ),
-        title: "Fiche d'annonce — PFNL",
+        title: "Fiche d'annonce | PFNL",
       },
       {
         path: 'inscription',
@@ -61,24 +61,24 @@ export const routes: Routes = [
           import('./features/public/inscription/inscription-publique.component').then(
             (m) => m.InscriptionPubliqueComponent,
           ),
-        title: 'Inscription — PFNL',
+        title: 'Inscription | PFNL',
       },
       {
         path: 'verifier',
         loadComponent: () =>
           import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
-        title: 'Vérifier un produit — PFNL',
+        title: 'Vérifier un produit | PFNL',
       },
       {
         path: 'verifier/:uuid',
         loadComponent: () =>
           import('./features/verify/verify-public.component').then((m) => m.VerifyPublicComponent),
-        title: 'Vérifier un produit — PFNL',
+        title: 'Vérifier un produit | PFNL',
       },
       {
         path: 'faq',
         loadComponent: () => import('./features/public/legal/faq/faq.component').then((m) => m.FaqComponent),
-        title: 'Foire aux questions — PFNL',
+        title: 'Foire aux questions | PFNL',
       },
       {
         path: 'politique-confidentialite',
@@ -86,7 +86,7 @@ export const routes: Routes = [
           import('./features/public/legal/confidentialite/confidentialite.component').then(
             (m) => m.ConfidentialiteComponent,
           ),
-        title: 'Politique de confidentialité — PFNL',
+        title: 'Politique de confidentialité | PFNL',
       },
       {
         path: 'conditions-utilisation',
@@ -94,7 +94,7 @@ export const routes: Routes = [
           import('./features/public/legal/conditions-utilisation/conditions-utilisation.component').then(
             (m) => m.ConditionsUtilisationComponent,
           ),
-        title: "Conditions d'utilisation — PFNL",
+        title: "Conditions d'utilisation | PFNL",
       },
       {
         path: 'politique-cookies',
@@ -102,7 +102,7 @@ export const routes: Routes = [
           import('./features/public/legal/cookies/politique-cookies.component').then(
             (m) => m.PolitiqueCookiesComponent,
           ),
-        title: 'Politique de cookies — PFNL',
+        title: 'Politique de cookies | PFNL',
       },
     ],
   },
@@ -110,7 +110,7 @@ export const routes: Routes = [
     path: 'connexion',
     canActivate: [guestGuard],
     loadComponent: () => import('./features/auth/login/login.component').then((m) => m.LoginComponent),
-    title: 'Connexion — PFNL',
+    title: 'Connexion | PFNL',
   },
   {
     path: 'mot-de-passe-oublie',
@@ -119,7 +119,7 @@ export const routes: Routes = [
       import('./features/auth/forgot-password/forgot-password.component').then(
         (m) => m.ForgotPasswordComponent,
       ),
-    title: 'Mot de passe oublié — PFNL',
+    title: 'Mot de passe oublié | PFNL',
   },
   {
     path: 'reinitialiser-mot-de-passe',
@@ -128,7 +128,7 @@ export const routes: Routes = [
       import('./features/auth/reset-password/reset-password.component').then(
         (m) => m.ResetPasswordComponent,
       ),
-    title: 'Réinitialiser le mot de passe — PFNL',
+    title: 'Réinitialiser le mot de passe | PFNL',
   },
   {
     path: 'changer-mot-de-passe',
@@ -137,25 +137,26 @@ export const routes: Routes = [
       import('./features/auth/change-password/change-password.component').then(
         (m) => m.ChangePasswordComponent,
       ),
-    title: 'Changer le mot de passe — PFNL',
+    title: 'Changer le mot de passe | PFNL',
   },
   {
     path: 'app',
-    canActivate: [authGuard],
+    canActivate: [authGuard, mustChangePasswordGuard],
+    canActivateChild: [mustChangePasswordGuard],
     loadComponent: () => import('./layout/shell/shell.component').then((m) => m.ShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'tableau-de-bord' },
       {
         path: 'tableau-de-bord',
         loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
-        title: 'Tableau de bord — PFNL',
+        title: 'Tableau de bord | PFNL',
       },
       {
         path: 'a-traiter',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () =>
           import('./features/validation/a-traiter.component').then((m) => m.ATraiterComponent),
-        title: 'À traiter — PFNL',
+        title: 'À traiter | PFNL',
       },
       {
         path: 'producteurs',
@@ -169,7 +170,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteurs-list/producteurs-list.component').then(
                 (m) => m.ProducteursListComponent,
               ),
-            title: 'Producteurs & collecteurs — PFNL',
+            title: 'Producteurs & collecteurs | PFNL',
           },
           {
             path: 'nouveau',
@@ -180,7 +181,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteur-form/producteur-form.component').then(
                 (m) => m.ProducteurFormComponent,
               ),
-            title: 'Nouvelle fiche producteur — PFNL',
+            title: 'Nouvelle fiche producteur | PFNL',
           },
           {
             path: ':id',
@@ -188,7 +189,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteur-detail/producteur-detail.component').then(
                 (m) => m.ProducteurDetailComponent,
               ),
-            title: 'Fiche producteur — PFNL',
+            title: 'Fiche producteur | PFNL',
           },
           {
             path: ':id/modifier',
@@ -196,7 +197,7 @@ export const routes: Routes = [
               import('./features/producteurs/producteur-form/producteur-form.component').then(
                 (m) => m.ProducteurFormComponent,
               ),
-            title: 'Modifier la fiche producteur — PFNL',
+            title: 'Modifier la fiche producteur | PFNL',
           },
         ],
       },
@@ -216,7 +217,7 @@ export const routes: Routes = [
           {
             path: '',
             loadComponent: () => import('./features/lots/lots-list/lots-list.component').then((m) => m.LotsListComponent),
-            title: 'Lots de produits — PFNL',
+            title: 'Lots de produits | PFNL',
           },
           {
             path: 'nouveau',
@@ -224,13 +225,13 @@ export const routes: Routes = [
               roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.PRODUCTEUR, R.COOPERATIVE),
             ],
             loadComponent: () => import('./features/lots/lot-form/lot-form.component').then((m) => m.LotFormComponent),
-            title: 'Déclarer un lot — PFNL',
+            title: 'Déclarer un lot | PFNL',
           },
           {
             path: ':id',
             loadComponent: () =>
               import('./features/lots/lot-detail/lot-detail.component').then((m) => m.LotDetailComponent),
-            title: 'Détail du lot — PFNL',
+            title: 'Détail du lot | PFNL',
           },
         ],
       },
@@ -252,7 +253,7 @@ export const routes: Routes = [
               import('./features/zones-collecte/zones-collecte-list.component').then(
                 (m) => m.ZonesCollecteListComponent,
               ),
-            title: 'Zones de collecte — PFNL',
+            title: 'Zones de collecte | PFNL',
           },
           {
             path: ':id',
@@ -260,7 +261,7 @@ export const routes: Routes = [
               import('./features/zones-collecte/zone-collecte-detail/zone-collecte-detail.component').then(
                 (m) => m.ZoneCollecteDetailComponent,
               ),
-            title: 'Détail de la zone — PFNL',
+            title: 'Détail de la zone | PFNL',
           },
         ],
       },
@@ -279,17 +280,17 @@ export const routes: Routes = [
           import('./features/certifications/certifications-list.component').then(
             (m) => m.CertificationsListComponent,
           ),
-        title: 'Certifications — PFNL',
+        title: 'Certifications | PFNL',
       },
       {
         path: 'cooperatives',
-        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.COOPERATIVE)],
+        canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER, R.COOPERATIVE, R.PRODUCTEUR)],
         children: [
           {
             path: '',
             loadComponent: () =>
               import('./features/cooperatives/cooperatives-list.component').then((m) => m.CooperativesListComponent),
-            title: 'Coopératives — PFNL',
+            title: 'Coopératives | PFNL',
           },
           {
             path: ':id',
@@ -297,7 +298,7 @@ export const routes: Routes = [
               import('./features/cooperatives/cooperative-detail/cooperative-detail.component').then(
                 (m) => m.CooperativeDetailComponent,
               ),
-            title: 'Détail de la coopérative — PFNL',
+            title: 'Détail de la coopérative | PFNL',
           },
         ],
       },
@@ -305,7 +306,7 @@ export const routes: Routes = [
         path: 'marketplace/annuaire',
         loadComponent: () =>
           import('./features/marketplace/annuaire/annuaire.component').then((m) => m.AnnuaireComponent),
-        title: 'Annuaire de la filière — PFNL',
+        title: 'Annuaire de la filière | PFNL',
       },
       {
         path: 'messagerie',
@@ -321,7 +322,7 @@ export const routes: Routes = [
         ],
         loadComponent: () =>
           import('./features/messagerie/messagerie.component').then((m) => m.MessagerieComponent),
-        title: 'Messagerie — PFNL',
+        title: 'Messagerie | PFNL',
       },
       {
         path: 'marketplace/offres',
@@ -340,7 +341,7 @@ export const routes: Routes = [
             path: '',
             loadComponent: () =>
               import('./features/marketplace/offres/offres-list.component').then((m) => m.OffresListComponent),
-            title: 'Offres & demandes — PFNL',
+            title: 'Offres & demandes | PFNL',
           },
           {
             path: ':id',
@@ -348,7 +349,7 @@ export const routes: Routes = [
               import('./features/marketplace/offres/offre-detail/offre-detail.component').then(
                 (m) => m.OffreDetailComponent,
               ),
-            title: "Détail de l'annonce — PFNL",
+            title: "Détail de l'annonce | PFNL",
           },
         ],
       },
@@ -360,7 +361,7 @@ export const routes: Routes = [
             path: '',
             loadComponent: () =>
               import('./features/utilisateurs/utilisateurs-list.component').then((m) => m.UtilisateursListComponent),
-            title: 'Comptes utilisateurs — PFNL',
+            title: 'Comptes utilisateurs | PFNL',
           },
           {
             path: ':id',
@@ -368,7 +369,7 @@ export const routes: Routes = [
               import('./features/utilisateurs/utilisateur-detail/utilisateur-detail.component').then(
                 (m) => m.UtilisateurDetailComponent,
               ),
-            title: 'Fiche utilisateur — PFNL',
+            title: 'Fiche utilisateur | PFNL',
           },
         ],
       },
@@ -376,14 +377,14 @@ export const routes: Routes = [
         path: 'rapports',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () => import('./features/rapports/rapports.component').then((m) => m.RapportsComponent),
-        title: 'Rapports & exports — PFNL',
+        title: 'Rapports & exports | PFNL',
       },
       {
         path: 'synchronisation',
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () =>
           import('./features/synchronisation/synchronisation.component').then((m) => m.SynchronisationComponent),
-        title: 'Synchronisation terrain — PFNL',
+        title: 'Synchronisation | PFNL',
       },
       {
         path: 'notifications',
@@ -391,18 +392,18 @@ export const routes: Routes = [
           import('./features/notifications/notifications-page.component').then(
             (m) => m.NotificationsPageComponent,
           ),
-        title: 'Notifications — PFNL',
+        title: 'Notifications | PFNL',
       },
       {
         path: 'parametres',
         loadComponent: () => import('./features/parametres/parametres.component').then((m) => m.ParametresComponent),
-        title: 'Mon profil — PFNL',
+        title: 'Mon profil | PFNL',
       },
       {
         path: 'acces-refuse',
         loadComponent: () =>
           import('./features/errors/access-denied/access-denied.component').then((m) => m.AccessDeniedComponent),
-        title: 'Accès refusé — PFNL',
+        title: 'Accès refusé | PFNL',
       },
     ],
   },
@@ -410,7 +411,7 @@ export const routes: Routes = [
     path: 'erreur-400',
     loadComponent: () =>
       import('./features/errors/bad-request/bad-request.component').then((m) => m.BadRequestComponent),
-    title: 'Requête invalide — PFNL',
+    title: 'Requête invalide | PFNL',
   },
-  { path: '**', loadComponent: () => import('./features/errors/not-found/not-found.component').then((m) => m.NotFoundComponent), title: 'Page introuvable — PFNL' },
+  { path: '**', loadComponent: () => import('./features/errors/not-found/not-found.component').then((m) => m.NotFoundComponent), title: 'Page introuvable | PFNL' },
 ];

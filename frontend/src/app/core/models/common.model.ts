@@ -26,4 +26,6 @@ export interface ApiError {
   message: string;
   fieldErrors?: Record<string, string[]>;
   raw?: unknown;
+  /** Code d'erreur applicatif renvoyé par l'API (ex. « password_change_required »). */
+  code?: string;
 }

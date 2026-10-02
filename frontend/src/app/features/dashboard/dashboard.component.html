@@ -1,12 +1,12 @@
 <div class="pnlf-page-header">
   <div>
     <p class="text-eyebrow">Tableau de bord</p>
-    <h1 class="pnlf-page-header__title">Bonjour, {{ user()?.prenoms }}</h1>
+    <h1 class="pnlf-page-header__title">{{ salutation() }}</h1>
     <p class="pnlf-page-header__subtitle">
       @if (isInstitutional()) {
         Vue d'ensemble de la filière PFNL et file des demandes à traiter.
       } @else if (isAcheteur) {
-        Consultez les offres, l’annuaire et la messagerie — et vérifiez l’origine des lots.
+        Consultez les offres, l’annuaire et la messagerie, et vérifiez l’origine des lots.
       } @else if (isCoop) {
         Suivi des membres et des lots de votre coopérative.
       } @else {
@@ -46,15 +46,13 @@
   <div class="dashboard-kpis">
     <pnlf-kpi-card label="Producteurs actifs" icon="users" tone="green" [value]="stats()?.totaux?.producteurs_actifs ?? 0" [loading]="loading()" />
     <pnlf-kpi-card label="Lots actifs" icon="package" tone="gold" [value]="stats()?.totaux?.lots_actifs ?? 0" [loading]="loading()" />
-    <pnlf-kpi-card label="À traiter" icon="file-text" tone="blue" [value]="inboxTotal()" [loading]="loading()" hint="Inscriptions, coops, certifs, offres" />
-    <a class="dash-kpi-link" routerLink="/app/rapports">
-      <pnlf-kpi-card label="Exports" icon="download" tone="neutral" value="CSV · XLSX · PDF" hint="Rapports & exports" />
-    </a>
+    <pnlf-kpi-card label="À traiter" icon="file-text" tone="blue" [value]="inboxTotal()" [loading]="loading()" hint="Inscriptions, coopératives, certifications, annonces" />
+    <pnlf-kpi-card label="Produits du référentiel" icon="leaf" tone="neutral" [value]="stats()?.totaux?.produits_referentiel ?? 0" [loading]="loading()" hint="PFNL actifs suivis par la plateforme" />
   </div>
 
   @if (inboxTotal() > 0) {
     <p class="dash-inbox-banner">
-      <a routerLink="/app/a-traiter">{{ inboxTotal() }} demande(s) en attente — ouvrir la file « À traiter » →</a>
+      <a routerLink="/app/a-traiter">{{ inboxTotal() }} {{ inboxTotal() > 1 ? 'demandes' : 'demande' }} en attente : ouvrir la file « À traiter » →</a>
     </p>
   }
 
@@ -63,14 +61,14 @@
       @if (loading()) {
         <pnlf-skeleton height="280px" radius="12px" />
       } @else {
-        <apx-chart [series]="statusChart().series!" [chart]="statusChart().chart!" [xaxis]="statusChart().xaxis!" [plotOptions]="statusChart().plotOptions!" [colors]="statusChart().colors!" [dataLabels]="statusChart().dataLabels!" [grid]="statusChart().grid!" [legend]="statusChart().legend!" />
+        <apx-chart [series]="statusChart().series!" [chart]="statusChart().chart!" [xaxis]="statusChart().xaxis!" [yaxis]="statusChart().yaxis!" [plotOptions]="statusChart().plotOptions!" [colors]="statusChart().colors!" [dataLabels]="statusChart().dataLabels!" [grid]="statusChart().grid!" [legend]="statusChart().legend!" />
       }
     </pnlf-card>
     <pnlf-card title="Producteurs par province" subtitle="Top 8 provinces les plus actives">
       @if (loading()) {
         <pnlf-skeleton height="280px" radius="12px" />
       } @else {
-        <apx-chart [series]="provinceChart().series!" [chart]="provinceChart().chart!" [xaxis]="provinceChart().xaxis!" [plotOptions]="provinceChart().plotOptions!" [colors]="provinceChart().colors!" [dataLabels]="provinceChart().dataLabels!" [grid]="provinceChart().grid!" [legend]="provinceChart().legend!" />
+        <apx-chart [series]="provinceChart().series!" [chart]="provinceChart().chart!" [xaxis]="provinceChart().xaxis!" [yaxis]="provinceChart().yaxis!" [plotOptions]="provinceChart().plotOptions!" [colors]="provinceChart().colors!" [dataLabels]="provinceChart().dataLabels!" [grid]="provinceChart().grid!" [legend]="provinceChart().legend!" />
       }
     </pnlf-card>
   </div>
@@ -139,7 +137,7 @@
               <td data-label="Code lot"><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
               <td data-label="Produit">{{ lot.produit_nom }}</td>
               <td data-label="Producteur">{{ lot.producteur_nom }}</td>
-              <td data-label="Quantité">{{ lot.quantite }} {{ lot.unite }}</td>
+              <td data-label="Quantité">{{ lot.quantite | pnlfQuantite: lot.unite }}</td>
               <td data-label="Statut"><pnlf-status-badge [label]="statutLotLabels[lot.statut]" [tone]="lotStatusTone(lot.statut)" /></td>
             </tr>
           }

@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { revealFormErrors } from '../../../core/forms/form-errors.util';
 import { toApiError } from '../../../core/http/api-error.util';
 import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
@@ -39,6 +40,7 @@ export class LoginComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly loading = signal(false);
   readonly errorMessage = signal('');
@@ -70,6 +72,7 @@ export class LoginComponent {
     this.errorMessage.set('');
 
     if (this.form.invalid) {
+      this.errorMessage.set(revealFormErrors(this.form, this.host));
       return;
     }
 

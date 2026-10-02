@@ -24,10 +24,10 @@
 </pnlf-card>
 
 <pnlf-card title="Journal d'activité" subtitle="Historique des actions (création, validation, connexion, export…)">
-  <div class="journal-tabs">
-    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'jour'" (click)="setGranularite('jour')">Par jour</button>
-    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'semaine'" (click)="setGranularite('semaine')">Par semaine</button>
-    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'mois'" (click)="setGranularite('mois')">Par mois</button>
+  <div class="journal-tabs" role="group" aria-label="Regroupement du journal">
+    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'jour'" [attr.aria-pressed]="granularite() === 'jour'" (click)="setGranularite('jour')">Par jour</button>
+    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'semaine'" [attr.aria-pressed]="granularite() === 'semaine'" (click)="setGranularite('semaine')">Par semaine</button>
+    <button type="button" class="journal-tab" [class.is-active]="granularite() === 'mois'" [attr.aria-pressed]="granularite() === 'mois'" (click)="setGranularite('mois')">Par mois</button>
   </div>
 
   <div class="journal-period-search">
@@ -40,7 +40,12 @@
   </div>
 
   @if (loadingPeriodes()) {
-    <p class="text-sm text-muted">Chargement de l'historique…</p>
+    <p class="text-sm text-muted" role="status">Chargement de l'historique…</p>
+  } @else if (periodesError()) {
+    <pnlf-alert tone="error">
+      {{ periodesError() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="loadPeriodes()">Réessayer</button>
+    </pnlf-alert>
   } @else if (periodes().length === 0) {
     <pnlf-empty-state icon="file-text" title="Aucun journal disponible" description="Les actions des utilisateurs apparaîtront ici au fil de l'utilisation." />
   } @else {
@@ -56,7 +61,7 @@
 </pnlf-card>
 
 @if (selected()) {
-  <pnlf-card [title]="'Détail — ' + selectedLibelle()" subtitle="Tous les événements de la période · filtrez en tapant un nom">
+  <pnlf-card [title]="'Détail : ' + selectedLibelle()" subtitle="Tous les événements de la période · filtrez en tapant un nom">
     <div class="journal-user-bar">
       <div class="journal-user-search">
         <pnlf-text-field
@@ -82,27 +87,33 @@
     </div>
 
     @if (loadingEvents()) {
-      <p class="text-sm text-muted">Chargement…</p>
+      <p class="text-sm text-muted" role="status">Chargement des événements…</p>
+    } @else if (eventsError()) {
+      <pnlf-alert tone="error">
+        {{ eventsError() }}
+        <button pnlfButton type="button" variant="outline" size="sm" (click)="loadEvents()">Réessayer</button>
+      </pnlf-alert>
     } @else if (events().length === 0) {
       <pnlf-empty-state icon="clock" title="Aucun événement" description="Aucun résultat pour cette recherche." />
     } @else {
       <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
         <table class="pnlf-table">
-          <thead><tr><th>Date</th><th>Action</th><th>Cible</th><th>Utilisateur</th><th>IP</th></tr></thead>
+          <caption class="pnlf-visually-hidden">Événements du journal d’activité</caption>
+          <thead><tr><th scope="col">Date et heure</th><th scope="col">Action</th><th scope="col">Élément concerné</th><th scope="col">Utilisateur</th><th scope="col">Adresse IP</th></tr></thead>
           <tbody>
             @for (e of events(); track e.id) {
               <tr>
-                <td data-label="Date">{{ e.created_at | date: 'dd/MM/yyyy HH:mm' }}</td>
-                <td data-label="Action">{{ e.action }}</td>
-                <td class="pnlf-table__muted" data-label="Cible">{{ e.table_cible || '—' }}</td>
-                <td data-label="Utilisateur">{{ e.utilisateur }}</td>
-                <td class="pnlf-table__muted" data-label="IP">{{ e.ip_adresse || '—' }}</td>
+                <td data-label="Date et heure">{{ e.created_at | pnlfDate: 'datetime' }}</td>
+                <td data-label="Action">{{ actionLabel(e.action) }}</td>
+                <td class="pnlf-table__muted" data-label="Élément concerné">{{ tableLabel(e.table_cible) }}</td>
+                <td data-label="Utilisateur">{{ e.utilisateur || '-' }}</td>
+                <td class="pnlf-table__muted" data-label="Adresse IP">{{ e.ip_adresse || '-' }}</td>
               </tr>
             }
           </tbody>
         </table>
       </div>
-      <pnlf-pagination [page]="eventsPage()" [pageSize]="eventsPageSize" [total]="eventsTotal()" (pageChange)="goToEventsPage($event)" />
+      <pnlf-pagination label="Pagination du journal" [page]="eventsPage()" [pageSize]="eventsPageSize" [total]="eventsTotal()" (pageChange)="goToEventsPage($event)" />
     }
   </pnlf-card>
 }

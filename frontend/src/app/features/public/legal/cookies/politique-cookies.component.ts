@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 
+import { ASSISTANCE } from '../../../../core/config/assistance';
 import { CookieConsentService } from '../../../../core/services/cookie-consent.service';
 import { ButtonComponent } from '../../../../design-system/button/button.component';
 import { IconComponent } from '../../../../design-system/icon/icon.component';
@@ -18,6 +19,7 @@ export class PolitiqueCookiesComponent {
   private readonly toast = inject(ToastService);
 
   readonly derniereMiseAJour = '21 septembre 2026';
+  readonly assistance = ASSISTANCE;
   readonly choice = this.consent.choice;
 
   rouvrirChoix(): void {

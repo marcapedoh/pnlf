@@ -3,10 +3,16 @@
   <header class="public-header">
     <div class="public-header__inner">
       <a routerLink="/" class="public-header__brand" (click)="closeMenu()">
-        <img src="assets/brand/logo-enef.jpg" alt="Logo de l'École Nationale des Eaux et Forêts" />
+        <img
+          src="assets/brand/logo-enef-128.png"
+          srcset="assets/brand/logo-enef-128.png 1x, assets/brand/logo-enef-256.png 2x"
+          width="48"
+          height="48"
+          alt="École Nationale des Eaux et Forêts du Gabon"
+        />
         <div class="public-header__brand-text">
           <span class="public-header__brand-title">PFNL · Plateforme de Traçabilité</span>
-          <span class="public-header__brand-subtitle">École Nationale des Eaux et Forêts — République Gabonaise</span>
+          <span class="public-header__brand-subtitle">École Nationale des Eaux et Forêts, République Gabonaise</span>
         </div>
       </a>
 
@@ -63,16 +69,26 @@
     <div class="public-footer__inner">
       <div class="public-footer__grid">
         <div>
-          <p class="public-footer__title">Plateforme PFNL</p>
+          <div class="public-footer__brand">
+            <img
+              src="assets/brand/logo-enef-128.png"
+              srcset="assets/brand/logo-enef-128.png 1x, assets/brand/logo-enef-256.png 2x"
+              width="56"
+              height="56"
+              alt="École Nationale des Eaux et Forêts du Gabon"
+              loading="lazy"
+            />
+            <p class="public-footer__title">Plateforme PFNL</p>
+          </div>
           <p>
-            Plateforme de Traçabilité des Produits Forestiers Non Ligneux du Gabon —
-            initiative de l'École Nationale des Eaux et Forêts.
+            Plateforme de Traçabilité des Produits Forestiers Non Ligneux du Gabon,
+            une initiative de l'École Nationale des Eaux et Forêts.
           </p>
         </div>
         <div>
           <p class="public-footer__title">Services publics</p>
           <ul>
-            <li><a routerLink="/annuaire">Annuaire des acteurs</a></li>
+            <li><a routerLink="/annuaire">Annuaire de la filière</a></li>
             <li><a routerLink="/offres-demandes">Offres &amp; demandes</a></li>
             <li><a routerLink="/verifier">Vérifier un produit</a></li>
             <li><a routerLink="/inscription">S'inscrire</a></li>
@@ -94,7 +110,7 @@
         </div>
       </div>
       <p class="public-footer__copy">
-        © {{ year }} République Gabonaise — École Nationale des Eaux et Forêts. Tous droits réservés.
+        © {{ year }} République Gabonaise, École Nationale des Eaux et Forêts. Tous droits réservés.
       </p>
     </div>
   </footer>

@@ -12,10 +12,30 @@
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-3);
 }
 
-.offre-form__photos {
+.offre-form__photos,
+.offre-form__full {
   grid-column: 1 / -1;
+}
+
+.offre-form__hint {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.offre-form__error {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.offre-photos__add:focus-within {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .pnlf-field__label {
@@ -109,6 +129,9 @@
 }
 
 .offre-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
@@ -122,12 +145,34 @@
 }
 
 .offre-card {
-  cursor: pointer;
+  position: relative;
+  display: block;
+  height: 100%;
   transition: transform 150ms ease, box-shadow 150ms ease;
 
   &:hover {
     transform: translateY(-3px);
     box-shadow: var(--shadow-lg);
+  }
+
+  &:focus-within {
+    outline: 2px solid var(--pnlf-green-700);
+    outline-offset: 2px;
+  }
+}
+
+.offre-card__link {
+  color: inherit;
+  text-decoration: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  &:focus-visible {
+    outline: none;
   }
 }
 

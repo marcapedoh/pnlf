@@ -93,10 +93,16 @@ def main() -> int:
                 erreurs += 1
                 continue
             role = rep['user']['role']
-            code_ecran, _ = client.requete('GET', ECRAN_PAR_ROLE[role], jeton=rep['access'])
-            ok = code_ecran == 200
+            code_ecran, corps = client.requete('GET', ECRAN_PAR_ROLE[role], jeton=rep['access'])
+            if rep['user'].get('doit_changer_mdp'):
+                code_me, _ = client.requete('GET', '/api/accounts/me/', jeton=rep['access'])
+                bloque = code_ecran == 403 and isinstance(corps, dict) and corps.get('code') == 'password_change_required'
+                ok = bloque and code_me == 200
+                extra = f' (changement de mot de passe exigé : écran bloqué, /api/accounts/me/ HTTP {code_me})'
+            else:
+                ok = code_ecran == 200
+                extra = ''
             erreurs += 0 if ok else 1
-            extra = ' (changement de mot de passe exigé)' if rep['user'].get('doit_changer_mdp') else ''
             print(f'{"OK   " if ok else "ECHEC"}  {adresse} : connecté [{role}], écran {ECRAN_PAR_ROLE[role]} HTTP {code_ecran}{extra}')
         else:
             ok = code in (400, 401)

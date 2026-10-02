@@ -10,17 +10,18 @@
 
   <pnlf-card title="Créer une zone de collecte">
     @if (errorMessage()) {
-      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;" role="alert">{{ errorMessage() }}</pnlf-alert>
     }
-    <form [formGroup]="form" (ngSubmit)="submit()" class="zone-form">
-      <pnlf-text-field label="Code" formControlName="code" [required]="true" />
-      <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" />
-      <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" />
+    <form [formGroup]="form" (ngSubmit)="submit()" class="zone-form" novalidate>
+      <pnlf-text-field label="Code" formControlName="code" [required]="true" [errorMessage]="err('code', 'Le code est requis.')" />
+      <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" [errorMessage]="err('libelle', 'Le libellé est requis.')" />
+      <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" [errorMessage]="err('province', 'Sélectionnez la province.')" />
       <pnlf-text-field label="Description" formControlName="description" />
-      <pnlf-text-field label="Latitude (WGS84)" formControlName="latitude" placeholder="ex : -0.5546" />
-      <pnlf-text-field label="Longitude (WGS84)" formControlName="longitude" placeholder="ex : 11.6642" />
+      <pnlf-text-field label="Latitude (WGS84)" formControlName="latitude" placeholder="ex : -0.5546" inputmode="decimal" hint="Entre -4 et 2,5" [errorMessage]="err('latitude')" />
+      <pnlf-text-field label="Longitude (WGS84)" formControlName="longitude" placeholder="ex : 11.6642" inputmode="decimal" hint="Entre 8,5 et 14,6" [errorMessage]="err('longitude')" />
       <div class="zone-form__actions">
-        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer</button>
+        <button pnlfButton type="button" variant="ghost" (click)="showForm.set(false)">Annuler</button>
+        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer la zone</button>
       </div>
     </form>
   </pnlf-card>
@@ -40,20 +41,21 @@
       <code>description</code>, <code>latitude</code>, <code>longitude</code>. Une zone existante (même code) est mise à jour.
     </p>
     @if (importError()) {
-      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ importError() }}</pnlf-alert>
+      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;" role="alert">{{ importError() }}</pnlf-alert>
     }
     <div class="zone-import__row">
       <label class="zone-import__file">
-        <input type="file" accept=".csv,.xlsx" (change)="onImportFileSelected($event)" hidden />
+        <input type="file" accept=".csv,.xlsx" (change)="onImportFileSelected($event)" class="pnlf-visually-hidden" />
         {{ importFileName() || 'Choisir un fichier…' }}
       </label>
       <button pnlfButton variant="primary" [loading]="importing()" (click)="importer()">Lancer l'import</button>
     </div>
     @if (importResult(); as res) {
-      <div class="zone-import__result">
+      <div class="zone-import__result" role="status">
         <p class="text-sm">
-          <strong>{{ res.total_lignes }}</strong> ligne(s) traitée(s) —
-          <strong>{{ res.crees }}</strong> créée(s), <strong>{{ res.mis_a_jour }}</strong> mise(s) à jour.
+          <strong>{{ res.total_lignes }}</strong> {{ res.total_lignes > 1 ? 'lignes traitées' : 'ligne traitée' }} :
+          <strong>{{ res.crees }}</strong> {{ res.crees > 1 ? 'créées' : 'créée' }},
+          <strong>{{ res.mis_a_jour }}</strong> {{ res.mis_a_jour > 1 ? 'mises à jour' : 'mise à jour' }}.
         </p>
         @if (res.erreurs.length) {
           <ul class="zone-import__errors">
@@ -78,13 +80,13 @@
           Importer un fichier
         </button>
         <a pnlfButton variant="ghost" [href]="modeleUrl" (click)="telechargerModele($event)">Télécharger le modèle CSV</a>
-        <button pnlfButton variant="primary" (click)="showForm.set(true); showImport.set(false)">
+        <button pnlfButton variant="primary" (click)="ouvrirFormulaire()">
           + Nouvelle zone
         </button>
       </div>
     } @else {
       <p class="text-sm text-muted zone-import__hint" style="margin-bottom: 1rem;">
-        Seules les autorités (admin, ministère, forestier) enrichissent le référentiel national.
+        Seules les autorités (administration, ministère, agents forestiers) enrichissent le référentiel national.
         Vous pouvez toutefois créer une zone au moment de déclarer un lot.
       </p>
     }
@@ -97,7 +99,7 @@
         id="zone-search"
         type="search"
         class="pnlf-select pnlf-toolbar__search"
-        placeholder="Rechercher un code ou un libellé…"
+        placeholder="Code ou libellé"
         [ngModel]="search()"
         (ngModelChange)="onSearchInput($event)"
       />
@@ -105,7 +107,7 @@
   </div>
 
   @if (loading()) {
-    <div class="pnlf-table-wrapper">
+    <div class="pnlf-table-wrapper" role="status" aria-label="Chargement des zones">
       <table class="pnlf-table">
         <tbody>
           @for (i of [1, 2, 3, 4, 5]; track i) {
@@ -114,10 +116,19 @@
         </tbody>
       </table>
     </div>
+  } @else if (loadError()) {
+    <pnlf-alert tone="error" title="Impossible de charger les zones de collecte">
+      {{ loadError() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+    </pnlf-alert>
   } @else if (items().length === 0) {
-    <pnlf-empty-state icon="map-pin" title="Aucune zone de collecte" description="Les zones recensées serviront au rattachement des lots. Vous pouvez aussi en créer une au moment de déclarer un lot.">
+    <pnlf-empty-state
+      icon="map-pin"
+      [title]="search() ? 'Aucune zone trouvée' : 'Aucune zone de collecte'"
+      [description]="search() ? 'Aucune zone ne correspond à votre recherche.' : 'Les zones recensées serviront au rattachement des lots. Vous pouvez aussi en créer une au moment de déclarer un lot.'"
+    >
       @if (canManage) {
-        <button pnlfButton variant="primary" type="button" (click)="showForm.set(true)">Créer une zone</button>
+        <button pnlfButton variant="primary" type="button" (click)="ouvrirFormulaire()">Créer une zone</button>
       } @else {
         <a pnlfButton routerLink="/app/lots/nouveau" variant="outline">Déclarer un lot</a>
       }
@@ -125,27 +136,36 @@
   } @else {
     <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
-        <thead><tr><th>Code</th><th>Libellé</th><th>Province</th><th>Coordonnées GPS</th><th></th></tr></thead>
+        <caption class="pnlf-visually-hidden">Liste des zones de collecte</caption>
+        <thead>
+          <tr>
+            <th scope="col">Code</th>
+            <th scope="col">Libellé</th>
+            <th scope="col">Province</th>
+            <th scope="col">Coordonnées GPS</th>
+            <th scope="col"><span class="pnlf-visually-hidden">Fiche</span></th>
+          </tr>
+        </thead>
         <tbody>
           @for (z of items(); track z.id) {
             <tr class="zone-row" (click)="openDetail(z)">
               <td data-label="Code">{{ z.code }}</td>
               <td data-label="Libellé">{{ z.libelle }}</td>
-              <td data-label="Province">{{ z.province_nom }}</td>
+              <td data-label="Province">{{ z.province_nom || '-' }}</td>
               <td class="pnlf-table__muted" data-label="Coordonnées GPS">
                 @if (z.latitude && z.longitude) {
                   {{ z.latitude }}, {{ z.longitude }}
                 } @else {
-                  —
+                  -
                 }
               </td>
-              <td data-label=""><a class="pnlf-table__link" [routerLink]="['/app/zones-collecte', z.id]" (click)="$event.stopPropagation()">Voir la fiche →</a></td>
+              <td data-label="Fiche"><a class="pnlf-table__link" [routerLink]="['/app/zones-collecte', z.id]" (click)="$event.stopPropagation()" [attr.aria-label]="'Voir la fiche de la zone ' + z.libelle">Voir la fiche →</a></td>
             </tr>
           }
         </tbody>
       </table>
     </div>
 
-    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" label="Pagination des zones" (pageChange)="goToPage($event)" />
   }
 }

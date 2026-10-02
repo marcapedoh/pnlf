@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
+import { revealFormErrors } from '../../../core/forms/form-errors.util';
 import { toApiError } from '../../../core/http/api-error.util';
 import { PasswordService } from '../../../core/services/password.service';
 import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
@@ -26,6 +27,7 @@ import { AuthLayoutComponent } from '../auth-layout/auth-layout.component';
 export class ForgotPasswordComponent {
   private readonly fb = inject(FormBuilder);
   private readonly passwordService = inject(PasswordService);
+  private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly loading = signal(false);
   readonly submitted = signal(false);
@@ -47,7 +49,10 @@ export class ForgotPasswordComponent {
   submit(): void {
     this.submitted.set(true);
     this.errorMessage.set('');
-    if (this.form.invalid) return;
+    if (this.form.invalid) {
+      revealFormErrors(this.form, this.host);
+      return;
+    }
 
     this.loading.set(true);
     this.passwordService.requestReset(this.form.getRawValue().email).subscribe({

@@ -25,6 +25,7 @@ from rest_framework.throttling import AnonRateThrottle
 from accounts.audit import request_meta, write_audit
 from accounts.messaging import envoyer_email, envoyer_sms
 from accounts.models import Utilisateur
+from config.validators import CoordonneesGabonMixin, TelephoneField
 
 from .db_utils import set_optional_column
 from .models import Cooperative, Departement, DocumentInscription, Producteur, Province, Village
@@ -45,12 +46,15 @@ LIBELLES_TYPE = {
 }
 
 
-class InscriptionPubliqueSerializer(serializers.Serializer):
+class InscriptionPubliqueSerializer(CoordonneesGabonMixin, serializers.Serializer):
     type_demande = serializers.ChoiceField(choices=TYPES_DEMANDE)
     nom = serializers.CharField(max_length=150)
     prenoms = serializers.CharField(max_length=150, required=False, allow_blank=True)
     email = serializers.EmailField()
-    telephone = serializers.CharField(max_length=30, min_length=6)
+    telephone = TelephoneField(error_messages={
+        'required': 'Le numéro de téléphone est requis.',
+        'blank': 'Le numéro de téléphone est requis.',
+    })
     date_naissance = serializers.DateField(required=False, allow_null=True)
     latitude = serializers.DecimalField(
         max_digits=10, decimal_places=7, required=False, allow_null=True,
@@ -58,8 +62,15 @@ class InscriptionPubliqueSerializer(serializers.Serializer):
     longitude = serializers.DecimalField(
         max_digits=10, decimal_places=7, required=False, allow_null=True,
     )
-    password = serializers.CharField(write_only=True, min_length=8)
-    password_confirmation = serializers.CharField(write_only=True, min_length=8)
+    password = serializers.CharField(write_only=True, min_length=8, error_messages={
+        'required': 'Le mot de passe est requis.',
+        'blank': 'Le mot de passe est requis.',
+        'min_length': 'Le mot de passe doit contenir au moins 8 caractères.',
+    })
+    password_confirmation = serializers.CharField(write_only=True, error_messages={
+        'required': 'Confirmez votre mot de passe.',
+        'blank': 'Confirmez votre mot de passe.',
+    })
     photo = serializers.FileField(required=False, allow_null=True)
     # Documents administratifs (facultatifs selon le profil — validés après coup dans validate()).
     document_cni = serializers.FileField(required=False, allow_null=True)
@@ -95,7 +106,12 @@ class InscriptionPubliqueSerializer(serializers.Serializer):
     def validate_email(self, value):
         value = value.strip().lower()
         if Utilisateur.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
-            raise serializers.ValidationError('Un compte existe déjà avec cette adresse email.')
+            raise serializers.ValidationError('Un compte existe déjà avec cette adresse e-mail.')
+        return value
+
+    def validate_date_naissance(self, value):
+        if value is not None and value >= timezone.localdate():
+            raise serializers.ValidationError('La date de naissance doit être antérieure à aujourd’hui.')
         return value
 
     def validate_password(self, value):
@@ -175,7 +191,8 @@ class PublicInscriptionView(generics.CreateAPIView):
 
         type_demande = data['type_demande']
         nom = data['nom'].strip()
-        prenoms = (data.get('prenoms') or '').strip() or 'Coopérative'
+        # Une coopérative n'a pas de prénom : le nom affiché est celui de la structure.
+        prenoms = '' if type_demande == 'COOPERATIVE' else (data.get('prenoms') or '').strip()
 
         with transaction.atomic():
             now = timezone.now()
@@ -287,9 +304,9 @@ def _enregistrer_documents_administratifs(entite_type, entite_id, sous_dossier, 
 
 
 def _notifier_accuse_reception(user: Utilisateur, type_libelle: str) -> None:
-    sujet = "PFNL — Accusé de réception de votre inscription"
+    sujet = "PFNL : accusé de réception de votre inscription"
     corps = (
-        f'Bonjour {user.prenoms} {user.nom},\n\n'
+        f'Bonjour {user.get_full_name()},\n\n'
         f"Nous avons bien reçu votre demande d'inscription en tant que {type_libelle} sur la "
         'plateforme PFNL (École Nationale des Eaux et Forêts).\n'
         'Un administrateur va examiner votre dossier. Vous recevrez un email et un SMS de '
@@ -314,7 +331,7 @@ def _notifier_admins(user: Utilisateur, type_libelle: str, table_cible: str, fic
         creer_notification(
             admin_id,
             "Nouvelle demande d'inscription",
-            f'{user.prenoms} {user.nom} ({type_libelle}) a soumis une demande d\'inscription. '
+            f'{user.get_full_name()} ({type_libelle}) a soumis une demande d\'inscription. '
             'Ouvrez sa fiche pour la valider ou la rejeter.',
             metadata={'table_cible': table_cible, 'enregistrement_id': str(fiche_id)},
         )

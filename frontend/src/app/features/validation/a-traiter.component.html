@@ -10,6 +10,11 @@
 
 @if (loading()) {
   <pnlf-skeleton height="280px" radius="16px" />
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible de charger la file à traiter">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
 } @else if (data(); as d) {
   @if (total() === 0) {
     <pnlf-empty-state
@@ -26,8 +31,8 @@
           <ul class="inbox-list">
             @for (p of d.producteurs.results; track p.id) {
               <li>
-                <a [routerLink]="['/app/producteurs', p.id]">{{ p.prenoms }} {{ p.nom }}</a>
-                <span>{{ p.code_producteur }} · {{ p.created_at | date: 'dd/MM/yyyy' }}</span>
+                <a [routerLink]="['/app/producteurs', p.id]">{{ nomActeur(p) }}</a>
+                <span>{{ p.code_producteur }} · {{ p.created_at | pnlfDate }}</span>
               </li>
             }
           </ul>
@@ -43,7 +48,7 @@
             @for (c of d.cooperatives.results; track c.id) {
               <li>
                 <a [routerLink]="['/app/cooperatives', c.id]">{{ c.nom }}</a>
-                <span>{{ c.code }} · {{ c.created_at | date: 'dd/MM/yyyy' }}</span>
+                <span>{{ c.code }} · {{ c.created_at | pnlfDate }}</span>
               </li>
             }
           </ul>
@@ -61,7 +66,7 @@
             @for (c of d.certifications.results; track c.id) {
               <li>
                 <a routerLink="/app/certifications">{{ c.type_libelle }}</a>
-                <span>{{ c.producteur_nom }} · {{ c.created_at | date: 'dd/MM/yyyy' }}</span>
+                <span>{{ c.producteur_nom }} · {{ c.created_at | pnlfDate }}</span>
               </li>
             }
           </ul>
@@ -69,7 +74,7 @@
         }
       </pnlf-card>
 
-      <pnlf-card title="Annonces marketplace" [subtitle]="d.offres.count + ' en attente'">
+      <pnlf-card title="Annonces de la place de marché" [subtitle]="d.offres.count + ' en attente'">
         @if (!canValidateOffresCertifs) {
           <p class="text-sm text-muted">La publication des annonces est réservée à l’administrateur et à l’agent du ministère.</p>
         } @else if (d.offres.results.length === 0) {
@@ -79,7 +84,7 @@
             @for (o of d.offres.results; track o.id) {
               <li>
                 <a [routerLink]="['/app/marketplace/offres', o.id]">{{ o.titre }}</a>
-                <span>{{ o.type_annonce }} · {{ o.created_at | date: 'dd/MM/yyyy' }}</span>
+                <span>{{ o.type_annonce === 'DEMANDE' ? 'Demande' : 'Offre' }} · {{ o.created_at | pnlfDate }}</span>
               </li>
             }
           </ul>
@@ -94,8 +99,8 @@
           <ul class="inbox-list">
             @for (a of d.acheteurs!.results; track a.id) {
               <li>
-                <a [routerLink]="['/app/utilisateurs', a.id]">{{ a.prenoms }} {{ a.nom }}</a>
-                <span>{{ a.created_at | date: 'dd/MM/yyyy' }}</span>
+                <a [routerLink]="['/app/utilisateurs', a.id]">{{ nomActeur(a) }}</a>
+                <span>{{ a.created_at | pnlfDate }}</span>
               </li>
             }
           </ul>

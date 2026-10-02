@@ -6,9 +6,9 @@
       @if (p.photo_url) {
         <img [src]="p.photo_url" [alt]="p.prenoms + ' ' + p.nom" />
       } @else {
-        <span class="producteur-detail__initials">{{ initials(p) }}</span>
+        <span class="producteur-detail__initials" aria-hidden="true">{{ initials(p) }}</span>
       }
-      @if (canManage) {
+      @if (canEditPhoto) {
         <label class="producteur-detail__photo-btn">
           <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onPhotoSelected($event)" hidden />
           {{ uploadingPhoto() ? 'Envoi…' : 'Changer la photo' }}
@@ -18,7 +18,7 @@
     <div class="pnlf-page-header producteur-detail__header">
       <div>
         <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
-          <a routerLink="/app/producteurs">Producteurs &amp; collecteurs</a>
+          <a routerLink="/app/producteurs">{{ isProducteurRole ? 'Ma fiche' : 'Producteurs & collecteurs' }}</a>
           <span aria-hidden="true">›</span>
           <span aria-current="page">{{ p.prenoms }} {{ p.nom }}</span>
         </nav>
@@ -30,16 +30,18 @@
         </div>
       </div>
       <div class="producteur-detail__actions">
-        <a pnlfButton routerLink="/app/producteurs" variant="ghost">← Retour à la liste</a>
+        @if (!isProducteurRole) {
+          <a pnlfButton routerLink="/app/producteurs" variant="ghost">← Retour à la liste</a>
+        }
         @if (canValidate && p.statut === StatutProducteur.EN_VALIDATION) {
-          <button pnlfButton variant="outline" (click)="valider()">Valider la fiche</button>
-          <button pnlfButton variant="ghost" (click)="rejeter()">Rejeter</button>
+          <button pnlfButton variant="outline" (click)="dialog.set({ kind: 'valider' })">Valider la fiche</button>
+          <button pnlfButton variant="ghost" (click)="dialog.set({ kind: 'rejeter' })">Rejeter</button>
         }
         @if (canValidate && p.statut === StatutProducteur.ACTIF) {
-          <button pnlfButton variant="ghost" (click)="desactiver()">Désactiver</button>
+          <button pnlfButton variant="ghost" (click)="dialog.set({ kind: 'desactiver' })">Désactiver</button>
         }
         @if (canValidate && p.statut === StatutProducteur.INACTIF) {
-          <button pnlfButton variant="outline" (click)="activer()">Réactiver</button>
+          <button pnlfButton variant="outline" (click)="dialog.set({ kind: 'activer' })">Réactiver</button>
         }
         <button pnlfButton variant="outline" type="button" (click)="exporterPdf()">
           Imprimer la fiche (PDF)
@@ -54,13 +56,26 @@
   <div class="producteur-detail__grid">
     <pnlf-card title="Informations personnelles">
       <dl class="producteur-detail__dl">
-        <div><dt>Téléphone</dt><dd [class.is-missing]="estManquant(p.telephone)">{{ p.telephone || 'Non renseigné' }}</dd></div>
-        <div><dt>E-mail</dt><dd [class.is-missing]="estManquant(p.email)">{{ p.email || 'Non renseigné' }}</dd></div>
-        <div><dt>Date de naissance</dt><dd [class.is-missing]="estManquant(p.date_naissance)">{{ (p.date_naissance | date: 'dd/MM/yyyy') || 'Non renseignée' }}</dd></div>
+        @if (aLaCle(p, 'telephone')) {
+          <div><dt>Téléphone</dt><dd [class.is-missing]="estManquant(p.telephone)">{{ (p.telephone | pnlfTelephone) || 'Non renseigné' }}</dd></div>
+        }
+        @if (aLaCle(p, 'email')) {
+          <div><dt>Adresse e-mail</dt><dd [class.is-missing]="estManquant(p.email)">{{ p.email || 'Non renseignée' }}</dd></div>
+        }
+        @if (aLaCle(p, 'date_naissance')) {
+          <div><dt>Date de naissance</dt><dd [class.is-missing]="estManquant(p.date_naissance)">{{ (p.date_naissance | pnlfDate) || 'Non renseignée' }}</dd></div>
+        }
         <div><dt>Communauté</dt><dd [class.is-missing]="estManquant(p.communaute)">{{ p.communaute || 'Non renseignée' }}</dd></div>
-        <div><dt>Type de pièce d'identité</dt><dd [class.is-missing]="estManquant(p.type_piece_identite)">{{ p.type_piece_identite || 'Non renseigné' }}</dd></div>
-        <div><dt>N° de la pièce</dt><dd [class.is-missing]="estManquant(p.numero_piece)">{{ p.numero_piece || 'Non renseigné' }}</dd></div>
+        @if (aLaCle(p, 'type_piece_identite')) {
+          <div><dt>Type de pièce d'identité</dt><dd [class.is-missing]="estManquant(p.type_piece_identite)">{{ p.type_piece_identite || 'Non renseigné' }}</dd></div>
+        }
+        @if (aLaCle(p, 'numero_piece')) {
+          <div><dt>N° de la pièce</dt><dd [class.is-missing]="estManquant(p.numero_piece)">{{ p.numero_piece || 'Non renseigné' }}</dd></div>
+        }
       </dl>
+      @if (!aLaCle(p, 'telephone')) {
+        <p class="text-sm text-muted">Les coordonnées et pièces d'identité ne sont visibles que par l'administration et le titulaire de la fiche.</p>
+      }
     </pnlf-card>
 
     <pnlf-card title="Localisation">
@@ -68,46 +83,52 @@
         <div><dt>Province</dt><dd [class.is-missing]="estManquant(p.province_nom)">{{ p.province_nom || 'Non renseignée' }}</dd></div>
         <div><dt>Coordonnées GPS</dt>
           <dd [class.is-missing]="estManquant(p.latitude) || estManquant(p.longitude)">
-            {{ !estManquant(p.latitude) && !estManquant(p.longitude) ? p.latitude + ', ' + p.longitude : 'Non renseignées (optionnel)' }}
+            {{ !estManquant(p.latitude) && !estManquant(p.longitude) ? p.latitude + ', ' + p.longitude : 'Non renseignées (facultatif)' }}
           </dd>
         </div>
-        <div><dt>Coopérative</dt><dd [class.is-missing]="estManquant(p.cooperative)">{{ p.cooperative || 'Aucune' }}</dd></div>
-        <div><dt>Enregistré le</dt><dd>{{ p.created_at | date: 'dd/MM/yyyy' }}</dd></div>
+        <div><dt>Coopérative</dt><dd [class.is-missing]="estManquant(p.cooperative_nom)">{{ p.cooperative_nom || 'Aucune' }}</dd></div>
+        <div><dt>Enregistré le</dt><dd>{{ p.created_at | pnlfDate }}</dd></div>
       </dl>
     </pnlf-card>
   </div>
 
-  <pnlf-card title="Message du demandeur / notes de dossier">
-    @if (estManquant(p.notes)) {
-      <p class="producteur-detail__notes producteur-detail__notes--missing">Aucune note ni message n'a été renseigné par le demandeur.</p>
-    } @else {
-      <p class="producteur-detail__notes">{{ p.notes }}</p>
-    }
-  </pnlf-card>
-
-  <pnlf-card title="Documents administratifs joints" subtitle="Pièces déposées lors de la demande d'inscription">
-    <ul class="producteur-documents">
-      @for (attendu of typesDocumentsAttendus; track attendu.type) {
-        @if (documentPour(attendu.type); as doc) {
-          <li>
-            <span class="producteur-documents__label">{{ attendu.label }}</span>
-            <a [href]="doc.url ?? ''" target="_blank" rel="noopener" class="pnlf-table__link">
-              {{ doc.nom_original || 'Voir le document' }}
-            </a>
-            <span class="text-xs text-muted">{{ doc.created_at | date: 'dd/MM/yyyy' }}</span>
-          </li>
-        } @else {
-          <li class="is-missing">
-            <span class="producteur-documents__label">{{ attendu.label }}</span>
-            <span>{{ attendu.requis ? 'Non fourni (obligatoire)' : 'Non fourni (optionnel)' }}</span>
-          </li>
-        }
+  @if (aLaCle(p, 'notes')) {
+    <pnlf-card title="Message du demandeur / notes de dossier">
+      @if (estManquant(p.notes)) {
+        <p class="producteur-detail__notes producteur-detail__notes--missing">Aucune note ni message n'a été renseigné par le demandeur.</p>
+      } @else {
+        <p class="producteur-detail__notes">{{ p.notes }}</p>
       }
-    </ul>
-  </pnlf-card>
+    </pnlf-card>
+  }
+
+  @if (canValidate) {
+    <pnlf-card title="Documents administratifs joints" subtitle="Pièces déposées lors de la demande d'inscription">
+      <ul class="producteur-documents">
+        @for (attendu of typesDocumentsAttendus; track attendu.type) {
+          @if (documentPour(attendu.type); as doc) {
+            <li>
+              <span class="producteur-documents__label">{{ attendu.label }}</span>
+              <a [href]="doc.url ?? ''" target="_blank" rel="noopener" class="pnlf-table__link">
+                {{ doc.nom_original || 'Voir le document' }}
+              </a>
+              <span class="text-xs text-muted">{{ doc.created_at | pnlfDate }}</span>
+            </li>
+          } @else {
+            <li class="is-missing">
+              <span class="producteur-documents__label">{{ attendu.label }}</span>
+              <span>{{ attendu.requis ? 'Non fourni (obligatoire)' : 'Non fourni (facultatif)' }}</span>
+            </li>
+          }
+        }
+      </ul>
+    </pnlf-card>
+  }
 
   <pnlf-card title="Lots déclarés" subtitle="10 lots les plus récents associés à ce producteur">
-    @if (lots().length === 0) {
+    @if (lotsError()) {
+      <pnlf-alert tone="error">{{ lotsError() }}</pnlf-alert>
+    } @else if (lots().length === 0) {
       <pnlf-empty-state icon="package" title="Aucun lot associé" description="Les lots déclarés par ce producteur apparaîtront ici." />
     } @else {
       <div class="pnlf-table-wrapper">
@@ -120,7 +141,7 @@
               <tr>
                 <td><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
                 <td>{{ lot.produit_nom }}</td>
-                <td>{{ lot.quantite }} {{ lot.unite }}</td>
+                <td>{{ lot.quantite | pnlfQuantite: lot.unite }}</td>
                 <td><pnlf-status-badge [label]="statutLotLabels[lot.statut]" [tone]="lotTone(lot.statut)" /></td>
               </tr>
             }
@@ -139,8 +160,8 @@
           <li>
             <header>
               <strong>{{ m.nom_visiteur }}</strong>
-              <span>{{ m.email_visiteur }}{{ m.telephone_visiteur ? ' · ' + m.telephone_visiteur : '' }}</span>
-              <time>{{ m.created_at | date: 'dd/MM/yyyy HH:mm' }}</time>
+              <span>{{ m.email_visiteur }}{{ m.telephone_visiteur ? ' · ' + (m.telephone_visiteur | pnlfTelephone) : '' }}</span>
+              <time [attr.datetime]="m.created_at">{{ m.created_at | pnlfDate: 'datetime' }}</time>
             </header>
             <p>{{ m.message }}</p>
             @if (m.statut !== 'TRAITE') {
@@ -153,10 +174,24 @@
       </ul>
     }
   </pnlf-card>
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible d’afficher la fiche">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
 } @else {
   <pnlf-empty-state icon="users" title="Producteur introuvable" />
 }
 
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'valider'"
+  title="Valider cette fiche ?"
+  message="La fiche deviendra active et apparaîtra dans l’annuaire public. Le compte lié, s’il existe, sera activé et son titulaire prévenu."
+  confirmLabel="Valider la fiche"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'rejeter'"
   title="Rejeter la fiche"
@@ -175,6 +210,15 @@
   message="Elle disparaîtra de l’annuaire public et le compte lié sera bloqué."
   confirmLabel="Désactiver"
   [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'activer'"
+  title="Réactiver cette fiche ?"
+  message="Elle réapparaîtra dans l’annuaire public et le compte lié sera débloqué."
+  confirmLabel="Réactiver"
   [loading]="dialogLoading()"
   (confirmed)="onDialogConfirm($event)"
   (cancelled)="dialog.set(null)"

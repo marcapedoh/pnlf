@@ -31,8 +31,17 @@ export class TextFieldComponent implements ControlValueAccessor {
   readonly hint = input<string>('');
   readonly errorMessage = input<string>('');
   readonly required = input(false);
-  readonly autocomplete = input<string>('off');
+  /** Laisser vide pour conserver le comportement natif du navigateur. */
+  readonly autocomplete = input<string>('');
   readonly icon = input<string>('');
+  readonly name = input<string>('');
+  readonly inputmode = input<string>('');
+  readonly min = input<string | number | null>(null);
+  readonly max = input<string | number | null>(null);
+  readonly step = input<string | number | null>(null);
+  readonly maxlength = input<number | null>(null);
+  /** Nom accessible lorsque le champ n'a pas de libellé visible (recherche, filtres). */
+  readonly ariaLabel = input<string>('');
 
   readonly id = `pnlf-field-${uid++}`;
   readonly value = signal<string>('');

@@ -3,8 +3,11 @@
     <div class="auth-layout__brand-pattern"></div>
     <div class="auth-layout__brand-content">
       <img
-        src="assets/brand/logo-enef.jpg"
-        alt="Logo de l'École Nationale des Eaux et Forêts"
+        src="assets/brand/logo-enef-256.png"
+        srcset="assets/brand/logo-enef-256.png 1x, assets/brand/logo-enef.png 2x"
+        width="96"
+        height="96"
+        alt="École Nationale des Eaux et Forêts du Gabon"
         class="auth-layout__seal"
       />
       <p class="auth-layout__eyebrow">République Gabonaise</p>
@@ -31,7 +34,7 @@
         </li>
       </ul>
 
-      <p class="auth-layout__motto">« Union — Travail — Justice »</p>
+      <p class="auth-layout__motto">« Union, Travail, Justice »</p>
     </div>
   </section>
 
@@ -39,8 +42,11 @@
     <div class="auth-layout__panel-inner">
       <div class="auth-layout__mobile-brand">
         <img
-          src="assets/brand/logo-enef.jpg"
-          alt="Logo de l'École Nationale des Eaux et Forêts"
+          src="assets/brand/logo-enef-128.png"
+          srcset="assets/brand/logo-enef-128.png 1x, assets/brand/logo-enef-256.png 2x"
+          width="52"
+          height="52"
+          alt="École Nationale des Eaux et Forêts du Gabon"
           class="auth-layout__mobile-seal"
         />
         <div>
@@ -48,7 +54,9 @@
           <p class="auth-layout__mobile-title">PFNL · Traçabilité</p>
         </div>
       </div>
-      <a routerLink="/" class="auth-layout__back-link">← Retour au site public</a>
+      @if (!hideBackLink()) {
+        <a routerLink="/" class="auth-layout__back-link">← Retour au site public</a>
+      }
       <ng-content></ng-content>
     </div>
   </section>

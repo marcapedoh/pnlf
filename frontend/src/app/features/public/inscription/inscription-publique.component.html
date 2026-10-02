@@ -19,7 +19,7 @@
         <p>
           Votre demande a été enregistrée avec l’adresse <strong>{{ s.email }}</strong>.
           Conservez votre numéro de dossier. Vous recevrez un e-mail et un SMS dès que votre compte
-          sera validé — vous pourrez alors vous connecter avec le mot de passe choisi.
+          sera validé. Vous pourrez alors vous connecter avec le mot de passe choisi.
         </p>
         <p class="text-sm text-muted">Tant que le dossier n’est pas validé, la connexion affichera un message d’attente (et non une erreur de mot de passe).</p>
         <div class="inscription-form__actions">
@@ -30,11 +30,14 @@
     </pnlf-card>
   } @else {
     <pnlf-card>
-      <ol class="wizard-steps">
-        <li [class.is-active]="step() === 1" [class.is-done]="step() > 1">1. Identité</li>
-        <li [class.is-active]="step() === 2" [class.is-done]="step() > 2">2. Localisation</li>
-        <li [class.is-active]="step() === 3">3. Confirmation</li>
+      <ol class="wizard-steps" aria-label="Étapes de l’inscription">
+        <li [class.is-active]="step() === 1" [class.is-done]="step() > 1" [attr.aria-current]="step() === 1 ? 'step' : null">1. Identité</li>
+        <li [class.is-active]="step() === 2" [class.is-done]="step() > 2" [attr.aria-current]="step() === 2 ? 'step' : null">2. Localisation</li>
+        <li [class.is-active]="step() === 3" [attr.aria-current]="step() === 3 ? 'step' : null">3. Confirmation</li>
       </ol>
+
+      <h2 #stepTitle class="pnlf-visually-hidden" tabindex="-1">Étape {{ step() }} sur 3 : {{ stepTitles[step() - 1] }}</h2>
+      <p class="text-sm text-muted">Les champs marqués d’un astérisque (*) sont obligatoires.</p>
 
       @if (errorMessage()) {
         <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;">{{ errorMessage() }}</pnlf-alert>
@@ -63,13 +66,9 @@
               </button>
             }
           </div>
-          <p class="text-sm text-muted">
-            Producteur : vous cultivez ou exploitez des PFNL. Collecteur : vous récoltez en forêt.
-            Coopérative : vous représentez un groupement. Acheteur : vous souhaitez acheter et discuter avec les acteurs.
-          </p>
 
           @if (!isAcheteur) {
-          <h3 class="inscription-form__section">Photo {{ isCooperative ? 'de la coopérative' : "d'identité" }}</h3>
+          <h3 class="inscription-form__section">Photo {{ isCooperative ? 'de la coopérative' : "d'identité" }} <span class="inscription-form__req" aria-hidden="true">*</span></h3>
           <div class="photo-picker">
             <div class="photo-picker__preview">
               @if (photoPreview()) {
@@ -83,22 +82,22 @@
                 Choisir une photo
                 <input id="photo-input" type="file" accept="image/png,image/jpeg,image/webp" (change)="onPhotoSelected($event)" hidden />
               </label>
-              <p class="photo-picker__hint">JPEG, PNG ou WEBP — 5 Mo maximum.</p>
+              <p class="photo-picker__hint">JPEG, PNG ou WEBP, 5 Mo maximum.</p>
               @if (submitted() && photoError()) {
-                <p class="photo-picker__error">{{ photoError() }}</p>
+                <p class="photo-picker__error" role="alert">{{ photoError() }}</p>
               }
             </div>
           </div>
 
-          <h3 class="inscription-form__section">Pièce d'identité (CNI)</h3>
+          <h3 class="inscription-form__section">Pièce d'identité (CNI) <span class="inscription-form__req" aria-hidden="true">*</span></h3>
           <div class="document-picker">
             <label class="photo-picker__button" for="cni-input">
               {{ documentCniName() || 'Choisir un fichier' }}
               <input id="cni-input" type="file" accept=".pdf,.jpg,.jpeg,.png" (change)="onDocumentCniSelected($event)" hidden />
             </label>
-            <p class="photo-picker__hint">PDF, JPEG ou PNG — 8 Mo maximum. Ce document est examiné par un administrateur avant validation de votre dossier.</p>
+            <p class="photo-picker__hint">PDF, JPEG ou PNG, 8 Mo maximum. Ce document est examiné par un administrateur avant validation de votre dossier.</p>
             @if (submitted() && documentCniError()) {
-              <p class="photo-picker__error">{{ documentCniError() }}</p>
+              <p class="photo-picker__error" role="alert">{{ documentCniError() }}</p>
             }
           </div>
           }
@@ -110,42 +109,49 @@
             <pnlf-text-field
               [label]="isCooperative ? 'Nom de la coopérative' : 'Nom'"
               formControlName="nom"
+              [autocomplete]="isCooperative ? 'organization' : 'family-name'"
               [required]="true"
-              [errorMessage]="submitted() && form.controls.nom.invalid ? 'Ce champ est requis.' : ''"
+              [errorMessage]="err('nom')"
             />
             @if (!isCooperative) {
               <pnlf-text-field
                 label="Prénoms"
                 formControlName="prenoms"
+                autocomplete="given-name"
                 [required]="true"
-                [errorMessage]="submitted() && !form.controls.prenoms.value ? 'Ce champ est requis.' : ''"
+                [errorMessage]="err('prenoms')"
               />
             } @else {
-              <pnlf-text-field label="Numéro d'agrément (optionnel)" formControlName="numero_agrement" hint="À compléter si déjà attribué, sinon laissez vide." />
+              <pnlf-text-field label="Numéro d'agrément (facultatif)" formControlName="numero_agrement" hint="À compléter si déjà attribué, sinon laissez vide." [errorMessage]="err('numero_agrement')" />
             }
 
             <pnlf-text-field
               label="Adresse e-mail (identifiant de connexion)"
               type="email"
               formControlName="email"
+              autocomplete="email"
               [required]="true"
-              [errorMessage]="submitted() && form.controls.email.invalid ? 'Adresse e-mail valide requise.' : ''"
+              [errorMessage]="err('email')"
             />
             <pnlf-text-field
               label="Téléphone"
               type="tel"
               formControlName="telephone"
-              placeholder="+241 …"
+              autocomplete="tel"
+              inputmode="tel"
+              placeholder="+241 77 00 01 02"
               [required]="true"
-              [errorMessage]="submitted() && form.controls.telephone.invalid ? 'Numéro de téléphone requis.' : ''"
+              [errorMessage]="err('telephone')"
             />
             @if (isPersonne) {
               <pnlf-text-field
                 label="Date de naissance"
                 type="date"
                 formControlName="date_naissance"
+                autocomplete="bday"
+                [max]="today"
                 [required]="true"
-                [errorMessage]="submitted() && form.controls.date_naissance.invalid ? 'La date de naissance est requise.' : ''"
+                [errorMessage]="err('date_naissance')"
               />
             }
           </div>
@@ -156,16 +162,18 @@
               label="Mot de passe"
               type="password"
               formControlName="password"
+              autocomplete="new-password"
               [required]="true"
-              hint="8 caractères minimum."
-              [errorMessage]="submitted() && form.controls.password.invalid ? 'Mot de passe trop court (8 caractères minimum).' : ''"
+              hint="8 caractères minimum. Évitez un mot de passe courant, uniquement numérique ou proche de votre nom ou de votre adresse e-mail."
+              [errorMessage]="err('password')"
             />
             <pnlf-text-field
               label="Confirmer le mot de passe"
               type="password"
               formControlName="password_confirmation"
+              autocomplete="new-password"
               [required]="true"
-              [errorMessage]="submitted() && form.errors?.['mismatch'] ? 'Les mots de passe ne correspondent pas.' : ''"
+              [errorMessage]="confirmationError()"
             />
           </div>
         }
@@ -178,19 +186,19 @@
               formControlName="province"
               [options]="provinces()"
               [required]="!isAcheteur"
-              [errorMessage]="submitted() && form.controls.province.invalid ? 'La province est requise.' : ''"
+              [errorMessage]="err('province')"
             />
             @if (isAcheteur) {
-              <pnlf-text-field label="Adresse (optionnel)" formControlName="adresse" />
+              <pnlf-text-field label="Adresse (facultatif)" formControlName="adresse" autocomplete="street-address" [errorMessage]="err('adresse')" />
             } @else if (!isCooperative) {
               <pnlf-select-field
-                label="Département (optionnel)"
+                label="Département (facultatif)"
                 formControlName="departement"
                 [options]="departements()"
                 placeholder="Sélectionner une province d'abord"
               />
               <pnlf-select-field
-                label="Village (optionnel)"
+                label="Village (facultatif)"
                 formControlName="village"
                 [options]="villages()"
                 placeholder="Sélectionner un département d'abord"
@@ -248,11 +256,17 @@
             </div>
           }
 
-          <pnlf-text-field
-            label="Message (optionnel)"
-            formControlName="message"
-            placeholder="Parlez-nous de votre activité, vos produits, votre zone de collecte…"
-          />
+          <div class="inscription-form__message">
+            <label for="inscription-message">Message (facultatif)</label>
+            <textarea
+              id="inscription-message"
+              class="pnlf-select"
+              formControlName="message"
+              rows="4"
+              maxlength="2000"
+              placeholder="Parlez-nous de votre activité, vos produits, votre zone de collecte…"
+            ></textarea>
+          </div>
 
           <label class="conditions-check">
             <input type="checkbox" formControlName="accepte_conditions" />
@@ -262,7 +276,7 @@
             </span>
           </label>
           @if (submitted() && form.controls.accepte_conditions.invalid) {
-            <p class="photo-picker__error">Vous devez cocher cette case pour poursuivre.</p>
+            <p class="photo-picker__error" role="alert">Cochez cette case pour envoyer votre demande.</p>
           }
         }
 

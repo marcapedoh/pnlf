@@ -17,9 +17,11 @@ from accounts.serializers import (
     ChangePasswordSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    PnlfTokenObtainPairSerializer,
     UtilisateurAdminSerializer,
     UtilisateurSerializer,
 )
+from accounts.views import set_refresh_cookie
 from pnlf_platform.services import creer_notification
 
 
@@ -43,6 +45,7 @@ def _interdit_mutation_admin(acteur, cible: Utilisateur) -> None:
 
 class MeView(generics.RetrieveAPIView):
     serializer_class = UtilisateurSerializer
+    allow_password_change_required = True
 
     def get_object(self):
         return self.request.user
@@ -70,6 +73,12 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         _interdit_mutation_admin(self.request.user, serializer.instance)
+        if serializer.instance.id == self.request.user.id:
+            data = serializer.validated_data
+            if 'statut' in data and data['statut'] != serializer.instance.statut:
+                raise ValidationError({'statut': 'Vous ne pouvez pas modifier le statut de votre propre compte.'})
+            if 'role' in data and data['role'] != serializer.instance.role:
+                raise ValidationError({'role': 'Vous ne pouvez pas modifier votre propre rôle.'})
         user = serializer.save()
         ip, ua = request_meta(self.request)
         write_audit(
@@ -79,6 +88,8 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         _interdit_mutation_admin(self.request.user, instance)
+        if instance.id == self.request.user.id:
+            raise PermissionDenied('Vous ne pouvez pas désactiver votre propre compte.')
         if instance.role == Utilisateur.Role.ADMINISTRATEUR:
             raise PermissionDenied('Impossible de supprimer un administrateur.')
         instance.deleted_at = timezone.now()
@@ -109,6 +120,8 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
     def suspendre(self, request, pk=None):
         u = self.get_object()
         _interdit_mutation_admin(request.user, u)
+        if u.id == request.user.id:
+            raise PermissionDenied('Vous ne pouvez pas suspendre votre propre compte.')
         u.statut = Utilisateur.Statut.SUSPENDU
         u.updated_at = timezone.now()
         u.save(update_fields=['statut', 'updated_at'])
@@ -149,7 +162,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
         lien = _lien_reinitialisation(token)
         envoyer_email(
             destinataire_id=user.id, email=user.email,
-            sujet='PFNL — Réinitialisation de mot de passe',
+            sujet='PFNL : réinitialisation de mot de passe',
             corps_texte=(
                 f'Bonjour {user.prenoms} {user.nom},\n\n'
                 'Un administrateur a demandé la réinitialisation de votre mot de passe. '
@@ -165,12 +178,19 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
 
 
 class ChangePasswordView(APIView):
+    """Changement de mot de passe : renvoie une nouvelle session (l'ancienne est révoquée
+    par l'empreinte ``pwd`` des jetons) pour que l'utilisateur reste connecté."""
+
+    allow_password_change_required = True
+
     def post(self, request):
-        ser = ChangePasswordSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
         user = request.user
+        ser = ChangePasswordSerializer(data=request.data, context={'user': user})
+        ser.is_valid(raise_exception=True)
         if not user.check_password(ser.validated_data['ancien_mot_de_passe']):
-            return Response({'detail': 'Ancien mot de passe incorrect.'}, status=400)
+            return Response(
+                {'ancien_mot_de_passe': ['Le mot de passe actuel est incorrect.']}, status=400,
+            )
         user.set_password(ser.validated_data['nouveau_mot_de_passe'])
         user.doit_changer_mdp = False
         user.updated_at = timezone.now()
@@ -180,7 +200,14 @@ class ChangePasswordView(APIView):
             utilisateur_id=user.id, action='PASSWORD_CHANGE', table_cible='utilisateurs',
             enregistrement_id=user.id, ip_adresse=ip, user_agent=ua,
         )
-        return Response({'detail': 'Mot de passe modifié.'})
+        refresh = PnlfTokenObtainPairSerializer.get_token(user)
+        response = Response({
+            'detail': 'Mot de passe modifié.',
+            'access': str(refresh.access_token),
+            'user': UtilisateurSerializer(user, context={'request': request}).data,
+        })
+        set_refresh_cookie(response, str(refresh))
+        return response
 
 
 class PasswordResetRequestView(APIView):
@@ -208,7 +235,7 @@ class PasswordResetRequestView(APIView):
         lien = _lien_reinitialisation(token)
         envoyer_email(
             destinataire_id=user.id, email=user.email,
-            sujet='PFNL — Réinitialisation de mot de passe',
+            sujet='PFNL : réinitialisation de mot de passe',
             corps_texte=(
                 f'Bonjour {user.prenoms} {user.nom},\n\n'
                 'Une demande de réinitialisation de mot de passe a été faite pour votre compte. '
@@ -239,11 +266,16 @@ class PasswordResetConfirmView(APIView):
                 token_hash=token_hash, utilise_at__isnull=True, expire_at__gt=now,
             )
         except ReinitialisationMdp.DoesNotExist:
-            return Response({'detail': 'Token invalide ou expiré.'}, status=400)
+            return Response(
+                {'detail': 'Ce lien de réinitialisation est invalide ou a expiré. Demandez-en un nouveau.'},
+                status=400,
+            )
         user = reset.utilisateur
         user.set_password(ser.validated_data['nouveau_mot_de_passe'])
+        # Le mot de passe vient d'être choisi par le titulaire lui-même.
+        user.doit_changer_mdp = False
         user.updated_at = now
-        user.save(update_fields=['mot_de_passe_hash', 'updated_at'])
+        user.save(update_fields=['mot_de_passe_hash', 'doit_changer_mdp', 'updated_at'])
         reset.utilise_at = now
         reset.save(update_fields=['utilise_at'])
         return Response({'detail': 'Mot de passe réinitialisé.'})

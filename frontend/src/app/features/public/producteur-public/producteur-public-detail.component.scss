@@ -452,6 +452,22 @@
   gap: var(--space-3);
 }
 
+.contact-form__hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.contact-form__req,
+.contact-form__error {
+  color: var(--danger-600, #b42318);
+}
+
+.contact-form__error {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
 .chat-cta__text {
   font-size: var(--fs-sm);
   color: var(--text-secondary);

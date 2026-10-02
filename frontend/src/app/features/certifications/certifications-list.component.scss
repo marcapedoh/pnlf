@@ -102,8 +102,20 @@
   color: var(--pnlf-green-700);
 }
 
+.cert-form__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
 .cert-detail-doc__upload {
   cursor: pointer;
+
+  &:focus-within span {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
 }
 
 .cert-detail-modal__actions {

@@ -9,6 +9,7 @@ python scripts/media_sync.py restaurer || echo "WARN: restauration medias incomp
 
 echo "==> jeu de demonstration (cree une seule fois, non bloquant)"
 python scripts/seed_demo_acteurs.py || echo "WARN: seed demo ignore"
+python scripts/corriger_prenoms_cooperatives.py || echo "WARN: correction prenoms cooperatives ignoree"
 
 echo "==> envoi des medias manquants vers le stockage objet (non bloquant)"
 python scripts/media_sync.py pousser || echo "WARN: envoi medias incomplet"

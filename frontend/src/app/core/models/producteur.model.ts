@@ -36,6 +36,7 @@ export interface Producteur {
   latitude: number | null;
   longitude: number | null;
   cooperative: string | null;
+  cooperative_nom?: string | null;
   utilisateur_id: string | null;
   statut: StatutProducteur;
   valide_par_id: string | null;
@@ -65,7 +66,7 @@ export enum StatutCooperative {
 
 export const STATUT_COOPERATIVE_LABELS: Record<StatutCooperative, string> = {
   [StatutCooperative.ACTIF]: 'Active',
-  [StatutCooperative.INACTIF]: 'Désactivée',
+  [StatutCooperative.INACTIF]: 'Inactive',
   [StatutCooperative.EN_VALIDATION]: 'En attente de validation',
   [StatutCooperative.REJETE]: 'Rejetée',
 };

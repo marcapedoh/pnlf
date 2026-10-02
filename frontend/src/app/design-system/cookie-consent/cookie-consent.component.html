@@ -1,19 +1,13 @@
 @if (!hasChoice()) {
-  <div class="cookie-consent" role="dialog" aria-modal="false" aria-label="Consentement aux cookies">
+  <div class="cookie-consent" role="region" aria-label="Information sur les cookies">
     <div class="cookie-consent__inner">
       <p class="cookie-consent__text">
-        Nous utilisons uniquement des cookies techniques essentiels (connexion, préférences, sécurité)
-        nécessaires au fonctionnement de la plateforme PFNL. Aucun cookie publicitaire n'est déposé.
-        Consultez notre <a routerLink="/politique-cookies">politique de cookies</a> pour en savoir plus.
+        Ce site n'utilise que des cookies techniques indispensables (connexion, sécurité).
+        <a routerLink="/politique-cookies">En savoir plus</a>
       </p>
-      <div class="cookie-consent__actions">
-        <button pnlfButton variant="outline" size="sm" type="button" (click)="acceptEssentialOnly()">
-          Essentiels uniquement
-        </button>
-        <button pnlfButton variant="primary" size="sm" type="button" (click)="acceptAll()">
-          Tout accepter
-        </button>
-      </div>
+      <button pnlfButton variant="gold" size="sm" type="button" (click)="acknowledge()">
+        J'ai compris
+      </button>
     </div>
   </div>
 }

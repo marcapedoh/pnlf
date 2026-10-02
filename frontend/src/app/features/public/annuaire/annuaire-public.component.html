@@ -5,7 +5,7 @@
       <h1>Producteurs &amp; collecteurs de PFNL</h1>
       <p>
         Acteurs validés de la filière gabonaise. Consultez leur fiche, leurs lots tracés
-        et leurs certifications — puis contactez-les sans créer de compte.
+        et leurs certifications, puis contactez-les sans créer de compte.
       </p>
     </div>
   </header>
@@ -62,6 +62,10 @@
           <pnlf-skeleton height="380px" />
         }
       </div>
+    } @else if (loadError()) {
+      <pnlf-empty-state icon="alert-triangle" title="Impossible de charger l’annuaire" [description]="loadError()">
+        <button type="button" pnlfButton variant="outline" (click)="load()">Réessayer</button>
+      </pnlf-empty-state>
     } @else if (producteurs().length === 0) {
       <pnlf-empty-state
         icon="users"
@@ -72,9 +76,9 @@
       </pnlf-empty-state>
     } @else {
       <div class="annuaire-toolbar">
-        <p>
-          <strong>{{ producteurs().length }}</strong>
-          acteur{{ producteurs().length > 1 ? 's' : '' }} validé{{ producteurs().length > 1 ? 's' : '' }}
+        <p aria-live="polite">
+          <strong>{{ total() }}</strong>
+          acteur{{ total() > 1 ? 's' : '' }} validé{{ total() > 1 ? 's' : '' }}
         </p>
       </div>
       <div class="annuaire-grid">
@@ -91,7 +95,7 @@
                 @if (p.certifications?.length) {
                   <span class="actor-card__verified" title="Certifié">
                     <pnlf-icon name="shield-check" [size]="14" />
-                    {{ p.certifications!.length }} certif.
+                    {{ p.certifications!.length }} certification{{ p.certifications!.length > 1 ? 's' : '' }}
                   </span>
                 }
               </div>
@@ -99,7 +103,7 @@
                 <h2>{{ p.prenoms }} {{ p.nom }}</h2>
                 <p class="actor-card__place">
                   <pnlf-icon name="map-pin" [size]="14" />
-                  <span>{{ p.province_nom }}@if (p.communaute) { · {{ p.communaute }} }</span>
+                  <span>{{ localisation(p) }}</span>
                 </p>
                 @if (p.cooperative_nom) {
                   <p class="actor-card__coop">
@@ -132,7 +136,7 @@
     }
 
     @if (!loading() && total() > pageSize) {
-      <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+      <pnlf-pagination label="Pagination de l’annuaire" [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
     }
   </div>
 </div>

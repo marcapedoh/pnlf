@@ -13,7 +13,16 @@
 </div>
 
 <pnlf-card>
-  @if (service.items().length === 0) {
+  @if (loading()) {
+    <div class="pnlf-stack" style="gap: var(--space-3);" aria-busy="true">
+      @for (i of [1, 2, 3, 4]; track i) { <pnlf-skeleton height="56px" radius="10px" /> }
+    </div>
+  } @else if (loadError()) {
+    <pnlf-alert tone="error">
+      {{ loadError() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+    </pnlf-alert>
+  } @else if (service.items().length === 0) {
   <pnlf-empty-state
     icon="bell"
     title="Aucune notification"
@@ -33,10 +42,10 @@
               <p class="notif-list__title">{{ n.titre }}</p>
               @if (openedId() === n.id) {
                 <p class="notif-list__body notif-list__body--full">{{ n.corps }}</p>
-                <p class="notif-list__date">{{ n.created_at | date: 'dd/MM/yyyy HH:mm' }}</p>
+                <p class="notif-list__date">{{ n.created_at | pnlfDate: 'datetime' }}</p>
               } @else {
                 <p class="notif-list__body">{{ n.corps }}</p>
-                <p class="notif-list__date">{{ n.created_at | date: 'dd/MM/yyyy HH:mm' }}</p>
+                <p class="notif-list__date">{{ n.created_at | pnlfDate: 'datetime' }}</p>
               }
             </div>
             @if (!n.lue) {
@@ -58,6 +67,6 @@
   }
 </pnlf-card>
 
-@if (service.items().length > 0) {
-  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="service.total()" (pageChange)="goToPage($event)" />
+@if (!loading() && service.items().length > 0) {
+  <pnlf-pagination label="Pagination des notifications" [page]="page()" [pageSize]="pageSize" [total]="service.total()" (pageChange)="goToPage($event)" />
 }

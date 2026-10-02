@@ -71,6 +71,7 @@ class PnlfTokenRefreshView(TokenRefreshView):
     serializer_class = PnlfTokenRefreshSerializer
     permission_classes = [permissions.AllowAny]
     throttle_classes = [RefreshRateThrottle]
+    allow_password_change_required = True
 
     def post(self, request, *args, **kwargs):
         data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
@@ -92,6 +93,7 @@ class PnlfTokenRefreshView(TokenRefreshView):
 
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    allow_password_change_required = True
 
     def post(self, request):
         # Pas de blacklist SimpleJWT (incompatible avec Utilisateur UUID).
@@ -102,6 +104,7 @@ class LogoutView(APIView):
 
 class MeView(generics.RetrieveAPIView):
     serializer_class = UtilisateurSerializer
+    allow_password_change_required = True
 
     def get_object(self):
         return self.request.user

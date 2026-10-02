@@ -4,43 +4,54 @@
   <div class="coop-detail__hero">
     <div class="coop-detail__photo">
       @if (c.photo_url) {
-        <img [src]="c.photo_url" [alt]="c.nom" />
+        <img [src]="c.photo_url" [alt]="'Logo de ' + c.nom" />
       } @else {
-        <span class="coop-detail__initials">{{ initials(c.nom) }}</span>
+        <span class="coop-detail__initials" aria-hidden="true">{{ initials(c.nom) }}</span>
       }
       @if (canManagePhoto) {
         <label class="coop-detail__photo-btn">
-          <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onPhotoSelected($event)" hidden />
+          <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onPhotoSelected($event)" class="pnlf-visually-hidden" />
           {{ uploadingPhoto() ? 'Envoi…' : 'Changer le logo' }}
         </label>
       }
     </div>
     <div class="pnlf-page-header coop-detail__header">
       <div>
-        <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
-          <a routerLink="/app/cooperatives">Coopératives</a>
-          <span aria-hidden="true">›</span>
-          <span aria-current="page">{{ c.nom }}</span>
-        </nav>
-        <p class="text-eyebrow">{{ c.code }}</p>
+        @if (isCoopRole) {
+          <p class="text-eyebrow">Ma coopérative · {{ c.code }}</p>
+        } @else {
+          <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
+            <a routerLink="/app/cooperatives">Coopératives</a>
+            <span aria-hidden="true">›</span>
+            <span aria-current="page">{{ c.nom }}</span>
+          </nav>
+          <p class="text-eyebrow">{{ c.code }}</p>
+        }
         <h1 class="pnlf-page-header__title">{{ c.nom }}</h1>
         <pnlf-status-badge [label]="statutLabels[c.statut]" [tone]="tone(c.statut)" />
       </div>
       <div class="coop-detail__actions">
         @if (canValidate && c.statut === StatutCooperative.EN_VALIDATION) {
-          <button pnlfButton variant="outline" (click)="valider()">Valider</button>
-          <button pnlfButton variant="ghost" (click)="rejeter()">Rejeter</button>
+          <button pnlfButton variant="outline" (click)="dialog.set({ kind: 'valider' })">Valider</button>
+          <button pnlfButton variant="ghost" (click)="dialog.set({ kind: 'rejeter' })">Rejeter</button>
         }
         @if (canValidate && c.statut === StatutCooperative.ACTIF) {
-          <button pnlfButton variant="ghost" (click)="desactiver()">Désactiver</button>
+          <button pnlfButton variant="ghost" (click)="dialog.set({ kind: 'desactiver' })">Désactiver</button>
         }
         @if (canValidate && c.statut === StatutCooperative.INACTIF) {
-          <button pnlfButton variant="outline" (click)="activer()">Réactiver</button>
+          <button pnlfButton variant="outline" (click)="dialog.set({ kind: 'activer' })">Réactiver</button>
         }
-        <button pnlfButton variant="outline" type="button" (click)="exporterPdf()">
-          Imprimer la fiche (PDF)
-        </button>
-        <a pnlfButton routerLink="/app/cooperatives" variant="ghost">← Retour à la liste</a>
+        @if (isProducteur && c.statut === StatutCooperative.ACTIF) {
+          <button pnlfButton variant="primary" (click)="dialog.set({ kind: 'adhesion' })">Demander à rejoindre</button>
+        }
+        @if (!isProducteur) {
+          <button pnlfButton variant="outline" type="button" (click)="exporterPdf()">
+            Imprimer la fiche (PDF)
+          </button>
+        }
+        @if (!isCoopRole) {
+          <a pnlfButton routerLink="/app/cooperatives" variant="ghost">← Retour à la liste</a>
+        }
       </div>
     </div>
   </div>
@@ -48,20 +59,20 @@
   <div class="coop-detail__grid">
     <pnlf-card title="Coordonnées">
       <dl class="coop-detail__dl">
-        <div><dt>Numéro d'agrément</dt><dd>{{ c.numero_agrement || '—' }}</dd></div>
-        <div><dt>Téléphone</dt><dd>{{ c.telephone || '—' }}</dd></div>
-        <div><dt>E-mail</dt><dd>{{ c.email || '—' }}</dd></div>
-        <div><dt>Adresse</dt><dd>{{ c.adresse || '—' }}</dd></div>
-        <div><dt>Province</dt><dd>{{ c.province_nom || '—' }}</dd></div>
+        <div><dt>Numéro d'agrément</dt><dd>{{ c.numero_agrement || 'Non renseigné' }}</dd></div>
+        <div><dt>Téléphone</dt><dd>{{ (c.telephone | pnlfTelephone) || 'Non renseigné' }}</dd></div>
+        <div><dt>Adresse e-mail</dt><dd>{{ c.email || 'Non renseignée' }}</dd></div>
+        <div><dt>Adresse</dt><dd>{{ c.adresse || 'Non renseignée' }}</dd></div>
+        <div><dt>Province</dt><dd>{{ c.province_nom || 'Non renseignée' }}</dd></div>
       </dl>
     </pnlf-card>
 
     <pnlf-card title="Suivi">
       <dl class="coop-detail__dl">
         <div><dt>Statut</dt><dd>{{ statutLabels[c.statut] }}</dd></div>
-        <div><dt>Créée le</dt><dd>{{ c.created_at | date: 'dd/MM/yyyy' }}</dd></div>
-        <div><dt>Dernière mise à jour</dt><dd>{{ c.updated_at | date: 'dd/MM/yyyy' }}</dd></div>
-        <div><dt>Membres actifs</dt><dd>{{ membres().length }}</dd></div>
+        <div><dt>Créée le</dt><dd>{{ c.created_at | pnlfDate }}</dd></div>
+        <div><dt>Dernière mise à jour</dt><dd>{{ c.updated_at | pnlfDate }}</dd></div>
+        <div><dt>Membres actifs</dt><dd>{{ membresActifs() }}</dd></div>
       </dl>
     </pnlf-card>
   </div>
@@ -75,19 +86,35 @@
             id="coop-membre-search"
             type="text"
             class="pnlf-select"
-            placeholder="Rechercher un producteur par nom, code ou téléphone…"
+            role="combobox"
+            autocomplete="off"
+            aria-autocomplete="list"
+            aria-controls="coop-membre-results"
+            [attr.aria-expanded]="membreComboOpen"
+            [attr.aria-invalid]="membreError() ? true : null"
+            [attr.aria-describedby]="membreError() ? 'coop-membre-error' : null"
+            placeholder="Saisissez au moins 2 caractères : nom ou code"
             [value]="membreQuery()"
             (input)="onMembreQueryChange($any($event.target).value)"
+            (keydown)="onMembreKeydown($event)"
           />
-          @if (membreResults().length > 0) {
-            <ul class="coop-membres__results">
-              @for (p of membreResults(); track p.id) {
-                <li>
-                  <button type="button" (click)="selectCandidat(p)">
-                    <strong>{{ p.prenoms }} {{ p.nom }}</strong>
-                    <span>{{ p.code_producteur }} · {{ p.province_nom }}</span>
-                  </button>
-                </li>
+          @if (membreComboOpen) {
+            <ul class="coop-membres__results" id="coop-membre-results" role="listbox" aria-label="Producteurs trouvés">
+              @if (searchingMembre()) {
+                <li class="coop-membres__state" role="status">Recherche en cours…</li>
+              } @else if (membreSearchError()) {
+                <li class="coop-membres__state" role="alert">{{ membreSearchError() }}</li>
+              } @else if (membreResults().length === 0) {
+                <li class="coop-membres__state" role="status">Aucun producteur disponible ne correspond à « {{ membreQuery().trim() }} ».</li>
+              } @else {
+                @for (p of membreResults(); track p.id) {
+                  <li role="option" aria-selected="false">
+                    <button type="button" (click)="selectCandidat(p)">
+                      <strong>{{ p.prenoms }} {{ p.nom }}</strong>
+                      <span>{{ p.code_producteur }} · {{ p.province_nom || 'Province non renseignée' }}</span>
+                    </button>
+                  </li>
+                }
               }
             </ul>
           }
@@ -96,25 +123,47 @@
           Enregistrer le membre
         </button>
       </div>
-      @if (selectedCandidat()) {
+      @if (membreError()) {
+        <p class="coop-membres__error" id="coop-membre-error" role="alert">{{ membreError() }}</p>
+      } @else if (selectedCandidat()) {
         <p class="coop-membres__ok">✓ {{ selectedCandidat()!.prenoms }} {{ selectedCandidat()!.nom }} sélectionné</p>
       }
     }
     @if (membres().length === 0) {
-      <pnlf-empty-state icon="users" title="Aucun membre rattaché" description="Recherchez un producteur ci-dessus pour l’enregistrer comme membre." />
+      <pnlf-empty-state
+        icon="users"
+        title="Aucun membre rattaché"
+        [description]="canAddMembres ? 'Recherchez un producteur ci-dessus pour l’enregistrer comme membre.' : 'Les membres de la coopérative apparaîtront ici.'"
+      />
     } @else {
       <div class="pnlf-table-wrapper">
         <table class="pnlf-table">
-          <thead><tr><th>Producteur / collecteur</th><th>Adhésion</th><th>Statut</th>@if (canAddMembres) {<th></th>}</tr></thead>
+          <caption class="pnlf-visually-hidden">Membres de la coopérative</caption>
+          <thead>
+            <tr>
+              <th scope="col">Producteur / collecteur</th>
+              <th scope="col">Adhésion</th>
+              <th scope="col">Statut</th>
+              @if (canAddMembres) {
+                <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
+              }
+            </tr>
+          </thead>
           <tbody>
             @for (m of membres(); track m.producteur) {
               <tr>
-                <td><a class="pnlf-table__link" [routerLink]="['/app/producteurs', m.producteur]">{{ m.producteur_nom }}</a></td>
-                <td>{{ m.date_adhesion | date: 'dd/MM/yyyy' }}</td>
+                <td>
+                  @if (isProducteur) {
+                    {{ m.producteur_nom }}
+                  } @else {
+                    <a class="pnlf-table__link" [routerLink]="['/app/producteurs', m.producteur]">{{ m.producteur_nom }}</a>
+                  }
+                </td>
+                <td>{{ (m.date_adhesion | pnlfDate) || '-' }}</td>
                 <td><pnlf-status-badge [label]="m.actif ? 'Actif' : 'Inactif'" [tone]="m.actif ? 'success' : 'neutral'" /></td>
                 @if (canAddMembres) {
                   <td>
-                    <button pnlfButton type="button" variant="ghost" size="sm" (click)="confirmerRetrait(m)">Retirer</button>
+                    <button pnlfButton type="button" variant="ghost" size="sm" (click)="dialog.set({ kind: 'retirer', producteur: m.producteur, nom: m.producteur_nom })" [attr.aria-label]="'Retirer ' + m.producteur_nom + ' de la coopérative'">Retirer</button>
                   </td>
                 }
               </tr>
@@ -124,10 +173,24 @@
       </div>
     }
   </pnlf-card>
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible d’afficher la coopérative">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
 } @else {
   <pnlf-empty-state icon="building" title="Coopérative introuvable" />
 }
 
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'valider'"
+  title="Valider cette coopérative ?"
+  [message]="coopNom() + ' deviendra active, apparaîtra dans l’annuaire public et son compte sera activé.'"
+  confirmLabel="Valider"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'rejeter'"
   title="Rejeter la demande"
@@ -143,7 +206,7 @@
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'desactiver'"
   title="Désactiver cette coopérative ?"
-  message="Elle disparaîtra de l’annuaire public."
+  [message]="coopNom() + ' disparaîtra de l’annuaire public et son compte sera bloqué.'"
   confirmLabel="Désactiver"
   [danger]="true"
   [loading]="dialogLoading()"
@@ -151,9 +214,27 @@
   (cancelled)="dialog.set(null)"
 />
 <pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'activer'"
+  title="Réactiver cette coopérative ?"
+  [message]="coopNom() + ' réapparaîtra dans l’annuaire public et son compte sera débloqué.'"
+  confirmLabel="Réactiver"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'adhesion'"
+  title="Demander à rejoindre cette coopérative ?"
+  [message]="'Votre demande sera transmise à ' + coopNom() + ', qui pourra l’accepter depuis son espace.'"
+  confirmLabel="Envoyer la demande"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
   [open]="dialog()?.kind === 'retirer'"
   title="Retirer ce membre ?"
-  [message]="'Le producteur ' + (dialog()?.nom || '') + ' ne fera plus partie de la coopérative.'"
+  [message]="(dialog()?.nom || 'Ce producteur') + ' ne fera plus partie de la coopérative.'"
   confirmLabel="Retirer"
   [danger]="true"
   [loading]="dialogLoading()"

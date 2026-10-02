@@ -359,8 +359,12 @@ def etape_comptes(s: Seed) -> None:
         s.api(email('admin.demo'), 'post', '/api/accounts/utilisateurs/', {
             'email': email(local), 'telephone': tel, 'role': role, 'statut': 'ACTIF',
             'nom': nom, 'prenoms': prenoms, 'password': MOT_DE_PASSE,
-            'preferences_notif': 'EMAIL', 'doit_changer_mdp': options.get('doit_changer_mdp', False),
+            'preferences_notif': 'EMAIL',
         })
+        # L'API force doit_changer_mdp=True à la création : état de démonstration rétabli ici.
+        Utilisateur.objects.filter(email=email(local)).update(
+            doit_changer_mdp=options.get('doit_changer_mdp', False),
+        )
     suspendu = s.utilisateur(email('forestier.suspendu'))
     s.api(email('admin.demo'), 'post', f'/api/accounts/utilisateurs/{suspendu.id}/suspendre/')
 
@@ -911,13 +915,15 @@ def bilan() -> None:
 def creer_jeu(s: Seed) -> None:
     from django.db import connection
 
-    # Répare les lots avec code vide (bloque la contrainte UNIQUE en prod).
+    # Répare les lots avec code vide (bloque la contrainte UNIQUE en prod) au format standard
+    # PNLF-AAAAMMJJ-XXXXXXXXXX ; les anciens codes « PNLF-FIX-… » de cette réparation sont renommés.
     with connection.cursor() as cur:
         cur.execute(
             """
             UPDATE lots
-               SET code_lot = 'PNLF-FIX-' || UPPER(SUBSTRING(REPLACE(id::text, '-', '') FROM 1 FOR 12))
-             WHERE code_lot IS NULL OR code_lot = ''
+               SET code_lot = 'PNLF-' || TO_CHAR(COALESCE(created_at, NOW()), 'YYYYMMDD') || '-'
+                              || UPPER(SUBSTRING(REPLACE(id::text, '-', '') FROM 1 FOR 10))
+             WHERE code_lot IS NULL OR code_lot = '' OR code_lot LIKE 'PNLF-FIX-%%'
             """
         )
         if cur.rowcount:

@@ -1,7 +1,7 @@
 <div class="pnlf-page-header">
   <div>
     <p class="text-eyebrow">Mon espace</p>
-    <h1 class="pnlf-page-header__title">Mon profil &amp; paramètres</h1>
+    <h1 class="pnlf-page-header__title">Mon profil</h1>
     <p class="pnlf-page-header__subtitle">Informations de votre compte sur la plateforme PFNL.</p>
   </div>
 </div>
@@ -11,7 +11,7 @@
     <dl class="parametres-dl">
       <div><dt>Nom complet</dt><dd>{{ auth.fullName() }}</dd></div>
       <div><dt>E-mail</dt><dd>{{ auth.currentUser()?.email }}</dd></div>
-      <div><dt>Téléphone</dt><dd>{{ auth.currentUser()?.telephone || '—' }}</dd></div>
+      <div><dt>Téléphone</dt><dd>{{ auth.currentUser()?.telephone || 'Non renseigné' }}</dd></div>
       <div><dt>Profil</dt><dd>{{ roleLabels[auth.currentUser()!.role] }}</dd></div>
       <div><dt>Statut du compte</dt><dd>{{ statutLabel(auth.currentUser()?.statut) }}</dd></div>
     </dl>

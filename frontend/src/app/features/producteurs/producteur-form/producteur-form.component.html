@@ -8,74 +8,135 @@
       Ces informations serviront à établir la traçabilité des lots déclarés par cet acteur.
     </p>
   </div>
-  <a pnlfButton routerLink="/app/producteurs" variant="ghost">← Retour à la liste</a>
+  @if (isEdit) {
+    <a pnlfButton [routerLink]="['/app/producteurs', producteurId]" variant="ghost">← Retour à la fiche</a>
+  } @else {
+    <a pnlfButton routerLink="/app/producteurs" variant="ghost">← Retour à la liste</a>
+  }
 </div>
 
 <pnlf-card>
-  @if (errorMessage()) {
-    <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;">{{ errorMessage() }}</pnlf-alert>
-  }
+  @if (loadingFiche()) {
+    <div class="producteur-form__state" role="status">
+      <pnlf-spinner size="md" />
+      <span>Chargement de la fiche…</span>
+    </div>
+  } @else if (loadError()) {
+    <pnlf-alert tone="error" title="Impossible de charger la fiche">
+      {{ loadError() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="loadFiche(producteurId!)">Réessayer</button>
+    </pnlf-alert>
+  } @else {
+    @if (errorMessage()) {
+      <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;" role="alert">{{ errorMessage() }}</pnlf-alert>
+    }
 
-  <form [formGroup]="form" (ngSubmit)="submit()" class="producteur-form" novalidate>
-    <div class="producteur-form__grid">
-      <pnlf-text-field label="Nom" formControlName="nom" [required]="true" [errorMessage]="submitted() && form.controls.nom.invalid ? 'Le nom est requis.' : ''" />
-      <pnlf-text-field label="Prénoms" formControlName="prenoms" [required]="true" [errorMessage]="submitted() && form.controls.prenoms.invalid ? 'Les prénoms sont requis.' : ''" />
+    <form [formGroup]="form" (ngSubmit)="submit()" class="producteur-form" novalidate>
+      <p class="text-sm text-muted">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
+      <div class="producteur-form__grid">
+        <pnlf-text-field label="Nom" formControlName="nom" [required]="true" autocomplete="family-name" [errorMessage]="err('nom', 'Le nom est requis.')" />
+        <pnlf-text-field label="Prénoms" formControlName="prenoms" [required]="true" autocomplete="given-name" [errorMessage]="err('prenoms', 'Les prénoms sont requis.')" />
 
-      <pnlf-select-field label="Type d'acteur" formControlName="type_acteur" [options]="typeActeurOptions" [required]="true" />
-      <pnlf-text-field label="Date de naissance" type="date" formControlName="date_naissance" />
-
-      <pnlf-text-field label="Téléphone" type="tel" formControlName="telephone" placeholder="+241 …" />
-      <pnlf-text-field label="E-mail" type="email" formControlName="email" />
-
-      <pnlf-text-field label="Communauté / Village d'usage" formControlName="communaute" />
-      <pnlf-select-field
-        label="Coopérative (optionnel)"
-        formControlName="cooperative"
-        [options]="cooperatives()"
-        placeholder="Aucune"
-      />
-
-      <pnlf-select-field
-        label="Province"
-        formControlName="province"
-        [options]="provinces()"
-        [required]="true"
-        [errorMessage]="submitted() && form.controls.province.invalid ? 'La province est requise.' : ''"
-      />
-      <pnlf-select-field
-        label="Département"
-        formControlName="departement"
-        [options]="departements()"
-        placeholder="Sélectionner une province d'abord"
-      />
-
-      <pnlf-select-field
-        label="Village"
-        formControlName="village"
-        [options]="villages()"
-        placeholder="Sélectionner un département d'abord"
-      />
-      <div></div>
-
-      <div class="lot-form__field" style="grid-column: 1 / -1;">
-        <button pnlfButton type="button" variant="ghost" size="sm" (click)="useCurrentPosition()" [disabled]="locatingGps()">
-          {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position actuelle' }}
-        </button>
-        @if (gpsError()) {
-          <p class="text-sm text-muted">{{ gpsError() }}</p>
+        <pnlf-select-field label="Type d'acteur" formControlName="type_acteur" [options]="typeActeurOptions" [required]="true" />
+        @if (isLisible('date_naissance')) {
+          <pnlf-text-field label="Date de naissance" type="date" formControlName="date_naissance" [max]="today" [errorMessage]="err('date_naissance')" />
         }
+
+        @if (isLisible('telephone')) {
+          <pnlf-text-field
+            label="Téléphone"
+            type="tel"
+            formControlName="telephone"
+            placeholder="+241 77 00 01 02"
+            autocomplete="tel"
+            inputmode="tel"
+            hint="Format attendu : +241 77 00 01 02"
+            [errorMessage]="err('telephone')"
+          />
+        }
+        @if (isLisible('email')) {
+          <pnlf-text-field label="Adresse e-mail" type="email" formControlName="email" autocomplete="email" [errorMessage]="err('email')" />
+        }
+
+        <pnlf-text-field label="Communauté / Village d'usage" formControlName="communaute" />
+        @if (canEditCooperative) {
+          <pnlf-select-field
+            label="Coopérative (facultatif)"
+            formControlName="cooperative"
+            [options]="cooperatives()"
+            placeholder="Aucune"
+          />
+        } @else if (cooperativeNom()) {
+          <div class="producteur-form__readonly">
+            <span class="pnlf-field__label">Coopérative</span>
+            <p>{{ cooperativeNom() }}</p>
+            @if (isEdit) {
+              <small class="text-muted">Le rattachement se modifie via la demande d'adhésion ou la gestion des membres.</small>
+            }
+          </div>
+        }
+
+        <pnlf-select-field
+          label="Province"
+          formControlName="province"
+          [options]="provinces()"
+          [required]="true"
+          [errorMessage]="err('province', 'La province est requise.')"
+        />
+        <pnlf-select-field
+          label="Département"
+          formControlName="departement"
+          [options]="departements()"
+          [placeholder]="departements().length ? 'Sélectionner…' : 'Sélectionner une province d’abord'"
+        />
+
+        <pnlf-select-field
+          label="Village"
+          formControlName="village"
+          [options]="villages()"
+          [placeholder]="villages().length ? 'Sélectionner…' : 'Sélectionner un département d’abord'"
+        />
+
+        <div class="lot-form__field" style="grid-column: 1 / -1;">
+          <button pnlfButton type="button" variant="ghost" size="sm" (click)="useCurrentPosition()" [disabled]="locatingGps()">
+            {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position actuelle' }}
+          </button>
+          @if (gpsError()) {
+            <p class="text-sm text-muted" role="alert">{{ gpsError() }}</p>
+          }
+        </div>
+        <pnlf-text-field
+          label="Latitude"
+          formControlName="latitude"
+          placeholder="ex : -0.5546"
+          inputmode="decimal"
+          hint="Entre -4 et 2,5 (Gabon)"
+          [errorMessage]="err('latitude')"
+        />
+        <pnlf-text-field
+          label="Longitude"
+          formControlName="longitude"
+          placeholder="ex : 11.6642"
+          inputmode="decimal"
+          hint="Entre 8,5 et 14,6 (Gabon)"
+          [errorMessage]="err('longitude')"
+        />
       </div>
-      <pnlf-text-field label="Latitude" formControlName="latitude" placeholder="ex : -0.5546" hint="Coordonnées GPS relevées sur le terrain" />
-      <pnlf-text-field label="Longitude" formControlName="longitude" placeholder="ex : 11.6642" />
-    </div>
 
-    <pnlf-text-field label="Notes" formControlName="notes" placeholder="Observations complémentaires" />
+      @if (showNotes) {
+        <pnlf-text-field label="Notes" formControlName="notes" placeholder="Observations complémentaires" />
+      }
 
-    <div class="producteur-form__actions">
-      <a pnlfButton routerLink="/app/producteurs" variant="ghost" type="button">Annuler</a>
-      <button pnlfButton type="submit" variant="primary" [loading]="loading()">
-        {{ isEdit ? 'Enregistrer les modifications' : 'Créer la fiche' }}
-      </button>
-    </div>
-  </form>
+      <div class="producteur-form__actions">
+        @if (isEdit) {
+          <a pnlfButton [routerLink]="['/app/producteurs', producteurId]" variant="ghost">Annuler</a>
+        } @else {
+          <a pnlfButton routerLink="/app/producteurs" variant="ghost">Annuler</a>
+        }
+        <button pnlfButton type="submit" variant="primary" [loading]="loading()">
+          {{ isEdit ? 'Enregistrer les modifications' : 'Créer la fiche' }}
+        </button>
+      </div>
+    </form>
+  }
 </pnlf-card>

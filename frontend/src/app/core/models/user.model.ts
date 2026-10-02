@@ -34,7 +34,7 @@ export const ROLE_LABELS: Record<RoleUtilisateur, string> = {
   [RoleUtilisateur.ADMINISTRATEUR]: 'Administrateur système',
   [RoleUtilisateur.AGENT_MINISTERE]: 'Agent du Ministère',
   [RoleUtilisateur.AGENT_FORESTIER]: 'Agent forestier',
-  [RoleUtilisateur.PRODUCTEUR]: 'Producteur / Collecteur',
+  [RoleUtilisateur.PRODUCTEUR]: 'Producteur ou collecteur',
   [RoleUtilisateur.COOPERATIVE]: 'Coopérative',
   [RoleUtilisateur.ACHETEUR]: 'Acheteur',
 };
@@ -47,6 +47,20 @@ export const ROLE_SHORT_LABELS: Record<RoleUtilisateur, string> = {
   [RoleUtilisateur.COOPERATIVE]: 'Coopérative',
   [RoleUtilisateur.ACHETEUR]: 'Acheteur',
 };
+
+export const PREFERENCE_NOTIF_LABELS: Record<string, string> = {
+  EMAIL: 'Par e-mail',
+  SMS: 'Par SMS',
+  EMAIL_SMS: 'Par e-mail et SMS',
+  AUCUNE: 'Aucune notification',
+};
+
+/** Rôles qu'un gestionnaire peut attribuer : seul un administrateur crée ou promeut un administrateur. */
+export function rolesAttribuables(acteur: RoleUtilisateur | null | undefined): { value: string; label: string }[] {
+  return (Object.entries(ROLE_LABELS) as [RoleUtilisateur, string][])
+    .filter(([value]) => value !== RoleUtilisateur.ADMINISTRATEUR || acteur === RoleUtilisateur.ADMINISTRATEUR)
+    .map(([value, label]) => ({ value, label }));
+}
 
 export const STATUT_COMPTE_LABELS: Record<StatutCompte, string> = {
   [StatutCompte.ACTIF]: 'Actif',

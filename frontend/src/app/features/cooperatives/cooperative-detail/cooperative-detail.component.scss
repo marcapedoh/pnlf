@@ -158,6 +158,19 @@
   }
 }
 
+.coop-membres__state {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.coop-membres__error {
+  font-size: var(--fs-xs);
+  color: var(--color-danger);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+
 .coop-membres__ok {
   font-size: var(--fs-xs);
   color: var(--color-success);

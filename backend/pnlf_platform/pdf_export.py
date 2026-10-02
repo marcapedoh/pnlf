@@ -57,6 +57,13 @@ ACTION_FR = {
     'VALIDATE': 'Validation',
     'REJECT': 'Rejet',
     'SYNC': 'Synchronisation',
+    'SOFT_DELETE': 'Suppression',
+    'ACTIVATE': 'Activation',
+    'DEACTIVATE': 'Désactivation',
+    'UPDATE_PHOTO': 'Mise à jour de photo',
+    'DELETE_PHOTO': 'Suppression de photo',
+    'UPDATE_IMAGE': 'Mise à jour d’image',
+    'INSCRIPTION_PUBLIQUE': 'Inscription publique',
 }
 
 TABLE_FR = {
@@ -67,10 +74,21 @@ TABLE_FR = {
     'cooperatives': 'Coopératives',
     'certifications': 'Certifications',
     'offres': 'Offres',
+    'offres_demandes': 'Offres et demandes',
+    'produits': 'Produits',
+    'acheteurs': 'Acheteurs',
     'zones_collecte': 'Zones de collecte',
     'mouvements': 'Mouvements',
     'notifications': 'Notifications',
 }
+
+
+def libelle_action(action) -> str:
+    return ACTION_FR.get(action, action.replace('_', ' ').capitalize() if action else '-')
+
+
+def libelle_table(table_cible) -> str:
+    return TABLE_FR.get(table_cible, table_cible or '-')
 
 _FONTS_READY = False
 FONT = 'Helvetica'
@@ -119,9 +137,8 @@ def _register_fonts() -> None:
 
 def _logo_path() -> Path | None:
     candidates = [
-        Path(settings.BASE_DIR).parent / 'frontend' / 'public' / 'assets' / 'brand' / 'logo-enef.jpg',
-        Path(settings.BASE_DIR).parent / 'logo enef.jpg',
         Path(settings.BASE_DIR) / 'static' / 'brand' / 'logo-enef.jpg',
+        Path(settings.BASE_DIR).parent / 'frontend' / 'public' / 'assets' / 'brand' / 'logo-enef.png',
     ]
     for path in candidates:
         if path.is_file():
@@ -187,7 +204,7 @@ def _esc(value) -> str:
 
 
 def _cell(text, style) -> Paragraph:
-    return Paragraph(_esc(text) or '—', style)
+    return Paragraph(_esc(text) or '-', style)
 
 
 def _header_table(styles, subtitle: str) -> Table:
@@ -284,7 +301,7 @@ def _render_pdf(story, *, title: str, footer: str) -> bytes:
         bottomMargin=16 * mm,
         title=title,
         author='École Nationale des Eaux et Forêts',
-        subject='Plateforme PFNL — rapport institutionnel',
+        subject='Plateforme PFNL : rapport institutionnel',
         creator='PFNL',
     )
 
@@ -361,7 +378,7 @@ def export_lots_pdf(queryset) -> HttpResponse:
             ('Date d’édition', now.strftime('%d/%m/%Y à %H:%M')),
             ('Nombre de lots', str(len(lots))),
             ('Périmètre', 'Lots visibles selon le profil connecté'),
-            ('Document', 'Export officiel — usage interne'),
+            ('Document', 'Export officiel à usage interne'),
         ]),
         Spacer(1, 10),
     ]
@@ -403,7 +420,7 @@ def export_lots_pdf(queryset) -> HttpResponse:
         story,
         filename=filename,
         title='Registre des lots PFNL',
-        footer='ENEF · République Gabonaise · Confidentiel — ne pas diffuser hors circuit institutionnel',
+        footer='ENEF · République Gabonaise · Confidentiel, ne pas diffuser hors circuit institutionnel',
     )
 
 
@@ -451,7 +468,7 @@ def _render_pdf_portrait(story, *, title: str, footer: str) -> bytes:
         bottomMargin=16 * mm,
         title=title,
         author='École Nationale des Eaux et Forêts',
-        subject='Plateforme PFNL — fiche institutionnelle',
+        subject='Plateforme PFNL : fiche institutionnelle',
         creator='PFNL',
     )
 
@@ -516,7 +533,7 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
     story: list = [
         _header_table_portrait(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 10),
-        Paragraph(f'Fiche {type_acteur.lower()} — {producteur.prenoms} {producteur.nom}', styles['title']),
+        Paragraph(f'Fiche {type_acteur.lower()} : {producteur.prenoms} {producteur.nom}', styles['title']),
     ]
 
     photo = None
@@ -541,18 +558,18 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
             getattr(producteur.departement, 'nom', None) if producteur.departement_id else None,
             getattr(producteur.village, 'nom', None) if producteur.village_id else None,
         ])
-    ) or '—'
+    ) or 'Non renseignée'
 
     identite_rows = [
-        ('Code', producteur.code_producteur or '—'),
+        ('Code', producteur.code_producteur or 'Non renseigné'),
         ('Type', type_acteur),
         ('Nom complet', f'{producteur.prenoms} {producteur.nom}'.strip()),
-        ('Téléphone', producteur.telephone or '—'),
-        ('E-mail', producteur.email or '—'),
+        ('Téléphone', producteur.telephone or 'Non renseigné'),
+        ('E-mail', producteur.email or 'Non renseigné'),
         ('Localisation', localisation),
-        ('Communauté', producteur.communaute or '—'),
-        ('Statut', STATUT_PRODUCTEUR_FR.get(producteur.statut, producteur.statut or '—')),
-        ('Inscrit le', producteur.created_at.strftime('%d/%m/%Y') if producteur.created_at else '—'),
+        ('Communauté', producteur.communaute or 'Non renseignée'),
+        ('Statut', STATUT_PRODUCTEUR_FR.get(producteur.statut, producteur.statut or 'Non renseigné')),
+        ('Inscrit le', producteur.created_at.strftime('%d/%m/%Y') if producteur.created_at else 'Non renseigné'),
     ]
 
     if photo:
@@ -580,11 +597,11 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
             qte = lot.quantite
             qte_txt = f'{qte:.3f}'.rstrip('0').rstrip('.') if qte is not None else ''
             rows.append([
-                lot.code_lot or '—',
-                lot.produit.nom if lot.produit_id else '—',
-                lot.date_collecte.strftime('%d/%m/%Y') if lot.date_collecte else '—',
+                lot.code_lot or '-',
+                lot.produit.nom if lot.produit_id else '-',
+                lot.date_collecte.strftime('%d/%m/%Y') if lot.date_collecte else '-',
                 f'{qte_txt} {lot.unite or ""}'.strip(),
-                STATUT_LOT_FR.get(lot.statut, lot.statut or '—'),
+                STATUT_LOT_FR.get(lot.statut, lot.statut or '-'),
             ])
         story.append(_data_table(header, rows, [30 * mm, 45 * mm, 30 * mm, 35 * mm, 45 * mm], styles, center_cols=(2, 3)))
 
@@ -601,11 +618,11 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
         header = ['Type', 'N° certificat', 'Statut', 'Obtenue le', 'Expire le']
         rows = [
             [
-                c.type_certification.libelle if c.type_certification_id else '—',
-                c.numero_certificat or '—',
-                c.statut or '—',
-                c.date_obtention.strftime('%d/%m/%Y') if c.date_obtention else '—',
-                c.date_expiration.strftime('%d/%m/%Y') if c.date_expiration else '—',
+                c.type_certification.libelle if c.type_certification_id else '-',
+                c.numero_certificat or '-',
+                c.statut or '-',
+                c.date_obtention.strftime('%d/%m/%Y') if c.date_obtention else '-',
+                c.date_expiration.strftime('%d/%m/%Y') if c.date_expiration else '-',
             ]
             for c in certs
         ]
@@ -613,7 +630,7 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
 
     filename = f'PFNL-fiche-{(producteur.code_producteur or str(producteur.id)[:8])}.pdf'
     return _build_pdf_portrait(
-        story, filename=filename, title=f'Fiche producteur — {producteur.nom}',
+        story, filename=filename, title=f'Fiche producteur : {producteur.nom}',
         footer='ENEF · République Gabonaise · Document généré automatiquement',
     )
 
@@ -632,7 +649,7 @@ def export_producteurs_liste_pdf(queryset) -> HttpResponse:
             ('Date d’édition', now.strftime('%d/%m/%Y à %H:%M')),
             ('Nombre d’acteurs', str(len(items))),
             ('Périmètre', 'Selon le profil connecté'),
-            ('Document', 'Export officiel — usage interne'),
+            ('Document', 'Export officiel à usage interne'),
         ]),
         Spacer(1, 10),
     ]
@@ -643,11 +660,11 @@ def export_producteurs_liste_pdf(queryset) -> HttpResponse:
         rows = [
             [
                 str(i),
-                p.code_producteur or '—',
+                p.code_producteur or '-',
                 f'{p.prenoms} {p.nom}'.strip(),
-                p.telephone or '—',
-                getattr(p.province, 'nom', None) or '—',
-                STATUT_PRODUCTEUR_FR.get(p.statut, p.statut or '—'),
+                p.telephone or '-',
+                getattr(p.province, 'nom', None) or '-',
+                STATUT_PRODUCTEUR_FR.get(p.statut, p.statut or '-'),
             ]
             for i, p in enumerate(items, start=1)
         ]
@@ -657,7 +674,7 @@ def export_producteurs_liste_pdf(queryset) -> HttpResponse:
     filename = f'PFNL-producteurs-{now:%Y%m%d-%H%M}.pdf'
     return _build_pdf(
         story, filename=filename, title='Registre des producteurs',
-        footer='ENEF · République Gabonaise · Confidentiel — ne pas diffuser hors circuit institutionnel',
+        footer='ENEF · République Gabonaise · Confidentiel, ne pas diffuser hors circuit institutionnel',
     )
 
 
@@ -668,21 +685,21 @@ def export_cooperative_fiche_pdf(cooperative, request=None) -> HttpResponse:
     styles = _styles()
 
     identite_rows = [
-        ('Code', cooperative.code or '—'),
-        ('Nom', cooperative.nom or '—'),
-        ('N° agrément', cooperative.numero_agrement or '—'),
-        ('Téléphone', cooperative.telephone or '—'),
-        ('E-mail', cooperative.email or '—'),
-        ('Adresse', cooperative.adresse or '—'),
-        ('Province', getattr(cooperative.province, 'nom', None) or '—'),
-        ('Statut', STATUT_COOPERATIVE_FR.get(cooperative.statut, cooperative.statut or '—')),
-        ('Créée le', cooperative.created_at.strftime('%d/%m/%Y') if cooperative.created_at else '—'),
+        ('Code', cooperative.code or 'Non renseigné'),
+        ('Nom', cooperative.nom or 'Non renseigné'),
+        ('N° agrément', cooperative.numero_agrement or 'Non renseigné'),
+        ('Téléphone', cooperative.telephone or 'Non renseigné'),
+        ('E-mail', cooperative.email or 'Non renseigné'),
+        ('Adresse', cooperative.adresse or 'Non renseignée'),
+        ('Province', getattr(cooperative.province, 'nom', None) or 'Non renseignée'),
+        ('Statut', STATUT_COOPERATIVE_FR.get(cooperative.statut, cooperative.statut or 'Non renseigné')),
+        ('Créée le', cooperative.created_at.strftime('%d/%m/%Y') if cooperative.created_at else 'Non renseignée'),
     ]
 
     story: list = [
         _header_table_portrait(styles, 'Plateforme de traçabilité des PFNL'),
         Spacer(1, 10),
-        Paragraph(f'Fiche coopérative — {cooperative.nom}', styles['title']),
+        Paragraph(f'Fiche coopérative : {cooperative.nom}', styles['title']),
         Spacer(1, 8),
         _identite_table(styles, identite_rows),
     ]
@@ -701,9 +718,9 @@ def export_cooperative_fiche_pdf(cooperative, request=None) -> HttpResponse:
         rows = [
             [
                 str(m.producteur),
-                getattr(m.producteur, 'telephone', None) or '—',
-                STATUT_PRODUCTEUR_FR.get(getattr(m.producteur, 'statut', None), getattr(m.producteur, 'statut', None) or '—'),
-                m.date_adhesion.strftime('%d/%m/%Y') if m.date_adhesion else '—',
+                getattr(m.producteur, 'telephone', None) or '-',
+                STATUT_PRODUCTEUR_FR.get(getattr(m.producteur, 'statut', None), getattr(m.producteur, 'statut', None) or '-'),
+                m.date_adhesion.strftime('%d/%m/%Y') if m.date_adhesion else '-',
             ]
             for m in membres
         ]
@@ -711,7 +728,7 @@ def export_cooperative_fiche_pdf(cooperative, request=None) -> HttpResponse:
 
     filename = f'PFNL-fiche-coop-{(cooperative.code or str(cooperative.id)[:8])}.pdf'
     return _build_pdf_portrait(
-        story, filename=filename, title=f'Fiche coopérative — {cooperative.nom}',
+        story, filename=filename, title=f'Fiche coopérative : {cooperative.nom}',
         footer='ENEF · République Gabonaise · Document généré automatiquement',
     )
 
@@ -737,7 +754,7 @@ def export_cooperatives_liste_pdf(queryset) -> HttpResponse:
             ('Date d’édition', now.strftime('%d/%m/%Y à %H:%M')),
             ('Nombre de coopératives', str(len(items))),
             ('Périmètre', 'Selon le profil connecté'),
-            ('Document', 'Export officiel — usage interne'),
+            ('Document', 'Export officiel à usage interne'),
         ]),
         Spacer(1, 10),
     ]
@@ -748,12 +765,12 @@ def export_cooperatives_liste_pdf(queryset) -> HttpResponse:
         rows = [
             [
                 str(i),
-                c.code or '—',
-                c.nom or '—',
-                c.telephone or '—',
-                getattr(c.province, 'nom', None) or '—',
+                c.code or '-',
+                c.nom or '-',
+                c.telephone or '-',
+                getattr(c.province, 'nom', None) or '-',
                 str(nb_membres.get(c.id, 0)),
-                STATUT_COOPERATIVE_FR.get(c.statut, c.statut or '—'),
+                STATUT_COOPERATIVE_FR.get(c.statut, c.statut or '-'),
             ]
             for i, c in enumerate(items, start=1)
         ]
@@ -763,7 +780,7 @@ def export_cooperatives_liste_pdf(queryset) -> HttpResponse:
     filename = f'PFNL-cooperatives-{now:%Y%m%d-%H%M}.pdf'
     return _build_pdf(
         story, filename=filename, title='Registre des coopératives',
-        footer='ENEF · République Gabonaise · Confidentiel — ne pas diffuser hors circuit institutionnel',
+        footer='ENEF · République Gabonaise · Confidentiel, ne pas diffuser hors circuit institutionnel',
     )
 
 
@@ -840,11 +857,11 @@ def export_journal_pdf(rows: list[dict], libelle: str) -> HttpResponse:
             action = r.get('action') or ''
             body.append([
                 created,
-                ACTION_FR.get(action, action.replace('_', ' ').capitalize() if action else '—'),
-                TABLE_FR.get(table_cible, table_cible or '—'),
-                str(r.get('enregistrement_id') or '—'),
+                ACTION_FR.get(action, action.replace('_', ' ').capitalize() if action else '-'),
+                TABLE_FR.get(table_cible, table_cible or '-'),
+                str(r.get('enregistrement_id') or '-'),
                 r.get('utilisateur') or 'Système',
-                r.get('ip_adresse') or '—',
+                r.get('ip_adresse') or '-',
             ])
         widths = [36 * mm, 36 * mm, 38 * mm, 58 * mm, 62 * mm, 34 * mm]
         story.append(_data_table(header, body, widths, styles, center_cols=(0, 5)))
@@ -853,6 +870,6 @@ def export_journal_pdf(rows: list[dict], libelle: str) -> HttpResponse:
     return _build_pdf(
         story,
         filename=filename,
-        title=f'Journal d’activité — {libelle}',
-        footer='ENEF · République Gabonaise · Journal d’audit — usage institutionnel uniquement',
+        title=f'Journal d’activité : {libelle}',
+        footer='ENEF · République Gabonaise · Journal d’audit à usage institutionnel uniquement',
     )

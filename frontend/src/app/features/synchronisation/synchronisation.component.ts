@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { PnlfDatePipe } from '../../shared/pipes/format.pipes';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -11,6 +11,8 @@ import { ButtonComponent } from '../../design-system/button/button.component';
 import { CardComponent } from '../../design-system/card/card.component';
 import { EmptyStateComponent } from '../../design-system/empty-state/empty-state.component';
 import { ToastService } from '../../design-system/toast/toast.service';
+import { ConfirmDialogComponent } from '../../design-system/confirm-dialog/confirm-dialog.component';
+import { toApiError } from '../../core/http/api-error.util';
 
 const FIELD_LABELS: Record<string, string> = {
   quantite: 'Quantité',
@@ -26,9 +28,20 @@ const FIELD_LABELS: Record<string, string> = {
   unite: 'Unité',
 };
 
+const ENTITE_LABELS: Record<string, string> = {
+  lot: 'Lot',
+  lots: 'Lot',
+  producteur: 'Fiche producteur',
+  producteurs: 'Fiche producteur',
+  mouvement: 'Mouvement de lot',
+  mouvements: 'Mouvement de lot',
+  zone_collecte: 'Zone de collecte',
+  zones_collecte: 'Zone de collecte',
+};
+
 @Component({
   selector: 'app-synchronisation',
-  imports: [DatePipe, FormsModule, CardComponent, EmptyStateComponent, ButtonComponent],
+  imports: [PnlfDatePipe, FormsModule, CardComponent, EmptyStateComponent, ButtonComponent, ConfirmDialogComponent],
   templateUrl: './synchronisation.component.html',
   styleUrl: './synchronisation.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,7 +54,10 @@ export class SynchronisationComponent {
   readonly appareils = signal<AppareilSync[]>([]);
   readonly conflits = signal<SyncConflict[]>([]);
   readonly loading = signal(true);
+  readonly loadError = signal('');
+  readonly appareilsError = signal('');
   readonly resolvingId = signal<string | null>(null);
+  readonly pendingResolution = signal<{ conflict: SyncConflict; choix: 'CLIENT' | 'SERVEUR' } | null>(null);
   readonly deviceLibelle = signal('');
   readonly registering = signal(false);
 
@@ -53,14 +69,27 @@ export class SynchronisationComponent {
   }
 
   reload(): void {
-    this.syncService.appareils().subscribe((res) => this.appareils.set(unwrapList(res)));
+    this.loading.set(true);
+    this.loadError.set('');
+    this.appareilsError.set('');
+    this.syncService.appareils().subscribe({
+      next: (res) => this.appareils.set(unwrapList(res)),
+      error: () => this.appareilsError.set('Impossible de charger la liste des appareils.'),
+    });
     this.syncService.conflits().subscribe({
       next: (res) => {
         this.conflits.set(unwrapList(res));
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        this.loading.set(false);
+        this.loadError.set('Impossible de charger les conflits de synchronisation.');
+      },
     });
+  }
+
+  entiteLabel(entite: string | null | undefined): string {
+    return ENTITE_LABELS[(entite ?? '').toLowerCase()] ?? (entite || 'Élément');
   }
 
   fieldEntries(payload: Record<string, unknown> | null): { key: string; label: string; value: string }[] {
@@ -70,7 +99,7 @@ export class SynchronisationComponent {
       .map(([key, value]) => ({
         key,
         label: FIELD_LABELS[key] || key.replaceAll('_', ' '),
-        value: value == null ? '—' : String(value),
+        value: value == null ? 'Non renseigné' : String(value),
       }));
   }
 
@@ -104,11 +133,13 @@ export class SynchronisationComponent {
       next: () => {
         this.conflits.update((list) => list.filter((c) => c.id !== conflict.id));
         this.resolvingId.set(null);
-        this.toast.success('Conflit résolu.');
+        this.pendingResolution.set(null);
+        this.toast.success('Conflit résolu');
       },
-      error: () => {
+      error: (err) => {
         this.resolvingId.set(null);
-        this.toast.error('Échec de la résolution du conflit.');
+        this.pendingResolution.set(null);
+        this.toast.error('Échec de la résolution du conflit', toApiError(err).message);
       },
     });
   }

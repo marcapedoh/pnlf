@@ -128,7 +128,7 @@ export interface MessagePublic {
 
 export const TYPE_ACTEUR_PUBLIC_LABELS: Record<TypeActeur, string> = {
   [TypeActeur.PRODUCTEUR]: 'Producteur',
-  [TypeActeur.COLLECTEUR]: 'Collecteur / récolteur',
+  [TypeActeur.COLLECTEUR]: 'Collecteur',
 };
 
 export interface PublicDepartement {

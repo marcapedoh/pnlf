@@ -1,7 +1,7 @@
 <div class="pnlf-page-header">
   <div>
     <p class="text-eyebrow">Mode terrain</p>
-    <h1 class="pnlf-page-header__title">Synchronisation hors-ligne</h1>
+    <h1 class="pnlf-page-header__title">Synchronisation</h1>
     <p class="pnlf-page-header__subtitle">
       Suivi des appareils de collecte et résolution des conflits de synchronisation.
     </p>
@@ -15,25 +15,37 @@
 }
 
 <pnlf-card title="Enregistrer cet appareil" subtitle="Utile pour identifier la tablette ou le téléphone utilisé sur le terrain" style="display:block; margin-bottom:1.5rem;">
-  <div class="sync-register">
-    <input class="pnlf-select" placeholder="Nom de l’appareil (ex : Tablette Minkébé)" [ngModel]="deviceLibelle()" (ngModelChange)="deviceLibelle.set($event)" />
-    <button pnlfButton variant="primary" type="button" [loading]="registering()" (click)="enregistrerAppareil()">Enregistrer cet appareil</button>
-  </div>
+  <form class="sync-register" (submit)="$event.preventDefault(); enregistrerAppareil()">
+    <label class="pnlf-visually-hidden" for="sync-device-name">Nom de l’appareil</label>
+    <input
+      id="sync-device-name"
+      class="pnlf-select"
+      maxlength="80"
+      placeholder="Nom de l’appareil (ex : Tablette Minkébé)"
+      [ngModel]="deviceLibelle()"
+      (ngModelChange)="deviceLibelle.set($event)"
+      name="libelle"
+    />
+    <button pnlfButton variant="primary" type="submit" [loading]="registering()">Enregistrer cet appareil</button>
+  </form>
 </pnlf-card>
 
 <pnlf-card title="Mes appareils enregistrés" style="display:block; margin-bottom:1.5rem;">
-  @if (appareils().length === 0) {
+  @if (appareilsError()) {
+    <p class="text-sm" role="alert">{{ appareilsError() }}</p>
+  } @else if (appareils().length === 0) {
     <pnlf-empty-state icon="wifi-off" title="Aucun appareil synchronisé pour le moment" description="Enregistrez cet appareil ci-dessus pour le retrouver ici." />
   } @else {
     <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
-        <thead><tr><th>Appareil</th><th>Identifiant</th><th>Dernière synchro</th></tr></thead>
+        <caption class="pnlf-visually-hidden">Appareils enregistrés</caption>
+        <thead><tr><th scope="col">Appareil</th><th scope="col">Identifiant</th><th scope="col">Dernière synchronisation</th></tr></thead>
         <tbody>
           @for (a of appareils(); track a.id) {
             <tr>
               <td data-label="Appareil">{{ a.libelle || 'Appareil sans nom' }}</td>
               <td class="pnlf-table__muted" data-label="Identifiant">{{ a.device_id }}</td>
-              <td data-label="Dernière synchro">{{ a.dernier_sync_at ? (a.dernier_sync_at | date: 'dd/MM/yyyy HH:mm') : 'Jamais synchronisé' }}</td>
+              <td data-label="Dernière synchronisation">{{ a.dernier_sync_at ? (a.dernier_sync_at | pnlfDate: 'datetime') : 'Jamais synchronisé' }}</td>
             </tr>
           }
         </tbody>
@@ -44,17 +56,22 @@
 
 <pnlf-card title="Conflits de synchronisation à résoudre">
   @if (loading()) {
-    <p class="text-sm text-muted">Chargement…</p>
+    <p class="text-sm text-muted" role="status">Chargement des conflits…</p>
+  } @else if (loadError()) {
+    <p class="text-sm" role="alert">
+      {{ loadError() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="reload()">Réessayer</button>
+    </p>
   } @else if (conflits().length === 0) {
     <pnlf-empty-state icon="check" title="Aucun conflit en attente" description="Toutes les données de terrain sont synchronisées." />
   } @else {
     <div class="conflict-list">
       @for (c of conflits(); track c.id) {
-        <div class="conflict-card">
+        <section class="conflict-card" [attr.aria-label]="'Conflit sur ' + entiteLabel(c.entite)">
           <div class="conflict-card__meta">
-            <span class="conflict-card__entity">{{ c.entite }}</span>
-            <span class="text-xs text-muted">Réf. client : {{ c.client_uuid }}</span>
-            <span class="text-xs text-muted">Détecté le {{ c.created_at | date: 'dd/MM/yyyy HH:mm' }}</span>
+            <span class="conflict-card__entity">{{ entiteLabel(c.entite) }}</span>
+            <span class="text-xs text-muted">Référence de l’appareil : {{ c.client_uuid }}</span>
+            <span class="text-xs text-muted">Détecté le {{ c.created_at | pnlfDate: 'datetime' }}</span>
           </div>
           <div class="conflict-card__payloads">
             <div>
@@ -76,16 +93,28 @@
           </div>
           @if (canResoudre) {
             <div class="conflict-card__actions">
-              <button pnlfButton variant="outline" size="sm" [loading]="resolvingId() === c.id" (click)="resoudre(c, 'CLIENT')">
+              <button pnlfButton variant="outline" size="sm" type="button" [disabled]="resolvingId() === c.id" (click)="pendingResolution.set({ conflict: c, choix: 'CLIENT' })">
                 Conserver la version terrain
               </button>
-              <button pnlfButton variant="primary" size="sm" [loading]="resolvingId() === c.id" (click)="resoudre(c, 'SERVEUR')">
+              <button pnlfButton variant="primary" size="sm" type="button" [disabled]="resolvingId() === c.id" (click)="pendingResolution.set({ conflict: c, choix: 'SERVEUR' })">
                 Conserver la version serveur
               </button>
             </div>
           }
-        </div>
+        </section>
       }
     </div>
   }
 </pnlf-card>
+
+@if (pendingResolution(); as p) {
+  <pnlf-confirm-dialog
+    [open]="true"
+    title="Résoudre ce conflit ?"
+    [message]="p.choix === 'CLIENT' ? 'La version saisie sur l’appareil remplacera la version enregistrée sur le serveur.' : 'La version du serveur est conservée et la saisie de l’appareil est abandonnée.'"
+    [confirmLabel]="p.choix === 'CLIENT' ? 'Conserver la version terrain' : 'Conserver la version serveur'"
+    [loading]="resolvingId() === p.conflict.id"
+    (confirmed)="resoudre(p.conflict, p.choix)"
+    (cancelled)="pendingResolution.set(null)"
+  />
+}

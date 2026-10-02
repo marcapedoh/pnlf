@@ -13,16 +13,16 @@
 
 <div class="pnlf-toolbar">
   <div class="pnlf-toolbar__filters">
-    <label class="pnlf-visually-hidden" for="lots-search">Rechercher un lot</label>
+    <label class="pnlf-visually-hidden" for="lots-search">Rechercher un lot par son code</label>
     <input
       id="lots-search"
       type="search"
       class="pnlf-select pnlf-toolbar__search"
-      placeholder="Rechercher un code lot, produit…"
+      placeholder="Code du lot (ex : PNLF-2026…)"
       [ngModel]="search()"
       (ngModelChange)="onSearchInput($event)"
     />
-    <select class="pnlf-select" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
+    <select class="pnlf-select" aria-label="Filtrer par statut" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
       <option value="">Tous les statuts</option>
       @for (s of allStatuts; track s) {
         <option [value]="s">{{ statutLabels[s] }}</option>
@@ -32,7 +32,7 @@
 </div>
 
 @if (loading()) {
-  <div class="pnlf-table-wrapper">
+  <div class="pnlf-table-wrapper" role="status" aria-label="Chargement des lots">
     <table class="pnlf-table">
       <tbody>
         @for (i of [1, 2, 3, 4, 5, 6]; track i) {
@@ -41,25 +41,36 @@
       </tbody>
     </table>
   </div>
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible de charger les lots">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
 } @else if (items().length === 0) {
-  <pnlf-empty-state icon="package" title="Aucun lot trouvé" [description]="canCreate ? 'Ajustez vos filtres ou déclarez un nouveau lot.' : 'Aucun lot ne correspond à vos critères pour le moment.'">
+  <pnlf-empty-state
+    icon="package"
+    title="Aucun lot trouvé"
+    [description]="hasFilters ? 'Aucun lot ne correspond à vos critères.' : canCreate ? 'Déclarez votre premier lot pour démarrer la traçabilité.' : 'Aucun lot n’est encore enregistré.'"
+  >
+    @if (hasFilters) {
+      <button pnlfButton type="button" variant="ghost" (click)="resetFilters()">Réinitialiser les filtres</button>
+    }
     @if (canCreate) {
       <a pnlfButton routerLink="/app/lots/nouveau" variant="primary">Déclarer un lot</a>
-    } @else {
-      <button pnlfButton type="button" variant="ghost" (click)="search.set(''); statutFilter.set(''); onFilterChange()">Réinitialiser les filtres</button>
     }
   </pnlf-empty-state>
 } @else {
   <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
     <table class="pnlf-table">
+      <caption class="pnlf-visually-hidden">Liste des lots</caption>
       <thead>
         <tr>
-          <th>Code lot</th>
-          <th>Produit</th>
-          <th>Producteur</th>
-          <th>Date de collecte</th>
-          <th>Quantité</th>
-          <th>Statut</th>
+          <th scope="col">Code lot</th>
+          <th scope="col">Produit</th>
+          <th scope="col">Producteur</th>
+          <th scope="col">Date de collecte</th>
+          <th scope="col">Quantité</th>
+          <th scope="col">Statut</th>
         </tr>
       </thead>
       <tbody>
@@ -68,8 +79,8 @@
             <td data-label="Code lot"><a class="pnlf-table__link" [routerLink]="['/app/lots', lot.id]">{{ lot.code_lot }}</a></td>
             <td data-label="Produit">{{ lot.produit_nom }}</td>
             <td data-label="Producteur">{{ lot.producteur_nom }}</td>
-            <td class="pnlf-table__muted" data-label="Date de collecte">{{ lot.date_collecte }}</td>
-            <td data-label="Quantité">{{ lot.quantite }} {{ lot.unite }}</td>
+            <td class="pnlf-table__muted" data-label="Date de collecte">{{ (lot.date_collecte | pnlfDate) || '-' }}</td>
+            <td data-label="Quantité">{{ lot.quantite | pnlfQuantite: lot.unite }}</td>
             <td data-label="Statut"><pnlf-status-badge [label]="statutLabels[lot.statut]" [tone]="tone(lot.statut)" /></td>
           </tr>
         }
@@ -77,5 +88,5 @@
     </table>
   </div>
 
-  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" label="Pagination des lots" (pageChange)="goToPage($event)" />
 }

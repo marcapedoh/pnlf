@@ -12,6 +12,16 @@ export interface AnnuaireResponse {
   cooperatives: Cooperative[];
 }
 
+export interface ConversationResume {
+  id: string;
+  sujet?: string | null;
+  offre_id?: string | null;
+  interlocuteur_nom?: string;
+  dernier_message?: string | null;
+  dernier_at?: string | null;
+  non_lus?: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class MarketplaceService {
   private readonly base = `${environment.apiUrl}/offres-demandes/`;
@@ -58,8 +68,8 @@ export class MarketplaceService {
     return this.http.post<{ id: string }>(`${environment.apiUrl}/conversations/`, payload);
   }
 
-  conversations(params: Record<string, string> = {}): Observable<ApiListResponse<{ id: string; sujet?: string; offre_id?: string }>> {
-    return this.http.get<ApiListResponse<{ id: string; sujet?: string; offre_id?: string }>>(
+  conversations(params: Record<string, string> = {}): Observable<ApiListResponse<ConversationResume>> {
+    return this.http.get<ApiListResponse<ConversationResume>>(
       `${environment.apiUrl}/conversations/`,
       { params },
     );

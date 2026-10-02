@@ -12,18 +12,11 @@
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-3);
 }
 
 .coop-actions {
   display: flex;
   gap: var(--space-2);
   white-space: nowrap;
-}
-
-.coop-row {
-  cursor: pointer;
-
-  &:hover {
-    background: var(--pnlf-green-50);
-  }
 }

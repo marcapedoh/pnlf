@@ -1,15 +1,42 @@
-<div class="pnlf-pagination">
-  <p class="pnlf-pagination__summary">
+<nav class="pnlf-pagination" [attr.aria-label]="label()">
+  <p class="pnlf-pagination__summary" aria-live="polite">
     @if (total() > 0) {
       Affichage de <strong>{{ rangeStart() }}</strong> à <strong>{{ rangeEnd() }}</strong> sur
-      <strong>{{ total() }}</strong> résultats
+      <strong>{{ total() }}</strong> {{ resultLabel() }}
     } @else {
       Aucun résultat
     }
   </p>
-  <div class="pnlf-pagination__controls">
-    <button type="button" (click)="goTo(page() - 1)" [disabled]="page() <= 1">Précédent</button>
-    <span class="pnlf-pagination__current">Page {{ page() }} / {{ totalPages() }}</span>
-    <button type="button" (click)="goTo(page() + 1)" [disabled]="page() >= totalPages()">Suivant</button>
-  </div>
-</div>
+  @if (totalPages() > 1) {
+    <ul class="pnlf-pagination__controls">
+      <li>
+        <button type="button" (click)="goTo(page() - 1)" [disabled]="page() <= 1" aria-label="Page précédente">
+          Précédent
+        </button>
+      </li>
+      @for (item of pages(); track $index) {
+        <li>
+          @if (item === 'ellipsis') {
+            <span class="pnlf-pagination__ellipsis" aria-hidden="true">…</span>
+          } @else {
+            <button
+              type="button"
+              class="pnlf-pagination__page"
+              [class.pnlf-pagination__page--current]="item === page()"
+              [attr.aria-current]="item === page() ? 'page' : null"
+              [attr.aria-label]="'Page ' + item + ' sur ' + totalPages()"
+              (click)="goTo(item)"
+            >
+              {{ item }}
+            </button>
+          }
+        </li>
+      }
+      <li>
+        <button type="button" (click)="goTo(page() + 1)" [disabled]="page() >= totalPages()" aria-label="Page suivante">
+          Suivant
+        </button>
+      </li>
+    </ul>
+  }
+</nav>

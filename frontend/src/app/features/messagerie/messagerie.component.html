@@ -41,7 +41,7 @@
 @if (supervisionMode()) {
   <div class="chat-supervision-banner" role="status">
     <pnlf-icon name="shield" [size]="18" />
-    <span>Mode supervision administrateur — lecture seule. Les participants ne sont pas notifiés de votre consultation.</span>
+    <span>Mode supervision administrateur (lecture seule). Les participants ne sont pas notifiés de votre consultation.</span>
   </div>
 }
 
@@ -92,6 +92,7 @@
               class="chat-inbox__item"
               [class.is-active]="activeId() === c.id"
               [class.has-unread]="!supervisionMode() && (c.non_lus || 0) > 0"
+              [attr.aria-current]="activeId() === c.id ? 'true' : null"
               (click)="select(c.id)"
             >
               <span class="chat-avatar" aria-hidden="true">
@@ -117,7 +118,7 @@
                 <span class="chat-inbox__preview">{{ c.dernier_message || c.sujet || 'Nouvelle discussion' }}</span>
               </span>
               @if (!supervisionMode() && (c.non_lus || 0) > 0) {
-                <span class="chat-inbox__badge">{{ c.non_lus! > 99 ? '99+' : c.non_lus }}</span>
+                <span class="chat-inbox__badge" [attr.aria-label]="c.non_lus + (c.non_lus! > 1 ? ' messages non lus' : ' message non lu')">{{ c.non_lus! > 99 ? '99+' : c.non_lus }}</span>
               }
             </button>
           </li>
@@ -179,7 +180,7 @@
         }
       </header>
 
-      <div class="chat-pane__thread" #thread>
+      <div class="chat-pane__thread" #thread role="log" aria-live="polite" [attr.aria-label]="'Messages avec ' + (activeConversation()?.interlocuteur_nom || 'votre interlocuteur')">
         @if (loadingThread()) {
           <pnlf-skeleton height="180px" radius="12px" />
         } @else {
@@ -231,11 +232,11 @@
       </div>
 
       @if (lectureSeule()) {
-        <p class="chat-composer__readonly">Consultation en lecture seule — vous ne pouvez pas répondre dans ce mode.</p>
+        <p class="chat-composer__readonly">Consultation en lecture seule : vous ne pouvez pas répondre dans ce mode.</p>
       } @else {
         <form class="chat-composer" (submit)="$event.preventDefault(); envoyer()">
           <input #fileInput type="file" accept="image/jpeg,image/png,image/webp" hidden (change)="onFile($event)" />
-          <button type="button" class="chat-composer__icon" title="Joindre une photo" (click)="pickImage()" [disabled]="sending()">
+          <button type="button" class="chat-composer__icon" title="Joindre une photo" aria-label="Joindre une photo" (click)="pickImage()" [disabled]="sending()">
             <pnlf-icon name="camera" [size]="18" />
           </button>
           <button
@@ -243,12 +244,16 @@
             class="chat-composer__icon"
             [class.is-recording]="recording()"
             [title]="recording() ? 'Arrêter l’enregistrement' : 'Message vocal'"
+            [attr.aria-label]="recording() ? 'Arrêter l’enregistrement et envoyer le message vocal' : 'Enregistrer un message vocal'"
+            [attr.aria-pressed]="recording()"
             (click)="toggleMic()"
             [disabled]="sending()"
           >
             <pnlf-icon name="mic" [size]="18" />
           </button>
+          <label class="pnlf-visually-hidden" for="chat-draft">Votre message</label>
           <textarea
+            id="chat-draft"
             name="draft"
             rows="2"
             [ngModel]="draft()"
@@ -261,7 +266,7 @@
           </button>
         </form>
         @if (recording()) {
-          <p class="chat-composer__hint">Enregistrement en cours — cliquez de nouveau sur le micro pour envoyer.</p>
+          <p class="chat-composer__hint">Enregistrement en cours. Cliquez de nouveau sur le micro pour envoyer.</p>
         }
       }
     }
@@ -270,9 +275,18 @@
 
 @if (showNew()) {
   <div class="chat-modal" (click)="showNew.set(false)">
-    <pnlf-card title="Nouvelle discussion" (click)="$event.stopPropagation()">
+    <pnlf-card
+      title="Nouvelle discussion"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Nouvelle discussion"
+      pnlfModal
+      (pnlfModalClose)="showNew.set(false)"
+      (click)="$event.stopPropagation()"
+    >
       <label class="pnlf-visually-hidden" for="chat-contact-search">Rechercher un contact</label>
       <input
+        data-autofocus
         class="chat-modal__search"
         type="search"
         id="chat-contact-search"
@@ -311,7 +325,15 @@
 
 @if (showGroupe()) {
   <div class="chat-modal" (click)="showGroupe.set(false)">
-    <pnlf-card title="Créer un groupe coopérative" (click)="$event.stopPropagation()">
+    <pnlf-card
+      title="Créer un groupe coopérative"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Créer un groupe coopérative"
+      pnlfModal
+      (pnlfModalClose)="showGroupe.set(false)"
+      (click)="$event.stopPropagation()"
+    >
       <p class="chat-modal__intro">
         Le groupe est réservé aux membres de <strong>votre</strong> coopérative. Seuls les membres sélectionnés verront les messages.
       </p>

@@ -269,6 +269,27 @@
   }
 }
 
+.inscription-form__req {
+  color: var(--danger-600, #b42318);
+}
+
+.inscription-form__message {
+  display: grid;
+  gap: 6px;
+  margin-top: var(--space-4);
+
+  label {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 96px;
+  }
+}
+
 .inscription-form__actions {
   display: flex;
   justify-content: flex-end;

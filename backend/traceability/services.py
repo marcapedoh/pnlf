@@ -36,6 +36,17 @@ STATUT_ORDRE = {
     'ANNULE': 7,
 }
 
+STATUT_LIBELLES = {
+    'BROUILLON': 'Brouillon',
+    'DECLARE': 'Déclaré',
+    'VALIDE': 'Validé',
+    'EN_TRANSIT': 'En transit',
+    'TRANSFORME': 'Transformé',
+    'COMMERCIALISE': 'Commercialisé',
+    'ARCHIVE': 'Archivé',
+    'ANNULE': 'Annulé',
+}
+
 TYPES_MOUVEMENT = {
     'COLLECTE', 'RECEPTION_COOPERATIVE', 'TRANSFERT', 'TRANSFORMATION',
     'CONTROLE', 'VENTE', 'EXPORT', 'AUTRE',
@@ -227,12 +238,16 @@ def enregistrer_photo(fichier, sous_dossier: str, entite_id, suffixe: str = '') 
 def transition_lot_statut(lot: Lot, nouveau_statut: str, *, force: bool = False) -> None:
     """Transition manuelle (validation agent / admin)."""
     if nouveau_statut not in STATUT_ORDRE:
-        raise ValidationError({'statut': 'Statut lot invalide.'})
+        raise ValidationError({'statut': 'Statut de lot invalide.'})
     if not force:
         cur = STATUT_ORDRE.get(lot.statut, 0)
         nxt = STATUT_ORDRE.get(nouveau_statut, 0)
         if nxt < cur and nouveau_statut not in ('ANNULE', 'ARCHIVE'):
-            raise ValidationError({'statut': f'Transition interdite : {lot.statut} → {nouveau_statut}'})
+            avant = STATUT_LIBELLES.get(lot.statut, lot.statut)
+            apres = STATUT_LIBELLES.get(nouveau_statut, nouveau_statut)
+            raise ValidationError({
+                'statut': f'Un lot « {avant} » ne peut pas revenir au statut « {apres} ».',
+            })
     lot.statut = nouveau_statut
     lot.updated_at = timezone.now()
     lot.save(update_fields=['statut', 'updated_at'])

@@ -17,11 +17,8 @@ export class CookieConsentComponent {
 
   readonly hasChoice = this.consent.hasChoice.bind(this.consent);
 
-  acceptAll(): void {
-    this.consent.acceptAll();
-  }
-
-  acceptEssentialOnly(): void {
+  /** Seuls des cookies essentiels sont déposés : une simple prise de connaissance suffit. */
+  acknowledge(): void {
     this.consent.acceptEssentialOnly();
   }
 }

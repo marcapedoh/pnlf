@@ -12,53 +12,101 @@
 
 <pnlf-card>
   @if (errorMessage()) {
-    <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;">{{ errorMessage() }}</pnlf-alert>
+    <pnlf-alert tone="error" style="display:block; margin-bottom: 1.25rem;" role="alert">{{ errorMessage() }}</pnlf-alert>
   }
 
   <form [formGroup]="form" (ngSubmit)="submit()" class="lot-form" novalidate>
+    <p class="lot-form__hint">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
     <div class="lot-form__field">
-      <label class="pnlf-field__label">Producteur / collecteur <span class="pnlf-field__required">*</span></label>
+      <label class="pnlf-field__label" for="lot-producteur">Producteur / collecteur <span class="pnlf-field__required" aria-hidden="true">*</span></label>
       @if (isProducteurRole && selectedProducteur()) {
-        <p class="lot-form__hint-ok">
-          ✓ {{ selectedProducteur()!.prenoms }} {{ selectedProducteur()!.nom }} — {{ selectedProducteur()!.code_producteur }}
+        <p class="lot-form__hint-ok" id="lot-producteur">
+          ✓ {{ selectedProducteur()!.prenoms }} {{ selectedProducteur()!.nom }} ({{ selectedProducteur()!.code_producteur }})
         </p>
       } @else {
         <div class="lot-form__combo">
           <input
+            #producteurInput
+            id="lot-producteur"
             type="text"
             class="pnlf-select"
-            placeholder="Rechercher par nom, code ou téléphone…"
+            role="combobox"
+            autocomplete="off"
+            aria-autocomplete="list"
+            aria-controls="lot-producteur-results"
+            aria-required="true"
+            [attr.aria-expanded]="comboOpen"
+            [attr.aria-activedescendant]="activeIndex() >= 0 && producteurResults().length ? 'lot-producteur-opt-' + activeIndex() : null"
+            [attr.aria-invalid]="producteurError() ? true : null"
+            [attr.aria-describedby]="producteurError() ? 'lot-producteur-error' : 'lot-producteur-hint'"
+            placeholder="Saisissez au moins 2 caractères : nom, code ou téléphone"
             [value]="producteurQuery()"
             (input)="onProducteurQueryChange($any($event.target).value)"
+            (keydown)="onProducteurKeydown($event)"
           />
-          @if (producteurResults().length > 0) {
-            <ul class="lot-form__combo-results">
-              @for (p of producteurResults(); track p.id) {
-                <li>
-                  <button type="button" (click)="selectProducteur(p)">
-                    <strong>{{ p.prenoms }} {{ p.nom }}</strong>
-                    <span>{{ p.code_producteur }} · {{ p.province_nom }}</span>
-                  </button>
-                </li>
+          @if (comboOpen) {
+            <ul class="lot-form__combo-results" id="lot-producteur-results" role="listbox" aria-label="Producteurs trouvés">
+              @if (searchingProducteur()) {
+                <li class="lot-form__combo-state" role="status">Recherche en cours…</li>
+              } @else if (producteurSearchError()) {
+                <li class="lot-form__combo-state" role="alert">{{ producteurSearchError() }}</li>
+              } @else if (producteurResults().length === 0) {
+                <li class="lot-form__combo-state" role="status">Aucun producteur ne correspond à « {{ producteurQuery().trim() }} ».</li>
+              } @else {
+                @for (p of producteurResults(); track p.id; let i = $index) {
+                  <li
+                    role="option"
+                    [id]="'lot-producteur-opt-' + i"
+                    [attr.aria-selected]="i === activeIndex()"
+                    [class.is-active]="i === activeIndex()"
+                  >
+                    <button type="button" tabindex="-1" (click)="selectProducteur(p)" (mouseenter)="activeIndex.set(i)">
+                      <strong>{{ p.prenoms }} {{ p.nom }}</strong>
+                      <span>{{ p.code_producteur }} · {{ p.province_nom || 'Province non renseignée' }}</span>
+                    </button>
+                  </li>
+                }
               }
             </ul>
           }
         </div>
-        @if (selectedProducteur()) {
-          <p class="lot-form__hint-ok">✓ Producteur sélectionné</p>
+        @if (producteurError()) {
+          <p class="lot-form__error" id="lot-producteur-error">{{ producteurError() }}</p>
+        } @else if (selectedProducteur()) {
+          <p class="lot-form__hint-ok" id="lot-producteur-hint">✓ Producteur sélectionné</p>
+        } @else {
+          <p class="lot-form__hint" id="lot-producteur-hint">Utilisez les flèches haut et bas puis Entrée pour choisir un résultat.</p>
         }
       }
     </div>
 
     <div class="producteur-form__grid">
-      <pnlf-select-field label="Produit" formControlName="produit" [options]="produits()" [required]="true" [errorMessage]="submitted() && form.controls.produit.invalid ? 'Veuillez sélectionner un produit.' : ''" />
-      <pnlf-text-field label="Date de collecte" type="date" formControlName="date_collecte" [required]="true" />
+      <pnlf-select-field label="Produit" formControlName="produit" [options]="produits()" [required]="true" [errorMessage]="err('produit', 'Sélectionnez un produit.')" />
+      <pnlf-text-field label="Date de collecte" type="date" formControlName="date_collecte" [required]="true" [max]="today" [errorMessage]="err('date_collecte', 'Indiquez la date de collecte.')" />
 
-      <pnlf-text-field label="Quantité" type="number" formControlName="quantite" [required]="true" [errorMessage]="submitted() && form.controls.quantite.invalid ? 'Veuillez saisir une quantité valide.' : ''" />
+      <pnlf-text-field
+        label="Quantité"
+        type="number"
+        formControlName="quantite"
+        [required]="true"
+        min="0.001"
+        step="any"
+        inputmode="decimal"
+        [errorMessage]="quantiteError()"
+      />
       <pnlf-select-field label="Unité" formControlName="unite" [options]="unites" [required]="true" />
 
       <pnlf-text-field label="Indicateur de qualité" formControlName="qualite_indicateur" placeholder="ex : Séché, 1er choix…" />
-      <pnlf-text-field label="Prix indicatif (XAF)" type="number" formControlName="prix_indicatif" />
+      <pnlf-text-field
+        label="Prix indicatif (FCFA)"
+        type="number"
+        formControlName="prix_indicatif"
+        min="0"
+        step="any"
+        inputmode="decimal"
+        hint="Prix unitaire indicatif, facultatif"
+        [errorMessage]="prixError()"
+      />
     </div>
 
     <div class="lot-form__field">
@@ -68,7 +116,7 @@
         [options]="zones()"
         [required]="true"
         hint="Choisissez une zone déjà recensée, ou créez-en une si elle n'existe pas encore."
-        [errorMessage]="submitted() && form.controls.zone_collecte.invalid ? 'Veuillez indiquer la zone de collecte.' : ''"
+        [errorMessage]="err('zone_collecte', 'Indiquez la zone de collecte.')"
       />
       @if (nouvelleZone()) {
         <div class="lot-form__new-zone">
@@ -77,14 +125,16 @@
             <pnlf-text-field
               label="Nom de la nouvelle zone"
               formControlName="nouvelle_zone_libelle"
-              placeholder="ex : Forêt de Minkébé — secteur nord"
+              placeholder="ex : Forêt de Minkébé, secteur nord"
               [required]="true"
+              [errorMessage]="err('nouvelle_zone_libelle', 'Indiquez le nom de la nouvelle zone.')"
             />
             <pnlf-select-field
               label="Province"
               formControlName="nouvelle_zone_province"
               [options]="provinces()"
               [required]="true"
+              [errorMessage]="err('nouvelle_zone_province', 'Sélectionnez la province de la zone.')"
             />
           </div>
         </div>
@@ -93,50 +143,50 @@
 
     <pnlf-text-field label="Observations" formControlName="observations" />
 
-    <div class="lot-form__field">
+    <div class="lot-form__field" role="group" aria-labelledby="lot-gps-label">
       <div class="lot-form__field-header">
-        <label class="pnlf-field__label">Coordonnées GPS du lieu de production/récolte (WGS84, optionnel)</label>
+        <span class="pnlf-field__label" id="lot-gps-label">Coordonnées GPS du lieu de production/récolte (WGS84, facultatif)</span>
         <button type="button" class="lot-form__gps-btn" (click)="useCurrentPosition()" [disabled]="locatingGps()">
           <pnlf-icon name="map-pin" [size]="14" />
           {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position actuelle' }}
         </button>
       </div>
       <div class="producteur-form__grid">
-        <pnlf-text-field label="Latitude" formControlName="latitude" placeholder="ex : -0.5546" />
-        <pnlf-text-field label="Longitude" formControlName="longitude" placeholder="ex : 11.6642" />
+        <pnlf-text-field label="Latitude" formControlName="latitude" placeholder="ex : -0.5546" inputmode="decimal" hint="Entre -4 et 2,5" [errorMessage]="err('latitude')" />
+        <pnlf-text-field label="Longitude" formControlName="longitude" placeholder="ex : 11.6642" inputmode="decimal" hint="Entre 8,5 et 14,6" [errorMessage]="err('longitude')" />
       </div>
       @if (gpsError()) {
-        <p class="lot-form__error">{{ gpsError() }}</p>
+        <p class="lot-form__error" role="alert">{{ gpsError() }}</p>
       }
     </div>
 
     <div class="lot-form__field">
-      <label class="pnlf-field__label">Photos de la marchandise (optionnel, {{ photosMax }} maximum)</label>
-      <div class="lot-photos">
+      <span class="pnlf-field__label" id="lot-photos-label">Photos de la marchandise (facultatif, {{ photosMax }} maximum)</span>
+      <div class="lot-photos" aria-labelledby="lot-photos-label" role="group">
         @for (preview of photoPreviews(); track $index) {
           <div class="lot-photos__thumb">
-            <img [src]="preview" alt="Photo du lot" />
-            <button type="button" class="lot-photos__remove" (click)="removePhoto($index)" aria-label="Retirer la photo">
+            <img [src]="preview" [alt]="'Photo ' + ($index + 1) + ' du lot'" />
+            <button type="button" class="lot-photos__remove" (click)="removePhoto($index)" [attr.aria-label]="'Retirer la photo ' + ($index + 1)">
               <pnlf-icon name="x" [size]="14" />
             </button>
           </div>
         }
         @if (photoPreviews().length < photosMax) {
           <label class="lot-photos__add">
-            <input type="file" accept="image/*" [multiple]="true" (change)="onPhotosSelected($event)" hidden />
+            <input type="file" accept="image/jpeg,image/png,image/webp" [multiple]="true" (change)="onPhotosSelected($event)" class="pnlf-visually-hidden" />
             <pnlf-icon name="camera" [size]="22" />
-            <span>Ajouter</span>
+            <span>Ajouter une photo</span>
           </label>
         }
       </div>
-      <p class="lot-form__hint">JPEG, PNG ou WEBP — 5 Mo maximum par photo. Visibles dans l'annuaire public.</p>
+      <p class="lot-form__hint">JPEG, PNG ou WEBP, 5 Mo maximum par photo. Visibles dans l'annuaire public.</p>
       @if (photoError()) {
-        <p class="lot-form__error">{{ photoError() }}</p>
+        <p class="lot-form__error" role="alert">{{ photoError() }}</p>
       }
     </div>
 
     <div class="producteur-form__actions">
-      <a pnlfButton routerLink="/app/lots" variant="ghost" type="button">Annuler</a>
+      <a pnlfButton routerLink="/app/lots" variant="ghost">Annuler</a>
       <button pnlfButton type="button" variant="outline" [loading]="loading()" (click)="submit(true)">Enregistrer en brouillon</button>
       <button pnlfButton type="submit" variant="primary" [loading]="loading()">Déclarer le lot</button>
     </div>

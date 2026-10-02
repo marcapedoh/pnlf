@@ -25,19 +25,29 @@
       id="producteurs-search"
       type="search"
       class="pnlf-select pnlf-toolbar__search"
-      placeholder="Rechercher un nom, code, téléphone…"
+      [placeholder]="canValidate ? 'Nom, code ou téléphone' : 'Nom ou code'"
       [ngModel]="search()"
       (ngModelChange)="onSearchInput($event)"
     />
 
-    <select class="pnlf-select" [ngModel]="provinceFilter()" (ngModelChange)="provinceFilter.set($event); onFilterChange()">
+    <select
+      class="pnlf-select"
+      aria-label="Filtrer par province"
+      [ngModel]="provinceFilter()"
+      (ngModelChange)="provinceFilter.set($event); onFilterChange()"
+    >
       <option value="">Toutes les provinces</option>
       @for (p of provinces(); track p.value) {
         <option [value]="p.value">{{ p.label }}</option>
       }
     </select>
 
-    <select class="pnlf-select" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
+    <select
+      class="pnlf-select"
+      aria-label="Filtrer par statut"
+      [ngModel]="statutFilter()"
+      (ngModelChange)="statutFilter.set($event); onFilterChange()"
+    >
       <option value="">Tous les statuts</option>
       @for (s of [StatutProducteur.ACTIF, StatutProducteur.EN_VALIDATION, StatutProducteur.REJETE, StatutProducteur.INACTIF]; track s) {
         <option [value]="s">{{ statutLabels[s] }}</option>
@@ -47,7 +57,7 @@
 </div>
 
 @if (loading()) {
-  <div class="pnlf-table-wrapper">
+  <div class="pnlf-table-wrapper" role="status" aria-label="Chargement des fiches">
     <table class="pnlf-table">
       <tbody>
         @for (i of [1, 2, 3, 4, 5, 6]; track i) {
@@ -58,11 +68,16 @@
       </tbody>
     </table>
   </div>
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible de charger les fiches">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
 } @else if (items().length === 0) {
   <pnlf-empty-state
     icon="users"
     title="Aucun producteur trouvé"
-    description="Ajustez vos filtres de recherche ou enregistrez une nouvelle fiche."
+    [description]="canCreate ? 'Ajustez vos filtres de recherche ou enregistrez une nouvelle fiche.' : 'Ajustez vos filtres de recherche.'"
   >
     @if (canCreate) {
       <a pnlfButton routerLink="/app/producteurs/nouveau" variant="primary">Enregistrer une fiche</a>
@@ -74,16 +89,19 @@
 } @else {
   <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
     <table class="pnlf-table">
+      <caption class="pnlf-visually-hidden">Liste des producteurs et collecteurs</caption>
       <thead>
         <tr>
-          <th>Code</th>
-          <th>Nom complet</th>
-          <th>Type</th>
-          <th>Province</th>
-          <th>Téléphone</th>
-          <th>Statut</th>
+          <th scope="col">Code</th>
+          <th scope="col">Nom complet</th>
+          <th scope="col">Type</th>
+          <th scope="col">Province</th>
           @if (canValidate) {
-            <th></th>
+            <th scope="col">Téléphone</th>
+          }
+          <th scope="col">Statut</th>
+          @if (canValidate) {
+            <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
           }
         </tr>
       </thead>
@@ -95,23 +113,25 @@
             </td>
             <td data-label="Nom complet">{{ p.prenoms }} {{ p.nom }}</td>
             <td data-label="Type">{{ p.type_acteur === TypeActeur.COLLECTEUR ? 'Collecteur' : 'Producteur' }}</td>
-            <td data-label="Province">{{ p.province_nom }}</td>
-            <td class="pnlf-table__muted" data-label="Téléphone">{{ p.telephone || '—' }}</td>
+            <td data-label="Province">{{ p.province_nom || '-' }}</td>
+            @if (canValidate) {
+              <td class="pnlf-table__muted" data-label="Téléphone">{{ (p.telephone | pnlfTelephone) || '-' }}</td>
+            }
             <td data-label="Statut"><pnlf-status-badge [label]="statutLabels[p.statut]" [tone]="tone(p.statut)" /></td>
             @if (canValidate) {
-              <td data-label="">
+              <td data-label="Actions">
                 @if (p.statut === StatutProducteur.EN_VALIDATION) {
                   <div class="pnlf-table__actions">
-                    <button pnlfButton variant="outline" size="sm" (click)="valider(p)">Valider</button>
-                    <button pnlfButton variant="ghost" size="sm" (click)="rejeter(p)">Rejeter</button>
+                    <button pnlfButton variant="outline" size="sm" (click)="dialog.set({ kind: 'valider', item: p })" [attr.aria-label]="'Valider la fiche de ' + p.prenoms + ' ' + p.nom">Valider</button>
+                    <button pnlfButton variant="ghost" size="sm" (click)="dialog.set({ kind: 'rejeter', item: p })" [attr.aria-label]="'Rejeter la fiche de ' + p.prenoms + ' ' + p.nom">Rejeter</button>
                   </div>
                 } @else if (p.statut === StatutProducteur.ACTIF) {
                   <div class="pnlf-table__actions">
-                    <button pnlfButton variant="ghost" size="sm" (click)="desactiver(p)">Désactiver</button>
+                    <button pnlfButton variant="ghost" size="sm" (click)="dialog.set({ kind: 'desactiver', item: p })" [attr.aria-label]="'Désactiver la fiche de ' + p.prenoms + ' ' + p.nom">Désactiver</button>
                   </div>
                 } @else if (p.statut === StatutProducteur.INACTIF) {
                   <div class="pnlf-table__actions">
-                    <button pnlfButton variant="outline" size="sm" (click)="activer(p)">Réactiver</button>
+                    <button pnlfButton variant="outline" size="sm" (click)="dialog.set({ kind: 'activer', item: p })" [attr.aria-label]="'Réactiver la fiche de ' + p.prenoms + ' ' + p.nom">Réactiver</button>
                   </div>
                 }
               </td>
@@ -122,9 +142,18 @@
     </table>
   </div>
 
-  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" label="Pagination des fiches" (pageChange)="goToPage($event)" />
 }
 
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'valider'"
+  title="Valider cette fiche ?"
+  [message]="'La fiche de ' + dialogNom() + ' deviendra active et apparaîtra dans l’annuaire public.'"
+  confirmLabel="Valider la fiche"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'rejeter'"
   title="Rejeter la fiche"
@@ -140,9 +169,18 @@
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'desactiver'"
   title="Désactiver cette fiche ?"
-  message="Elle disparaîtra de l’annuaire public."
+  [message]="'La fiche de ' + dialogNom() + ' disparaîtra de l’annuaire public et le compte lié sera bloqué.'"
   confirmLabel="Désactiver"
   [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'activer'"
+  title="Réactiver cette fiche ?"
+  [message]="'La fiche de ' + dialogNom() + ' réapparaîtra dans l’annuaire public et le compte lié sera débloqué.'"
+  confirmLabel="Réactiver"
   [loading]="dialogLoading()"
   (confirmed)="onDialogConfirm($event)"
   (cancelled)="dialog.set(null)"

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { ASSISTANCE } from '../../../../core/config/assistance';
 import { IconComponent } from '../../../../design-system/icon/icon.component';
 
 @Component({
@@ -13,4 +14,5 @@ import { IconComponent } from '../../../../design-system/icon/icon.component';
 })
 export class ConfidentialiteComponent {
   readonly derniereMiseAJour = '21 septembre 2026';
+  readonly assistance = ASSISTANCE;
 }

@@ -356,18 +356,23 @@ def export_journal(
         debut=debut_dt, fin=fin_dt, limit=5000, offset=0,
         utilisateur_id=utilisateur_id, action=action, q=q,
     )
-    headers = ['Date/heure', 'Action', 'Table', 'Enregistrement', 'Utilisateur', 'IP']
+    from pnlf_platform.pdf_export import libelle_action, libelle_table
+
+    headers = ['Date et heure', 'Action', 'Élément concerné', 'Identifiant', 'Utilisateur', 'Adresse IP']
 
     def _line(r):
         created = r['created_at']
         try:
-            created = datetime.fromisoformat(created).strftime('%d/%m/%Y %H:%M')
+            dt = datetime.fromisoformat(created)
+            if timezone.is_aware(dt):
+                dt = timezone.localtime(dt)
+            created = dt.strftime('%d/%m/%Y %H:%M')
         except Exception:
             pass
         return [
             created,
-            r.get('action') or '',
-            r.get('table_cible') or '',
+            libelle_action(r.get('action')),
+            libelle_table(r.get('table_cible')),
             r.get('enregistrement_id') or '',
             r.get('utilisateur') or '',
             r.get('ip_adresse') or '',

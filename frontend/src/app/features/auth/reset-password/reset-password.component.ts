@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
+import { controlError, handleFormApiError, revealFormErrors } from '../../../core/forms/form-errors.util';
 import { passwordMatchValidator } from '../../../core/validators/password-match.validator';
 import { toApiError } from '../../../core/http/api-error.util';
 import { PasswordService } from '../../../core/services/password.service';
@@ -29,6 +30,7 @@ export class ResetPasswordComponent {
   private readonly passwordService = inject(PasswordService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly loading = signal(false);
   readonly submitted = signal(false);
@@ -49,17 +51,14 @@ export class ResetPasswordComponent {
   );
 
   get passwordError(): string {
-    const ctrl = this.form.controls.password;
-    if (!this.submitted() || !ctrl.errors) return '';
-    if (ctrl.errors['required']) return 'Veuillez saisir un nouveau mot de passe.';
-    if (ctrl.errors['minlength']) return 'Le mot de passe doit contenir au moins 8 caractères.';
-    return '';
+    return controlError(this.form.controls.password, 'Saisissez un nouveau mot de passe.');
   }
 
   get confirmError(): string {
-    if (!this.submitted()) return '';
-    if (this.form.controls.confirm.errors?.['required']) return 'Veuillez confirmer le mot de passe.';
-    if (this.form.errors?.['passwordMismatch']) return 'Les mots de passe ne correspondent pas.';
+    const ctrl = this.form.controls.confirm;
+    const err = controlError(ctrl, 'Confirmez le mot de passe.');
+    if (err) return err;
+    if (ctrl.touched && this.form.errors?.['passwordMismatch']) return 'Les mots de passe ne correspondent pas.';
     return '';
   }
 
@@ -70,7 +69,10 @@ export class ResetPasswordComponent {
       this.errorMessage.set('Le lien de réinitialisation est invalide ou a expiré.');
       return;
     }
-    if (this.form.invalid) return;
+    if (this.form.invalid) {
+      this.errorMessage.set(revealFormErrors(this.form, this.host));
+      return;
+    }
 
     this.loading.set(true);
     this.passwordService
@@ -83,7 +85,9 @@ export class ResetPasswordComponent {
         },
         error: (err) => {
           this.loading.set(false);
-          this.errorMessage.set(toApiError(err).message);
+          this.errorMessage.set(
+            handleFormApiError(this.form, toApiError(err), this.host, { nouveau_mot_de_passe: 'password' }),
+          );
         },
       });
   }

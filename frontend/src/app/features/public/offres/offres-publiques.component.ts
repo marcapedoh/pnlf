@@ -1,4 +1,4 @@
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { PnlfDatePipe, PnlfMontantPipe, PnlfUnitePipe } from '../../../shared/pipes/format.pipes';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -17,8 +17,9 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
   imports: [
     FormsModule,
     RouterLink,
-    DatePipe,
-    DecimalPipe,
+    PnlfDatePipe,
+    PnlfMontantPipe,
+    PnlfUnitePipe,
     EmptyStateComponent,
     IconComponent,
     SkeletonComponent,
@@ -33,6 +34,7 @@ export class OffresPubliquesComponent {
 
   readonly items = signal<PublicOffreDemande[]>([]);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly provinces = signal<PublicProvince[]>([]);
   readonly produits = signal<PublicProduit[]>([]);
   readonly page = signal(1);
@@ -74,6 +76,7 @@ export class OffresPubliquesComponent {
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.publicService
       .offres({
         q: this.recherche.trim() || undefined,
@@ -89,7 +92,10 @@ export class OffresPubliquesComponent {
           this.total.set(res.count ?? res.results.length);
           this.loading.set(false);
         },
-        error: () => this.loading.set(false),
+        error: () => {
+          this.loading.set(false);
+          this.loadError.set('Impossible de charger les annonces. Vérifiez votre connexion puis réessayez.');
+        },
       });
   }
 }

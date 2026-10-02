@@ -3,23 +3,35 @@
     <div>
       <p class="text-eyebrow">Administration</p>
       <h1 class="pnlf-page-header__title">Créer un compte</h1>
-      <p class="pnlf-page-header__subtitle">Nouveau compte selon l’un des 6 profils métiers de la plateforme.</p>
+      <p class="pnlf-page-header__subtitle">Nouveau compte selon l’un des profils métiers de la plateforme.</p>
     </div>
     <button pnlfButton variant="ghost" type="button" (click)="showForm.set(false)">← Retour à la liste</button>
   </div>
 
   <pnlf-card title="Nouveau compte utilisateur">
+    <p class="text-sm text-muted" style="margin: 0 0 1rem;">Les champs marqués d’un astérisque (*) sont obligatoires.</p>
     @if (errorMessage()) {
       <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;">{{ errorMessage() }}</pnlf-alert>
     }
-    <form [formGroup]="form" (ngSubmit)="submit()" class="user-form">
-      <pnlf-text-field label="Nom" formControlName="nom" [required]="true" />
-      <pnlf-text-field label="Prénoms" formControlName="prenoms" [required]="true" />
-      <pnlf-text-field label="E-mail professionnel" type="email" formControlName="email" [required]="true" />
-      <pnlf-text-field label="Téléphone" formControlName="telephone" />
-      <pnlf-select-field label="Rôle / profil" formControlName="role" [options]="roleOptions" [required]="true" />
-      <pnlf-text-field label="Mot de passe temporaire" type="password" formControlName="password" [required]="true" hint="L'utilisateur devra le modifier à sa première connexion." />
+    <form [formGroup]="form" (ngSubmit)="submit()" class="user-form" novalidate>
+      <pnlf-select-field label="Rôle" formControlName="role" [options]="roleOptions()" [required]="true" [errorMessage]="err('role')" />
+      <pnlf-text-field [label]="form.controls.role.value === 'COOPERATIVE' ? 'Nom de la coopérative' : 'Nom'" formControlName="nom" autocomplete="off" [required]="true" [errorMessage]="err('nom')" />
+      @if (form.controls.role.value !== 'COOPERATIVE') {
+        <pnlf-text-field label="Prénoms" formControlName="prenoms" autocomplete="off" [required]="true" [errorMessage]="err('prenoms')" />
+      }
+      <pnlf-text-field label="Adresse e-mail professionnelle" type="email" formControlName="email" autocomplete="off" [required]="true" [errorMessage]="err('email')" />
+      <pnlf-text-field label="Téléphone" type="tel" formControlName="telephone" inputmode="tel" placeholder="+241 77 00 01 02" [errorMessage]="err('telephone')" />
+      <pnlf-text-field
+        label="Mot de passe temporaire"
+        type="password"
+        formControlName="password"
+        autocomplete="new-password"
+        [required]="true"
+        [errorMessage]="err('password')"
+        hint="8 caractères minimum, ni trop courant ni uniquement numérique. La personne devra le changer à sa première connexion."
+      />
       <div class="user-form__actions">
+        <button pnlfButton type="button" variant="ghost" (click)="showForm.set(false)">Annuler</button>
         <button pnlfButton type="submit" variant="primary" [loading]="saving()">Créer le compte</button>
       </div>
     </form>
@@ -29,9 +41,9 @@
     <div>
       <p class="text-eyebrow">Administration</p>
       <h1 class="pnlf-page-header__title">Comptes utilisateurs</h1>
-      <p class="pnlf-page-header__subtitle">Gestion des accès à la plateforme selon les 6 profils métiers.</p>
+      <p class="pnlf-page-header__subtitle">Gestion des accès à la plateforme selon les profils métiers.</p>
     </div>
-    <button pnlfButton variant="primary" (click)="showForm.set(true)">
+    <button pnlfButton variant="primary" (click)="ouvrirFormulaire()">
       + Créer un compte
     </button>
   </div>
@@ -43,17 +55,17 @@
         id="user-search"
         type="search"
         class="pnlf-select pnlf-toolbar__search"
-        placeholder="Rechercher un nom, un e-mail, un téléphone…"
+        placeholder="Nom, adresse e-mail ou téléphone"
         [ngModel]="search()"
         (ngModelChange)="onSearchInput($event)"
       />
-      <select class="pnlf-select" [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event); onFilterChange()">
+      <select class="pnlf-select" aria-label="Filtrer par rôle" [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event); onFilterChange()">
         <option value="">Tous les rôles</option>
-        @for (r of roleOptions; track r.value) {
+        @for (r of roleFilterOptions; track r.value) {
           <option [value]="r.value">{{ r.label }}</option>
         }
       </select>
-      <select class="pnlf-select" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
+      <select class="pnlf-select" aria-label="Filtrer par statut" [ngModel]="statutFilter()" (ngModelChange)="statutFilter.set($event); onFilterChange()">
         <option value="">Tous les statuts</option>
         @for (s of [StatutCompte.ACTIF, StatutCompte.EN_ATTENTE, StatutCompte.SUSPENDU, StatutCompte.INACTIF]; track s) {
           <option [value]="s">{{ statutLabels[s] }}</option>
@@ -63,7 +75,7 @@
   </div>
 
   @if (loading()) {
-    <div class="pnlf-table-wrapper">
+    <div class="pnlf-table-wrapper" aria-busy="true">
       <table class="pnlf-table">
         <tbody>
           @for (i of [1, 2, 3, 4, 5, 6]; track i) {
@@ -72,6 +84,11 @@
         </tbody>
       </table>
     </div>
+  } @else if (loadError()) {
+    <pnlf-alert tone="error" title="Impossible de charger les comptes">
+      {{ loadError() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+    </pnlf-alert>
   } @else if (items().length === 0) {
     <pnlf-empty-state
       icon="lock"
@@ -81,33 +98,38 @@
   } @else {
     <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
-        <thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
+        <caption class="pnlf-visually-hidden">Comptes utilisateurs</caption>
+        <thead>
+          <tr>
+            <th scope="col">Nom</th>
+            <th scope="col">Adresse e-mail</th>
+            <th scope="col">Rôle</th>
+            <th scope="col">Statut</th>
+            <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
         <tbody>
           @for (u of items(); track u.id) {
-            <tr class="user-row" (click)="openDetail(u)">
-              <td data-label="Nom">{{ u.prenoms }} {{ u.nom }}</td>
-              <td class="pnlf-table__muted" data-label="E-mail">{{ u.email }}</td>
+            <tr>
+              <td data-label="Nom"><a class="pnlf-table__link" [routerLink]="['/app/utilisateurs', u.id]">{{ displayName(u) }}</a></td>
+              <td class="pnlf-table__muted" data-label="Adresse e-mail">{{ u.email }}</td>
               <td data-label="Rôle">{{ roleLabels[u.role] }}</td>
               <td data-label="Statut"><pnlf-status-badge [label]="statutLabels[u.statut]" [tone]="statutTone(u.statut)" /></td>
-              <td data-label="">
-                <div class="user-row__actions" (click)="$event.stopPropagation()">
-                  <a class="pnlf-table__link" [routerLink]="['/app/utilisateurs', u.id]">Voir la fiche →</a>
-                  <button pnlfButton variant="ghost" size="sm" (click)="toggleStatus(u, $event)">
-                    {{ u.statut === StatutCompte.ACTIF ? 'Suspendre' : 'Activer' }}
-                  </button>
-                  <button
-                    pnlfButton
-                    variant="ghost"
-                    size="sm"
-                    [loading]="resettingId() === u.id"
-                    (click)="resetPassword(u, $event)"
-                  >
-                    Réinitialiser MDP
-                  </button>
-                  <button pnlfButton variant="ghost" size="sm" (click)="askDelete(u, $event)">
-                    Supprimer
-                  </button>
-                </div>
+              <td data-label="Actions">
+                @if (peutAgir(u)) {
+                  <div class="user-row__actions">
+                    @if (u.statut === StatutCompte.ACTIF) {
+                      <button pnlfButton variant="ghost" size="sm" type="button" (click)="demander('suspendre', u)">Suspendre</button>
+                    } @else if (u.statut !== StatutCompte.INACTIF) {
+                      <button pnlfButton variant="ghost" size="sm" type="button" (click)="demander('activer', u)">Activer</button>
+                    }
+                    <button pnlfButton variant="ghost" size="sm" type="button" (click)="demander('reset', u)">
+                      Réinitialiser le mot de passe
+                    </button>
+                  </div>
+                } @else {
+                  <span class="text-xs text-muted">{{ u.id === currentUserId() ? 'Votre compte' : 'Réservé à l’administrateur' }}</span>
+                }
               </td>
             </tr>
           }
@@ -115,17 +137,19 @@
       </table>
     </div>
 
-    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+    <pnlf-pagination label="Pagination des comptes" [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
   }
 }
 
-<pnlf-confirm-dialog
-  [open]="confirmDeleteOpen()"
-  title="Supprimer cet utilisateur ?"
-  message="Le compte sera désactivé et ne pourra plus se connecter. Cette action est réservée à l’administrateur."
-  confirmLabel="Supprimer"
-  [danger]="true"
-  [loading]="deleting()"
-  (confirmed)="confirmDelete()"
-  (cancelled)="confirmDeleteOpen.set(false); pendingDelete.set(null)"
-/>
+@if (actionDialog(); as d) {
+  <pnlf-confirm-dialog
+    [open]="true"
+    [title]="d.title"
+    [message]="d.message"
+    [confirmLabel]="d.confirm"
+    [danger]="d.danger"
+    [loading]="actionLoading()"
+    (confirmed)="confirmerAction()"
+    (cancelled)="action.set(null)"
+  />
+}

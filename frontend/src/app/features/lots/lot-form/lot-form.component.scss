@@ -38,6 +38,14 @@
   max-height: 260px;
   overflow-y: auto;
 
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li.is-active button {
+    background: var(--pnlf-green-50);
+  }
+
   li button {
     display: flex;
     flex-direction: column;
@@ -60,6 +68,17 @@
       color: var(--text-muted);
     }
   }
+}
+
+.lot-form__combo-state {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.lot-photos__add:focus-within {
+  outline: 2px solid var(--pnlf-green-600, currentColor);
+  outline-offset: 2px;
 }
 
 .lot-form__field-header {

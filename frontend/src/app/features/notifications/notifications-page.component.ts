@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { PnlfDatePipe } from '../../shared/pipes/format.pipes';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
@@ -9,10 +9,12 @@ import { ButtonComponent } from '../../design-system/button/button.component';
 import { CardComponent } from '../../design-system/card/card.component';
 import { EmptyStateComponent } from '../../design-system/empty-state/empty-state.component';
 import { PaginationComponent } from '../../design-system/pagination/pagination.component';
+import { SkeletonComponent } from '../../design-system/skeleton/skeleton.component';
+import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
 
 @Component({
   selector: 'app-notifications-page',
-  imports: [DatePipe, CardComponent, EmptyStateComponent, ButtonComponent, PaginationComponent],
+  imports: [PnlfDatePipe, CardComponent, EmptyStateComponent, ButtonComponent, PaginationComponent, SkeletonComponent, AlertBannerComponent],
   templateUrl: './notifications-page.component.html',
   styleUrl: './notifications-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,13 +26,22 @@ export class NotificationsPageComponent {
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly openedId = signal<string | null>(null);
+  readonly loading = signal(true);
+  readonly loadError = signal('');
 
   constructor() {
     this.load();
   }
 
   load(): void {
-    this.service.refresh(this.page(), this.pageSize).subscribe();
+    this.loading.set(true);
+    this.loadError.set('');
+    this.service.refresh(this.page(), this.pageSize).subscribe((res) => {
+      this.loading.set(false);
+      if (res === null) {
+        this.loadError.set('Impossible de charger vos notifications. Vérifiez votre connexion puis réessayez.');
+      }
+    });
     this.service.refreshUnreadCount().subscribe();
   }
 

@@ -138,6 +138,22 @@
   color: var(--text-primary);
 }
 
+.offre-contact__req {
+  color: var(--danger-600, #b42318);
+}
+
+.offre-contact__error {
+  margin: calc(var(--space-2) * -1) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--danger-600, #b42318);
+}
+
+.offre-pub-detail__price span {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .hp-field {
   position: absolute;
   left: -10000px;

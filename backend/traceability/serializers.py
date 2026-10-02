@@ -1,4 +1,13 @@
+from django.utils import timezone
 from rest_framework import serializers
+
+from config.validators import (
+    CoordonneesGabonMixin,
+    TelephoneField,
+    valider_date_non_future,
+    valider_montant_positif,
+    valider_quantite_positive,
+)
 
 from .db_utils import get_optional_column, set_optional_column
 from .models import (
@@ -85,6 +94,7 @@ class ProduitSerializer(serializers.ModelSerializer):
 
 class CooperativeSerializer(serializers.ModelSerializer):
     province_nom = serializers.CharField(source='province.nom', read_only=True)
+    telephone = TelephoneField(required=False, allow_blank=True, allow_null=True)
     photo_url = serializers.SerializerMethodField()
     documents = serializers.SerializerMethodField()
 
@@ -121,7 +131,7 @@ class CooperativeMembreSerializer(serializers.ModelSerializer):
         return str(obj.producteur)
 
 
-class ZoneCollecteSerializer(serializers.ModelSerializer):
+class ZoneCollecteSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
     province_nom = serializers.CharField(source='province.nom', read_only=True)
 
     class Meta:
@@ -134,8 +144,19 @@ class ZoneCollecteSerializer(serializers.ModelSerializer):
         extra_kwargs = {'code': {'required': False, 'allow_blank': True}}
 
 
-class ProducteurSerializer(serializers.ModelSerializer):
+ROLES_AGENTS = ('ADMINISTRATEUR', 'AGENT_MINISTERE', 'AGENT_FORESTIER')
+# Données personnelles d'une fiche producteur : lisibles par les agents et par le titulaire.
+CHAMPS_PRIVES_PRODUCTEUR = (
+    'type_piece_identite', 'numero_piece', 'date_naissance', 'notes', 'telephone', 'email',
+)
+# Notes d'instruction (motif de rejet, origine de l'inscription) : écriture réservée aux agents.
+CHAMPS_AGENTS_PRODUCTEUR = ('notes',)
+
+
+class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
     province_nom = serializers.CharField(source='province.nom', read_only=True)
+    cooperative_nom = serializers.CharField(source='cooperative.nom', read_only=True, default=None)
+    telephone = TelephoneField(required=False, allow_blank=True, allow_null=True)
     type_acteur = serializers.ChoiceField(
         choices=[('PRODUCTEUR', 'Producteur'), ('COLLECTEUR', 'Collecteur')],
         required=False,
@@ -151,13 +172,44 @@ class ProducteurSerializer(serializers.ModelSerializer):
             'id', 'code_producteur', 'nom', 'prenoms', 'date_naissance', 'type_acteur',
             'type_piece_identite', 'numero_piece', 'telephone', 'email', 'communaute',
             'province', 'province_nom', 'departement', 'village',
-            'latitude', 'longitude', 'cooperative', 'utilisateur_id', 'statut',
+            'latitude', 'longitude', 'cooperative', 'cooperative_nom', 'utilisateur_id', 'statut',
             'valide_par_id', 'valide_at', 'notes', 'visible_public', 'photo_url', 'documents',
             'client_uuid', 'created_at', 'updated_at',
         )
         read_only_fields = (
             'created_at', 'updated_at', 'utilisateur_id', 'valide_par_id', 'valide_at', 'statut',
         )
+
+    def _demandeur(self):
+        request = self.context.get('request')
+        return getattr(request, 'user', None)
+
+    def _est_agent(self) -> bool:
+        return getattr(self._demandeur(), 'role', None) in ROLES_AGENTS
+
+    def _peut_lire_prives(self, instance) -> bool:
+        if self._est_agent():
+            return True
+        user_id = getattr(self._demandeur(), 'id', None)
+        return bool(user_id and instance.utilisateur_id and instance.utilisateur_id == user_id)
+
+    def validate_date_naissance(self, valeur):
+        if valeur is not None and valeur >= timezone.localdate():
+            raise serializers.ValidationError('La date de naissance doit être antérieure à aujourd’hui.')
+        return valeur
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance is not None:
+            # Un champ que le demandeur ne peut pas lire (donc renvoyé vide par un formulaire)
+            # ne doit jamais écraser la valeur enregistrée.
+            if not self._peut_lire_prives(self.instance):
+                for champ in CHAMPS_PRIVES_PRODUCTEUR:
+                    attrs.pop(champ, None)
+            if not self._est_agent():
+                for champ in CHAMPS_AGENTS_PRODUCTEUR:
+                    attrs.pop(champ, None)
+        return attrs
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -167,24 +219,17 @@ class ProducteurSerializer(serializers.ModelSerializer):
         data['visible_public'] = bool(
             get_optional_column('producteurs', 'visible_public', instance.id, default=True)
         )
-        data['photo_url'] = _photo_url('producteurs', instance.id, self.context.get('request'))
         request = self.context.get('request')
-        role = getattr(getattr(request, 'user', None), 'role', None)
-        if role not in (
-            'ADMINISTRATEUR',
-            'AGENT_MINISTERE',
-            'AGENT_FORESTIER',
-        ):
-            for key in (
-                'type_piece_identite', 'numero_piece', 'date_naissance', 'notes',
-                'telephone', 'email',
-            ):
+        data['photo_url'] = _photo_url('producteurs', instance.id, request)
+        if not self._peut_lire_prives(instance):
+            for key in CHAMPS_PRIVES_PRODUCTEUR:
                 data.pop(key, None)
-            data['documents'] = []
-        else:
+        if self._est_agent():
             # Documents administratifs (CNI, fiche circuit, agrément Nagoya…) réservés
             # aux agents/administrateurs pour l'examen du dossier d'inscription.
             data['documents'] = _documents_administratifs('PRODUCTEUR', instance.id, request)
+        else:
+            data['documents'] = []
         return data
 
     def get_photo_url(self, obj):
@@ -233,8 +278,21 @@ class MouvementSerializer(serializers.ModelSerializer):
             'acteur_cooperative_id',
         )
 
+    def validate_quantite(self, valeur):
+        return valider_quantite_positive(valeur)
 
-class LotSerializer(serializers.ModelSerializer):
+    def validate_latitude(self, valeur):
+        if valeur is not None and not (-90 <= valeur <= 90):
+            raise serializers.ValidationError('La latitude doit être comprise entre -90 et 90.')
+        return valeur
+
+    def validate_longitude(self, valeur):
+        if valeur is not None and not (-180 <= valeur <= 180):
+            raise serializers.ValidationError('La longitude doit être comprise entre -180 et 180.')
+        return valeur
+
+
+class LotSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
     produit_nom = serializers.CharField(source='produit.nom', read_only=True)
     producteur_nom = serializers.SerializerMethodField()
     zone_collecte_nom = serializers.SerializerMethodField()
@@ -257,6 +315,17 @@ class LotSerializer(serializers.ModelSerializer):
             'code_lot', 'uuid_public', 'qr_payload', 'qr_image_path', 'qr_image_url', 'photos_urls',
             'declare_par_id', 'created_at', 'updated_at', 'mouvements', 'zone_collecte_nom', 'statut',
         )
+
+    def validate_date_collecte(self, valeur):
+        return valider_date_non_future(
+            valeur, 'La date de collecte ne peut pas être postérieure à aujourd’hui.',
+        )
+
+    def validate_quantite(self, valeur):
+        return valider_quantite_positive(valeur)
+
+    def validate_prix_indicatif(self, valeur):
+        return valider_montant_positif(valeur, 'Le prix indicatif ne peut pas être négatif.')
 
     def get_producteur_nom(self, obj):
         return f'{obj.producteur.prenoms} {obj.producteur.nom}'.strip()
@@ -430,6 +499,8 @@ class PublicProducteurDetailSerializer(PublicProducteurSerializer):
 
 
 class MessagePublicSerializer(serializers.ModelSerializer):
+    telephone_visiteur = TelephoneField(required=False, allow_blank=True, allow_null=True)
+
     class Meta:
         model = MessagePublic
         fields = (
@@ -437,6 +508,14 @@ class MessagePublicSerializer(serializers.ModelSerializer):
             'message', 'statut', 'created_at', 'traite_at',
         )
         read_only_fields = ('id', 'statut', 'created_at', 'traite_at')
+        extra_kwargs = {
+            'nom_visiteur': {'error_messages': {'blank': 'Votre nom est requis.', 'required': 'Votre nom est requis.'}},
+            'email_visiteur': {'error_messages': {
+                'blank': 'Votre adresse e-mail est requise.',
+                'required': 'Votre adresse e-mail est requise.',
+                'invalid': 'Adresse e-mail invalide.',
+            }},
+        }
 
     def validate_message(self, value):
         if len(value.strip()) < 10:

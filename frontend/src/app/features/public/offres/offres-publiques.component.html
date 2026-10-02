@@ -21,18 +21,18 @@
         (ngModelChange)="onFilterChange()"
       />
     </div>
-    <select class="offres-pub__select" [(ngModel)]="typeAnnonce" (ngModelChange)="onFilterChange()">
+    <select class="offres-pub__select" aria-label="Type d’annonce" [(ngModel)]="typeAnnonce" (ngModelChange)="onFilterChange()">
       <option value="">Toutes les annonces</option>
       <option value="OFFRE">Offres (vente)</option>
       <option value="DEMANDE">Demandes (achat)</option>
     </select>
-    <select class="offres-pub__select" [(ngModel)]="province" (ngModelChange)="onFilterChange()">
+    <select class="offres-pub__select" aria-label="Province" [(ngModel)]="province" (ngModelChange)="onFilterChange()">
       <option value="">Toutes les provinces</option>
       @for (pr of provinces(); track pr.id) {
         <option [value]="pr.id">{{ pr.nom }}</option>
       }
     </select>
-    <select class="offres-pub__select" [(ngModel)]="produit" (ngModelChange)="onFilterChange()">
+    <select class="offres-pub__select" aria-label="Produit" [(ngModel)]="produit" (ngModelChange)="onFilterChange()">
       <option value="">Tous les produits</option>
       @for (p of produits(); track p.id) {
         <option [value]="p.id">{{ p.nom }}</option>
@@ -47,6 +47,10 @@
         <pnlf-skeleton height="280px" />
       }
     </div>
+  } @else if (loadError()) {
+    <pnlf-empty-state icon="alert-triangle" title="Impossible de charger les annonces" [description]="loadError()">
+      <button type="button" class="offres-pub__btn" (click)="load()">Réessayer</button>
+    </pnlf-empty-state>
   } @else if (items().length === 0) {
     <pnlf-empty-state title="Aucune annonce publiée" description="Revenez ultérieurement ou élargissez vos critères.">
       <button type="button" class="offres-pub__btn" (click)="resetFilters()">Effacer les filtres</button>
@@ -58,7 +62,7 @@
         <a class="offre-pub-card" [routerLink]="['/offres-demandes', o.id]">
           <div class="offre-pub-card__photo">
             @if (o.photos_urls?.length) {
-              <img [src]="o.photos_urls![0]" [alt]="o.titre" loading="lazy" />
+              <img [src]="o.photos_urls![0]" alt="" loading="lazy" />
             } @else {
               <span>Photo à venir</span>
             }
@@ -70,15 +74,15 @@
             <h2>{{ o.titre }}</h2>
             <p class="offre-pub-card__meta">{{ o.produit_nom }}@if (o.province_nom) { · {{ o.province_nom }} }</p>
             @if (o.prix_unitaire) {
-              <p class="offre-pub-card__price">{{ o.prix_unitaire | number }} {{ o.devise }}</p>
+              <p class="offre-pub-card__price">{{ o.prix_unitaire | pnlfMontant: o.devise }}@if (o.unite) { / {{ o.unite | pnlfUnite }} }</p>
             }
-            <p class="offre-pub-card__date">Publiée le {{ o.created_at | date: 'dd/MM/yyyy' }}</p>
+            <p class="offre-pub-card__date">Publiée le {{ o.created_at | pnlfDate }}</p>
           </div>
         </a>
       }
     </div>
     @if (total() > pageSize) {
-      <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+      <pnlf-pagination label="Pagination des annonces" [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
     }
   }
 </div>

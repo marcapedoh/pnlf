@@ -29,7 +29,7 @@
           <ul class="identity__facts">
             <li>
               <pnlf-icon name="map-pin" [size]="16" />
-              <span>{{ p.province_nom }}@if (p.communaute) { · {{ p.communaute }} }</span>
+              <span>{{ localisation(p) }}</span>
             </li>
             @if (p.cooperative_nom) {
               <li>
@@ -127,11 +127,11 @@
                     <p class="lot-tile__code">{{ lot.code_lot }}</p>
                     <h3>{{ lot.produit_nom }}</h3>
                     <div class="lot-tile__meta">
-                      <span>{{ lot.quantite }} {{ lot.unite }}</span>
+                      <span>{{ lot.quantite | pnlfQuantite: lot.unite }}</span>
                       @if (lot.qualite_indicateur) {
                         <span>{{ lot.qualite_indicateur }}</span>
                       }
-                      <span>{{ lot.date_collecte | date: 'dd/MM/yyyy' }}</span>
+                      <span>{{ lot.date_collecte | pnlfDate }}</span>
                     </div>
                     @if (lot.observations) {
                       <p class="lot-tile__desc">{{ lot.observations }}</p>
@@ -139,8 +139,8 @@
                     <div class="lot-tile__foot">
                       @if (lot.prix_indicatif) {
                         <p class="lot-tile__price">
-                          {{ lot.prix_indicatif | number }} {{ lot.devise }}
-                          <span>/ {{ lot.unite }}</span>
+                          {{ lot.prix_indicatif | pnlfMontant: lot.devise }}
+                          <span>/ {{ lot.unite | pnlfUnite }}</span>
                         </p>
                       } @else {
                         <p class="lot-tile__price lot-tile__price--muted">Prix sur demande</p>
@@ -201,33 +201,55 @@
               Message envoyé. Le producteur ou un agent du ministère vous recontactera.
             </p>
           }
-          <form [formGroup]="contactForm" (ngSubmit)="submitContact()" class="contact-form">
+          <form [formGroup]="contactForm" (ngSubmit)="submitContact()" class="contact-form" novalidate>
+            <p class="contact-form__hint">Les champs marqués d’un astérisque (*) sont obligatoires.</p>
+            @if (formError()) {
+              <pnlf-alert tone="error">{{ formError() }}</pnlf-alert>
+            }
             <pnlf-text-field
               label="Votre nom"
               formControlName="nom_visiteur"
+              name="name"
+              autocomplete="name"
               [required]="true"
               placeholder="Nom complet"
+              [errorMessage]="err('nom_visiteur')"
             />
             <pnlf-text-field
-              label="Votre e-mail"
+              label="Votre adresse e-mail"
               type="email"
               formControlName="email_visiteur"
+              name="email"
+              autocomplete="email"
               [required]="true"
-              placeholder="email@exemple.com"
+              placeholder="nom@exemple.ga"
+              [errorMessage]="err('email_visiteur')"
             />
             <pnlf-text-field
-              label="Téléphone (optionnel)"
+              label="Téléphone (facultatif)"
+              type="tel"
               formControlName="telephone_visiteur"
-              placeholder="+241 …"
+              name="tel"
+              autocomplete="tel"
+              inputmode="tel"
+              placeholder="+241 77 00 01 02"
+              [errorMessage]="err('telephone_visiteur')"
             />
             <div class="contact-form__message">
-              <label for="message">Votre message</label>
+              <label for="producteur-contact-message">Votre message <span aria-hidden="true" class="contact-form__req">*</span></label>
               <textarea
-                id="message"
+                id="producteur-contact-message"
                 formControlName="message"
                 rows="5"
+                maxlength="2000"
+                required
+                [attr.aria-invalid]="err('message') ? 'true' : null"
+                [attr.aria-describedby]="err('message') ? 'producteur-contact-message-err' : null"
                 placeholder="Achat, partenariat, information sur un lot…"
               ></textarea>
+              @if (err('message')) {
+                <p id="producteur-contact-message-err" class="contact-form__error" role="alert">{{ err('message') }}</p>
+              }
             </div>
             <input type="text" class="hp-field" formControlName="site_web" tabindex="-1" autocomplete="off" aria-hidden="true" />
             <button pnlfButton type="submit" variant="primary" [loading]="sending()" [fullWidth]="true">

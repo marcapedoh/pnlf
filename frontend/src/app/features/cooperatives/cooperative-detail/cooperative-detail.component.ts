@@ -1,8 +1,12 @@
-import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Title } from '@angular/platform-browser';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switchMap, tap } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { initialesStructure } from '../../../core/auth/display-name.util';
+import { toApiError } from '../../../core/http/api-error.util';
 import { unwrapList } from '../../../core/models/common.model';
 import { Cooperative, Producteur, STATUT_COOPERATIVE_LABELS, StatutCooperative } from '../../../core/models/producteur.model';
 import { RoleUtilisateur } from '../../../core/models/user.model';
@@ -10,6 +14,7 @@ import { CooperativeMembre, CooperativesService } from '../../../core/services/c
 import { PdfPreviewService } from '../../../core/services/pdf-preview.service';
 import { ProducteursService } from '../../../core/services/producteurs.service';
 import { cooperativeStatusTone } from '../../../core/ui/status-tone.util';
+import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { CardComponent } from '../../../design-system/card/card.component';
 import { EmptyStateComponent } from '../../../design-system/empty-state/empty-state.component';
@@ -17,10 +22,24 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
 import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
+import { PnlfDatePipe, PnlfTelephonePipe } from '../../../shared/pipes/format.pipes';
+
+type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer' | 'retirer' | 'adhesion';
 
 @Component({
   selector: 'app-cooperative-detail',
-  imports: [RouterLink, DatePipe, CardComponent, StatusBadgeComponent, ButtonComponent, SkeletonComponent, EmptyStateComponent, ConfirmDialogComponent],
+  imports: [
+    RouterLink,
+    PnlfDatePipe,
+    PnlfTelephonePipe,
+    CardComponent,
+    StatusBadgeComponent,
+    ButtonComponent,
+    SkeletonComponent,
+    EmptyStateComponent,
+    ConfirmDialogComponent,
+    AlertBannerComponent,
+  ],
   templateUrl: './cooperative-detail.component.html',
   styleUrl: './cooperative-detail.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,13 +49,15 @@ export class CooperativeDetailComponent {
   private readonly producteursService = inject(ProducteursService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly title = inject(Title);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly coop = signal<Cooperative | null>(null);
   readonly membres = signal<CooperativeMembre[]>([]);
+  readonly membresActifs = computed(() => this.membres().filter((m) => m.actif).length);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly uploadingPhoto = signal(false);
   readonly statutLabels = STATUT_COOPERATIVE_LABELS;
   readonly tone = cooperativeStatusTone;
@@ -53,103 +74,129 @@ export class CooperativeDetailComponent {
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.COOPERATIVE,
   );
+  readonly isCoopRole = this.auth.hasRole(RoleUtilisateur.COOPERATIVE);
+  readonly isProducteur = this.auth.hasRole(RoleUtilisateur.PRODUCTEUR);
 
   readonly membreQuery = signal('');
   readonly membreResults = signal<Producteur[]>([]);
+  readonly membreSearchDone = signal(false);
+  readonly membreSearchError = signal('');
   readonly selectedCandidat = signal<Producteur | null>(null);
   readonly searchingMembre = signal(false);
   readonly addingMembre = signal(false);
-  readonly dialog = signal<{ kind: 'rejeter' | 'desactiver' | 'retirer'; producteur?: string; nom?: string } | null>(null);
+  readonly membreError = signal('');
+  private readonly membreSearch$ = new Subject<string>();
+  readonly dialog = signal<{ kind: DialogKind; producteur?: string; nom?: string } | null>(null);
   readonly dialogLoading = signal(false);
+  readonly coopNom = computed(() => this.coop()?.nom ?? '');
   private readonly pdfPreview = inject(PdfPreviewService);
 
   constructor() {
+    this.membreSearch$
+      .pipe(
+        map((q) => q.trim()),
+        debounceTime(250),
+        distinctUntilChanged(),
+        tap((q) => {
+          this.membreSearchError.set('');
+          this.membreSearchDone.set(false);
+          this.searchingMembre.set(q.length >= 2);
+          if (q.length < 2) this.membreResults.set([]);
+        }),
+        switchMap((q) =>
+          q.length < 2
+            ? of(null)
+            : this.producteursService
+                .list({ search: q, page_size: 8, statut: 'ACTIF', candidats_adhesion: '1', hors_cooperative: this.id })
+                .pipe(
+                  map((res) => unwrapList(res)),
+                  catchError((err) => {
+                    this.membreSearchError.set(toApiError(err).message);
+                    return of([] as Producteur[]);
+                  }),
+                ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((results) => {
+        this.searchingMembre.set(false);
+        if (results === null) return;
+        const already = new Set(this.membres().map((m) => m.producteur));
+        this.membreResults.set(results.filter((p) => !already.has(p.id)));
+        this.membreSearchDone.set(true);
+      });
     this.load();
   }
 
   load(): void {
     this.loading.set(true);
+    this.loadError.set('');
     this.service.get(this.id).subscribe({
       next: (c) => {
         this.coop.set(c);
+        this.title.setTitle(`${c.nom} | PFNL`);
         this.loading.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.router.navigate(['/app/cooperatives']);
+        this.coop.set(null);
+        this.loadError.set(toApiError(err).message);
       },
     });
+    this.reloadMembres();
+  }
+
+  private reloadMembres(): void {
     this.service.membres(this.id).subscribe({
       next: (m) => this.membres.set(m),
       error: () => this.membres.set([]),
     });
   }
 
-  valider(): void {
-    this.service.valider(this.id).subscribe({
-      next: () => {
-        this.toast.success('Coopérative validée avec succès');
-        this.load();
-      },
-      error: () => this.toast.error('Échec de la validation'),
-    });
-  }
-
-  rejeter(): void {
-    this.dialog.set({ kind: 'rejeter' });
-  }
-
-  desactiver(): void {
-    this.dialog.set({ kind: 'desactiver' });
-  }
-
-  confirmerRetrait(m: CooperativeMembre): void {
-    this.dialog.set({ kind: 'retirer', producteur: m.producteur, nom: m.producteur_nom });
-  }
-
   onDialogConfirm(value: string): void {
     const d = this.dialog();
     if (!d) return;
     this.dialogLoading.set(true);
-    const done = (ok: string) => {
+    const done = (ok: string, rechargerFiche = true) => {
       this.dialogLoading.set(false);
       this.dialog.set(null);
       this.toast.success(ok);
-      this.load();
+      if (rechargerFiche) this.load();
+      else this.reloadMembres();
     };
-    const fail = () => {
+    const fail = (titre: string) => (err: unknown) => {
       this.dialogLoading.set(false);
-      this.toast.error('Échec de l’opération');
+      this.dialog.set(null);
+      this.toast.error(titre, toApiError(err).message);
     };
-    if (d.kind === 'rejeter') {
-      this.service.rejeter(this.id, value.trim()).subscribe({ next: () => done('Demande rejetée'), error: fail });
-      return;
+    switch (d.kind) {
+      case 'valider':
+        this.service.valider(this.id).subscribe({ next: () => done('Coopérative validée'), error: fail('Échec de la validation') });
+        break;
+      case 'rejeter':
+        this.service.rejeter(this.id, value.trim()).subscribe({ next: () => done('Demande rejetée'), error: fail('Échec du rejet') });
+        break;
+      case 'desactiver':
+        this.service.desactiver(this.id).subscribe({ next: () => done('Coopérative désactivée'), error: fail('Échec de la désactivation') });
+        break;
+      case 'activer':
+        this.service.activer(this.id).subscribe({ next: () => done('Coopérative réactivée'), error: fail('Échec de la réactivation') });
+        break;
+      case 'adhesion':
+        this.service.demanderAdhesion(this.id).subscribe({
+          next: (res) => done(res.detail || 'Demande d’adhésion envoyée', false),
+          error: fail('Demande d’adhésion impossible'),
+        });
+        break;
+      case 'retirer':
+        if (d.producteur) {
+          this.service.retirerMembre(this.id, d.producteur).subscribe({
+            next: () => done('Membre retiré', false),
+            error: fail('Impossible de retirer ce membre'),
+          });
+        }
+        break;
     }
-    if (d.kind === 'desactiver') {
-      this.service.desactiver(this.id).subscribe({ next: () => done('Coopérative désactivée'), error: fail });
-      return;
-    }
-    if (d.kind === 'retirer' && d.producteur) {
-      this.service.retirerMembre(this.id, d.producteur).subscribe({
-        next: () => {
-          this.dialogLoading.set(false);
-          this.dialog.set(null);
-          this.toast.success('Membre retiré');
-          this.service.membres(this.id).subscribe({ next: (m) => this.membres.set(m), error: () => this.membres.set([]) });
-        },
-        error: fail,
-      });
-    }
-  }
-
-  activer(): void {
-    this.service.activer(this.id).subscribe({
-      next: () => {
-        this.toast.success('Coopérative réactivée');
-        this.load();
-      },
-      error: () => this.toast.error('Échec de la réactivation'),
-    });
   }
 
   onPhotoSelected(event: Event): void {
@@ -161,57 +208,56 @@ export class CooperativeDetailComponent {
       next: (c) => {
         this.coop.set(c);
         this.uploadingPhoto.set(false);
-        this.toast.success('Photo mise à jour');
+        this.toast.success('Logo mis à jour');
         input.value = '';
       },
       error: (err) => {
         this.uploadingPhoto.set(false);
-        this.toast.error(err?.error?.photo?.[0] || err?.error?.detail || 'Échec du téléversement');
+        const apiError = toApiError(err);
+        this.toast.error('Échec du téléversement', apiError.fieldErrors?.['photo']?.[0] ?? apiError.message);
         input.value = '';
       },
     });
   }
 
   initials(nom: string): string {
-    return nom.slice(0, 2).toUpperCase();
+    return initialesStructure(nom);
+  }
+
+  get membreComboOpen(): boolean {
+    return (
+      !this.selectedCandidat() &&
+      this.membreQuery().trim().length >= 2 &&
+      (this.searchingMembre() || this.membreSearchDone() || !!this.membreSearchError())
+    );
   }
 
   onMembreQueryChange(value: string): void {
     this.membreQuery.set(value);
     this.selectedCandidat.set(null);
-    if (value.trim().length < 2) {
+    this.membreError.set('');
+    this.membreSearch$.next(value);
+  }
+
+  onMembreKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
       this.membreResults.set([]);
-      return;
+      this.membreSearchDone.set(false);
     }
-    this.searchingMembre.set(true);
-    this.producteursService
-      .list({
-        search: value,
-        page_size: 8,
-        statut: 'ACTIF',
-        candidats_adhesion: '1',
-        hors_cooperative: this.id,
-      })
-      .subscribe({
-        next: (res) => {
-          const already = new Set(this.membres().map((m) => m.producteur));
-          this.membreResults.set(unwrapList(res).filter((p) => !already.has(p.id)));
-          this.searchingMembre.set(false);
-        },
-        error: () => this.searchingMembre.set(false),
-      });
   }
 
   selectCandidat(p: Producteur): void {
     this.selectedCandidat.set(p);
     this.membreResults.set([]);
-    this.membreQuery.set(`${p.prenoms} ${p.nom} — ${p.code_producteur}`);
+    this.membreSearchDone.set(false);
+    this.membreError.set('');
+    this.membreQuery.set(`${p.prenoms} ${p.nom} (${p.code_producteur})`);
   }
 
   ajouterMembre(): void {
     const p = this.selectedCandidat();
     if (!p) {
-      this.toast.error('Recherchez puis sélectionnez un producteur à rattacher.');
+      this.membreError.set('Recherchez puis sélectionnez un producteur à rattacher.');
       return;
     }
     this.addingMembre.set(true);
@@ -221,15 +267,13 @@ export class CooperativeDetailComponent {
         this.selectedCandidat.set(null);
         this.membreQuery.set('');
         this.membreResults.set([]);
-        this.toast.success('Membre enregistré');
-        this.service.membres(this.id).subscribe({
-          next: (m) => this.membres.set(m),
-          error: () => this.membres.set([]),
-        });
+        this.toast.success('Membre enregistré', `${p.prenoms} ${p.nom}`);
+        this.reloadMembres();
       },
       error: (err) => {
         this.addingMembre.set(false);
-        this.toast.error(err?.error?.detail || 'Impossible d’ajouter ce membre.');
+        const apiError = toApiError(err);
+        this.membreError.set(apiError.fieldErrors?.['producteur']?.[0] ?? apiError.message);
       },
     });
   }

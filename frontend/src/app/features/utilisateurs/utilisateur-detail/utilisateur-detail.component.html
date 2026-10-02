@@ -5,61 +5,78 @@
     <div class="user-detail__identity">
       <div class="user-detail__avatar">
         @if (u.photo_url) {
-          <img [src]="u.photo_url" [alt]="''" />
+          <img [src]="u.photo_url" alt="" />
         } @else {
-          <span>{{ initiales(u) }}</span>
+          <span aria-hidden="true">{{ initiales(u) }}</span>
         }
-        <button
-          type="button"
-          class="user-detail__avatar-edit"
-          [disabled]="uploadingPhoto()"
-          (click)="openPhotoPicker()"
-          aria-label="Changer la photo"
-        >
-          <pnlf-icon name="camera" [size]="14" />
-        </button>
-        <input #photoInput type="file" accept="image/*" class="pnlf-visually-hidden" (change)="onPhotoSelected($event)" />
+        @if (peutAgir() || estMoi()) {
+          <button
+            type="button"
+            class="user-detail__avatar-edit"
+            [disabled]="uploadingPhoto()"
+            (click)="openPhotoPicker()"
+            [attr.aria-label]="'Changer la photo de ' + displayName(u)"
+          >
+            <pnlf-icon name="camera" [size]="14" />
+          </button>
+          <input #photoInput type="file" accept="image/jpeg,image/png,image/webp" class="pnlf-visually-hidden" tabindex="-1" aria-hidden="true" (change)="onPhotoSelected($event)" />
+        }
       </div>
       <div>
         <nav class="pnlf-breadcrumb" aria-label="Fil d’Ariane">
           <a routerLink="/app/utilisateurs">Comptes utilisateurs</a>
           <span aria-hidden="true">›</span>
-          <span aria-current="page">{{ u.prenoms }} {{ u.nom }}</span>
+          <span aria-current="page">{{ displayName(u) }}</span>
         </nav>
         <p class="text-eyebrow">Compte utilisateur</p>
-        <h1 class="pnlf-page-header__title">{{ u.prenoms }} {{ u.nom }}</h1>
+        <h1 class="pnlf-page-header__title">{{ displayName(u) }}</h1>
         <pnlf-status-badge [label]="statutLabels[u.statut]" [tone]="statutTone(u.statut)" />
       </div>
     </div>
     <div class="user-detail__actions">
-      @if (!editMode()) {
+      @if (!editMode() && (peutAgir() || estMoi())) {
         <button pnlfButton variant="outline" type="button" (click)="startEdit()">Modifier la fiche</button>
       }
-      <button pnlfButton variant="outline" [loading]="acting()" (click)="toggleStatus()">
-        {{ u.statut === StatutCompte.ACTIF ? 'Suspendre le compte' : 'Activer le compte' }}
-      </button>
-      <button pnlfButton variant="ghost" [loading]="resetting()" (click)="envoyerReset()">
-        Réinitialiser le mot de passe
-      </button>
-      <button pnlfButton variant="ghost" (click)="askDelete()">Supprimer l’utilisateur</button>
+      @if (peutAgir()) {
+        @if (u.statut === StatutCompte.ACTIF) {
+          <button pnlfButton variant="outline" type="button" (click)="action.set('suspendre')">Suspendre le compte</button>
+        } @else if (u.statut !== StatutCompte.INACTIF) {
+          <button pnlfButton variant="outline" type="button" (click)="action.set('activer')">Activer le compte</button>
+        }
+        <button pnlfButton variant="ghost" type="button" (click)="action.set('reset')">Réinitialiser le mot de passe</button>
+        @if (u.role !== 'ADMINISTRATEUR') {
+          <button pnlfButton variant="ghost" type="button" (click)="action.set('desactiver')">Désactiver le compte</button>
+        }
+      }
       <a pnlfButton routerLink="/app/utilisateurs" variant="ghost">← Retour à la liste</a>
     </div>
   </div>
 
+  @if (estMoi()) {
+    <pnlf-alert tone="info" style="display:block; margin-bottom: 1rem;">
+      Il s’agit de votre propre compte : la suspension, la désactivation et le changement de rôle ne sont pas possibles ici.
+    </pnlf-alert>
+  }
+
   <div class="user-detail__grid">
     @if (editMode()) {
       <pnlf-card title="Modifier la fiche" style="display:block; grid-column: 1 / -1;">
-        <form [formGroup]="form" (ngSubmit)="saveEdit()" class="user-detail__form">
-          <pnlf-text-field label="Nom" formControlName="nom" [required]="true" />
-          <pnlf-text-field label="Prénoms" formControlName="prenoms" />
-          <pnlf-text-field label="E-mail" type="email" formControlName="email" [required]="true" />
-          <pnlf-text-field label="Téléphone" formControlName="telephone" />
-          <pnlf-select-field label="Rôle" formControlName="role" [options]="roleOptions" [required]="true" />
+        @if (formError()) {
+          <pnlf-alert tone="error" style="display:block; margin-bottom: 1rem;">{{ formError() }}</pnlf-alert>
+        }
+        <form [formGroup]="form" (ngSubmit)="saveEdit()" class="user-detail__form" novalidate>
+          <pnlf-text-field [label]="u.role === 'COOPERATIVE' ? 'Nom de la coopérative' : 'Nom'" formControlName="nom" [required]="true" [errorMessage]="err('nom')" />
+          @if (u.role !== 'COOPERATIVE') {
+            <pnlf-text-field label="Prénoms" formControlName="prenoms" />
+          }
+          <pnlf-text-field label="Adresse e-mail" type="email" formControlName="email" [required]="true" [errorMessage]="err('email')" />
+          <pnlf-text-field label="Téléphone" type="tel" formControlName="telephone" inputmode="tel" placeholder="+241 77 00 01 02" [errorMessage]="err('telephone')" />
+          @if (!estMoi()) {
+            <pnlf-select-field label="Rôle" formControlName="role" [options]="roleOptions()" [required]="true" />
+          }
           <div class="user-detail__form-actions">
             <button pnlfButton variant="ghost" type="button" (click)="cancelEdit()">Annuler</button>
-            <button pnlfButton variant="primary" type="submit" [loading]="saving()" [disabled]="form.invalid">
-              Enregistrer
-            </button>
+            <button pnlfButton variant="primary" type="submit" [loading]="saving()">Enregistrer</button>
           </div>
         </form>
       </pnlf-card>
@@ -67,9 +84,11 @@
       <pnlf-card title="Identité">
         <dl class="user-detail__dl">
           <div><dt>Nom</dt><dd>{{ u.nom }}</dd></div>
-          <div><dt>Prénoms</dt><dd>{{ u.prenoms }}</dd></div>
-          <div><dt>E-mail</dt><dd>{{ u.email }}</dd></div>
-          <div><dt>Téléphone</dt><dd>{{ u.telephone || '—' }}</dd></div>
+          @if (u.role !== 'COOPERATIVE') {
+            <div><dt>Prénoms</dt><dd>{{ u.prenoms || 'Non renseignés' }}</dd></div>
+          }
+          <div><dt>Adresse e-mail</dt><dd>{{ u.email }}</dd></div>
+          <div><dt>Téléphone</dt><dd>{{ (u.telephone | pnlfTelephone) || 'Non renseigné' }}</dd></div>
         </dl>
       </pnlf-card>
 
@@ -77,33 +96,40 @@
         <dl class="user-detail__dl">
           <div><dt>Rôle</dt><dd>{{ roleLabels[u.role] }}</dd></div>
           <div><dt>Statut</dt><dd>{{ statutLabels[u.statut] }}</dd></div>
-          <div><dt>Préférence de notification</dt><dd>{{ u.preferences_notif }}</dd></div>
-          <div><dt>Doit changer le mot de passe</dt><dd>{{ u.doit_changer_mdp ? 'Oui' : 'Non' }}</dd></div>
+          <div><dt>Notifications</dt><dd>{{ preferenceNotif(u.preferences_notif) }}</dd></div>
+          <div><dt>Changement de mot de passe exigé</dt><dd>{{ u.doit_changer_mdp ? 'Oui, à la prochaine connexion' : 'Non' }}</dd></div>
         </dl>
       </pnlf-card>
 
       <pnlf-card title="Journal de connexion">
         <dl class="user-detail__dl">
-          <div><dt>Dernière connexion</dt><dd>{{ u.derniere_connexion ? (u.derniere_connexion | date: 'dd/MM/yyyy HH:mm') : 'Jamais' }}</dd></div>
-          <div><dt>Compte créé le</dt><dd>{{ u.created_at | date: 'dd/MM/yyyy HH:mm' }}</dd></div>
+          <div><dt>Dernière connexion</dt><dd>{{ u.derniere_connexion ? (u.derniere_connexion | pnlfDate: 'datetime') : 'Jamais' }}</dd></div>
+          <div><dt>Compte créé le</dt><dd>{{ u.created_at | pnlfDate: 'datetime' }}</dd></div>
           @if (u.updated_at) {
-            <div><dt>Dernière mise à jour</dt><dd>{{ u.updated_at | date: 'dd/MM/yyyy HH:mm' }}</dd></div>
+            <div><dt>Dernière mise à jour</dt><dd>{{ u.updated_at | pnlfDate: 'datetime' }}</dd></div>
           }
         </dl>
       </pnlf-card>
     }
   </div>
 
-  <pnlf-confirm-dialog
-    [open]="confirmDeleteOpen()"
-    title="Supprimer cet utilisateur ?"
-    message="Le compte sera désactivé et ne pourra plus se connecter."
-    confirmLabel="Supprimer"
-    [danger]="true"
-    [loading]="deleting()"
-    (confirmed)="confirmDelete()"
-    (cancelled)="confirmDeleteOpen.set(false)"
-  />
+  @if (actionDialog(); as d) {
+    <pnlf-confirm-dialog
+      [open]="true"
+      [title]="d.title"
+      [message]="d.message"
+      [confirmLabel]="d.confirm"
+      [danger]="d.danger"
+      [loading]="actionLoading()"
+      (confirmed)="confirmerAction()"
+      (cancelled)="action.set(null)"
+    />
+  }
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible d’afficher ce compte">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
 } @else {
   <pnlf-empty-state icon="lock" title="Utilisateur introuvable" />
 }

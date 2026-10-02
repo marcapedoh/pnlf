@@ -16,30 +16,31 @@ import { PublicService } from '../../../core/services/public.service';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { IconComponent } from '../../../design-system/icon/icon.component';
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
+import { HomePartnersComponent } from './home-partners/home-partners.component';
 
 /** Images du dossier « image pfnl », copiées dans public/assets/home-carousel. */
 const HERO_SLIDES = [
-  { src: 'assets/home-carousel/slide-01.jpg', alt: 'Filière PFNL — image 1' },
-  { src: 'assets/home-carousel/slide-02.jpg', alt: 'Filière PFNL — image 2' },
-  { src: 'assets/home-carousel/slide-03.jpg', alt: 'Filière PFNL — image 3' },
-  { src: 'assets/home-carousel/slide-04.jpg', alt: 'Filière PFNL — image 4' },
-  { src: 'assets/home-carousel/slide-05.jpg', alt: 'Filière PFNL — image 5' },
-  { src: 'assets/home-carousel/slide-06.jpg', alt: 'Filière PFNL — image 6' },
-  { src: 'assets/home-carousel/slide-07.jpg', alt: 'Filière PFNL — image 7' },
-  { src: 'assets/home-carousel/slide-08.jpg', alt: 'Filière PFNL — image 8' },
-  { src: 'assets/home-carousel/slide-09.jpg', alt: 'Filière PFNL — image 9' },
-  { src: 'assets/home-carousel/slide-10.jpg', alt: 'Filière PFNL — image 10' },
-  { src: 'assets/home-carousel/slide-11.jpg', alt: 'Filière PFNL — image 11' },
-  { src: 'assets/home-carousel/slide-12.jpg', alt: 'Filière PFNL — image 12' },
-  { src: 'assets/home-carousel/slide-13.jpg', alt: 'Filière PFNL — image 13' },
-  { src: 'assets/home-carousel/slide-14.jpg', alt: 'Filière PFNL — image 14' },
+  { src: 'assets/home-carousel/slide-01.jpg', alt: 'Filière PFNL, image 1' },
+  { src: 'assets/home-carousel/slide-02.jpg', alt: 'Filière PFNL, image 2' },
+  { src: 'assets/home-carousel/slide-03.jpg', alt: 'Filière PFNL, image 3' },
+  { src: 'assets/home-carousel/slide-04.jpg', alt: 'Filière PFNL, image 4' },
+  { src: 'assets/home-carousel/slide-05.jpg', alt: 'Filière PFNL, image 5' },
+  { src: 'assets/home-carousel/slide-06.jpg', alt: 'Filière PFNL, image 6' },
+  { src: 'assets/home-carousel/slide-07.jpg', alt: 'Filière PFNL, image 7' },
+  { src: 'assets/home-carousel/slide-08.jpg', alt: 'Filière PFNL, image 8' },
+  { src: 'assets/home-carousel/slide-09.jpg', alt: 'Filière PFNL, image 9' },
+  { src: 'assets/home-carousel/slide-10.jpg', alt: 'Filière PFNL, image 10' },
+  { src: 'assets/home-carousel/slide-11.jpg', alt: 'Filière PFNL, image 11' },
+  { src: 'assets/home-carousel/slide-12.jpg', alt: 'Filière PFNL, image 12' },
+  { src: 'assets/home-carousel/slide-13.jpg', alt: 'Filière PFNL, image 13' },
+  { src: 'assets/home-carousel/slide-14.jpg', alt: 'Filière PFNL, image 14' },
 ];
 
 const SLIDE_MS = 4500;
 
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, FormsModule, ButtonComponent, IconComponent, SkeletonComponent],
+  imports: [RouterLink, FormsModule, ButtonComponent, IconComponent, SkeletonComponent, HomePartnersComponent],
   templateUrl: './home-page.component.html',
   styleUrl: './home-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

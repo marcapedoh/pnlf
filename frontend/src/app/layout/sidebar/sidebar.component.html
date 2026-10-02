@@ -11,8 +11,8 @@
     @for (section of sections(); track section.title) {
       <div class="app-sidebar__section">
         <p class="app-sidebar__section-title">{{ section.title }}</p>
-        <ul>
-          @for (item of section.items; track item.route) {
+        <ul class="app-sidebar__list">
+          @for (item of section.items; track item.label) {
             <li>
               <a
                 [routerLink]="item.route"

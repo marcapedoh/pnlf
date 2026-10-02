@@ -11,21 +11,26 @@
   <div class="pnlf-field__control pnlf-select-control">
     <select
       [id]="id"
+      [attr.name]="name() || null"
       [value]="value()"
       [disabled]="disabled()"
       [required]="required()"
+      [attr.aria-label]="label() ? null : ariaLabel() || placeholder()"
+      [attr.aria-invalid]="!!errorMessage()"
+      [attr.aria-describedby]="errorMessage() ? id + '-error' : hint() ? id + '-hint' : null"
       (change)="handleChange($event)"
+      (blur)="handleBlur()"
     >
-      <option value="" disabled>{{ placeholder() }}</option>
+      <option value="" [disabled]="required()">{{ placeholder() }}</option>
       @for (opt of options(); track opt.value) {
-        <option [value]="opt.value">{{ opt.label }}</option>
+        <option [value]="opt.value" [selected]="opt.value === value()">{{ opt.label }}</option>
       }
     </select>
   </div>
 
   @if (errorMessage()) {
-    <p class="pnlf-field__error" role="alert">{{ errorMessage() }}</p>
+    <p [id]="id + '-error'" class="pnlf-field__error" role="alert">{{ errorMessage() }}</p>
   } @else if (hint()) {
-    <p class="pnlf-field__hint">{{ hint() }}</p>
+    <p [id]="id + '-hint'" class="pnlf-field__hint">{{ hint() }}</p>
   }
 </div>

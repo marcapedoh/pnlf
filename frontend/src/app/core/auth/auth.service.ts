@@ -5,6 +5,7 @@ import { Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { LoginRequest, LoginResponse, RefreshResponse } from '../models/auth.model';
 import { RoleUtilisateur, Utilisateur } from '../models/user.model';
+import { displayInitials, displayName } from './display-name.util';
 import { TokenStorageService } from './token-storage.service';
 
 @Injectable({ providedIn: 'root' })
@@ -15,15 +16,9 @@ export class AuthService {
   readonly currentUser = this._currentUser.asReadonly();
   readonly bootstrapped = this._bootstrapped.asReadonly();
   readonly isAuthenticated = computed(() => !!this._currentUser());
-  readonly fullName = computed(() => {
-    const u = this._currentUser();
-    return u ? `${u.prenoms} ${u.nom}`.trim() : '';
-  });
-  readonly initials = computed(() => {
-    const u = this._currentUser();
-    if (!u) return '';
-    return `${u.prenoms?.[0] ?? ''}${u.nom?.[0] ?? ''}`.toUpperCase();
-  });
+  readonly mustChangePassword = computed(() => !!this._currentUser()?.doit_changer_mdp);
+  readonly fullName = computed(() => displayName(this._currentUser()));
+  readonly initials = computed(() => displayInitials(this._currentUser()));
 
   constructor(
     private readonly http: HttpClient,
@@ -39,6 +34,12 @@ export class AuthService {
           this._currentUser.set(res.user);
         }),
       );
+  }
+
+  /** Enregistre une nouvelle session (ex. après changement de mot de passe). */
+  applySession(access: string, user?: Utilisateur): void {
+    this.tokens.setTokens(access);
+    if (user) this._currentUser.set(user);
   }
 
   logout(): void {

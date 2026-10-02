@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -11,12 +11,14 @@ import { ButtonComponent } from '../../design-system/button/button.component';
 import { IconComponent } from '../../design-system/icon/icon.component';
 import { SpinnerComponent } from '../../design-system/spinner/spinner.component';
 import { StatusBadgeComponent } from '../../design-system/badge/status-badge.component';
+import { PnlfDatePipe, PnlfQuantitePipe } from '../../shared/pipes/format.pipes';
 
 @Component({
   selector: 'app-verify-public',
   imports: [
     FormsModule,
-    DatePipe,
+    PnlfDatePipe,
+    PnlfQuantitePipe,
     RouterLink,
     AlertBannerComponent,
     ButtonComponent,

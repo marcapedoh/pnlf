@@ -164,7 +164,7 @@ class Producteur(models.Model):
         ordering = ['nom', 'prenoms']
 
     def __str__(self):
-        return f'{self.code_producteur} — {self.prenoms} {self.nom}'
+        return f'{self.code_producteur} : {self.prenoms} {self.nom}'
 
 
 class MessagePublic(models.Model):

@@ -28,6 +28,9 @@ export class SelectFieldComponent implements ControlValueAccessor {
   readonly required = input(false);
   readonly errorMessage = input<string>('');
   readonly hint = input<string>('');
+  readonly name = input<string>('');
+  /** Nom accessible lorsque le champ n'a pas de libellé visible (filtres). */
+  readonly ariaLabel = input<string>('');
 
   readonly id = `pnlf-select-${uid++}`;
   readonly value = signal<string>('');
@@ -56,6 +59,10 @@ export class SelectFieldComponent implements ControlValueAccessor {
     const target = event.target as HTMLSelectElement;
     this.value.set(target.value);
     this.onChange(target.value);
+    this.onTouched();
+  }
+
+  handleBlur(): void {
     this.onTouched();
   }
 }

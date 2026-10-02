@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { ASSISTANCE } from '../../../../core/config/assistance';
 import { IconComponent } from '../../../../design-system/icon/icon.component';
 
 interface FaqItem {
@@ -22,6 +23,7 @@ interface FaqGroupe {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FaqComponent {
+  readonly assistance = ASSISTANCE;
   readonly openKey = signal<string | null>('g0-0');
 
   readonly groupes: FaqGroupe[] = [

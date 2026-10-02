@@ -44,7 +44,7 @@
                   [attr.aria-label]="'Photo ' + (i + 1)"
                   (click)="selectPhoto(i)"
                 >
-                  <img [src]="url" [alt]="l.produit_nom + ' — photo ' + (i + 1)" />
+                  <img [src]="url" [alt]="l.produit_nom + ', photo ' + (i + 1)" />
                 </button>
               }
             </div>
@@ -73,7 +73,7 @@
                   <div class="trace__body">
                     <strong>{{ m.type_libelle }}</strong>
                     <span>
-                      {{ m.date_mouvement | date: 'dd/MM/yyyy' }}
+                      {{ m.date_mouvement | pnlfDate }}
                       @if (m.lieu_libelle) { · {{ m.lieu_libelle }} }
                     </span>
                   </div>
@@ -97,8 +97,8 @@
 
           @if (l.prix_indicatif) {
             <p class="offer__price">
-              {{ l.prix_indicatif | number }} {{ l.devise }}
-              <span>/ {{ l.unite }}</span>
+              {{ l.prix_indicatif | pnlfMontant: l.devise }}
+              <span>/ {{ l.unite | pnlfUnite }}</span>
             </p>
           } @else {
             <p class="offer__price offer__price--muted">Prix sur demande</p>
@@ -109,7 +109,7 @@
               <pnlf-icon name="package" [size]="16" />
               <div>
                 <span>Quantité</span>
-                <strong>{{ l.quantite }} {{ l.unite }}</strong>
+                <strong>{{ l.quantite | pnlfQuantite: l.unite }}</strong>
               </div>
             </li>
             @if (l.qualite_indicateur) {
@@ -125,7 +125,7 @@
               <pnlf-icon name="clock" [size]="16" />
               <div>
                 <span>Collecte</span>
-                <strong>{{ l.date_collecte | date: 'dd/MM/yyyy' }}</strong>
+                <strong>{{ l.date_collecte | pnlfDate }}</strong>
               </div>
             </li>
             @if (l.latitude && l.longitude) {

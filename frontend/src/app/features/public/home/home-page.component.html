@@ -6,7 +6,7 @@
         Traçabilité officielle des Produits Forestiers Non Ligneux
       </h1>
       <p class="hero__lede">
-        Origine, conformité et traçabilité des PFNL du Gabon — de la forêt à l'acheteur.
+        Origine, conformité et traçabilité des PFNL du Gabon, de la forêt à l'acheteur.
       </p>
       <div class="hero__actions">
         <a routerLink="/annuaire" pnlfButton variant="primary" size="lg">Consulter l'annuaire</a>
@@ -201,7 +201,7 @@
       </a>
       <a routerLink="/inscription" [queryParams]="{ type: 'COLLECTEUR' }" class="join-card">
         <pnlf-icon name="map-pin" [size]="28" />
-        <h3>Collecteur / récolteur</h3>
+        <h3>Collecteur</h3>
         <p>Vous collectez des PFNL en forêt pour les vendre ou les transformer.</p>
       </a>
       <a routerLink="/inscription" [queryParams]="{ type: 'COOPERATIVE' }" class="join-card">
@@ -212,6 +212,8 @@
     </div>
   </div>
 </section>
+
+<app-home-partners />
 
 <section class="cta-section">
   <div class="cta-section__inner">
