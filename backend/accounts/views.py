@@ -10,7 +10,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .audit import request_meta, write_audit
-from .serializers import PnlfTokenObtainPairSerializer, UtilisateurSerializer
+from .serializers import PnlfTokenObtainPairSerializer, PnlfTokenRefreshSerializer, UtilisateurSerializer
 
 
 class LoginRateThrottle(throttling.AnonRateThrottle):
@@ -68,6 +68,7 @@ class PnlfTokenObtainPairView(TokenObtainPairView):
 
 class PnlfTokenRefreshView(TokenRefreshView):
     """Refresh depuis cookie HttpOnly (prioritaire) ou corps JSON (compat)."""
+    serializer_class = PnlfTokenRefreshSerializer
     permission_classes = [permissions.AllowAny]
     throttle_classes = [RefreshRateThrottle]
 

@@ -7,7 +7,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -443,7 +443,7 @@ class CooperativeViewSet(viewsets.ModelViewSet):
         )
         return Response({'detail': 'Membre retiré.'})
 
-    @action(detail=True, methods=['post'], url_path='demander-adhesion')
+    @action(detail=True, methods=['post'], url_path='demander-adhesion', permission_classes=[IsAuthenticated])
     def demander_adhesion(self, request, pk=None):
         coop = self.get_object()
         if request.user.role != Utilisateur.Role.PRODUCTEUR:

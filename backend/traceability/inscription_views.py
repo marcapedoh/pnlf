@@ -224,7 +224,7 @@ class PublicInscriptionView(generics.CreateAPIView):
                     telephone=data['telephone'], email=data['email'],
                     adresse=data.get('adresse') or None,
                     province=data['province'], utilisateur_id=user.id, actif=False,
-                    created_at=now, updated_at=now,
+                    statut='EN_VALIDATION', created_at=now, updated_at=now,
                 )
                 fiche.save()
                 sous_dossier, table_cible = 'cooperatives', 'cooperatives'

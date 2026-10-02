@@ -389,7 +389,8 @@ class PublicContactProducteurView(generics.CreateAPIView):
         destinataires.update(
             Utilisateur.objects.filter(
                 role__in=[Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE],
-                actif=True,
+                statut=Utilisateur.Statut.ACTIF,
+                deleted_at__isnull=True,
             ).values_list('id', flat=True)[:5]
         )
         now = timezone.now()

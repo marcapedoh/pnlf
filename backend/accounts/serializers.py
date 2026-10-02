@@ -3,7 +3,8 @@ from datetime import timedelta
 import bcrypt
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Utilisateur
@@ -163,3 +164,19 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
             'access': str(refresh.access_token),
             'user': UtilisateurSerializer(user).data,
         }
+
+
+class PnlfTokenRefreshSerializer(TokenRefreshSerializer):
+    """Refresh vérifié sur pnlf.utilisateurs (UUID) : AUTH_USER_MODEL reste le modèle auth Django."""
+
+    def validate(self, attrs):
+        from .token_utils import password_fingerprint
+
+        refresh = self.token_class(attrs['refresh'])
+        user = Utilisateur.objects.filter(pk=refresh.get('user_id'), deleted_at__isnull=True).first()
+        if user is None or not user.is_active:
+            raise AuthenticationFailed('Compte inactif ou introuvable.', code='user_inactive')
+        claim = refresh.get('pwd')
+        if claim and claim != password_fingerprint(user):
+            raise AuthenticationFailed('Session révoquée.', code='password_changed')
+        return {'access': str(refresh.access_token)}

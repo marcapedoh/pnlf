@@ -4,8 +4,8 @@ set -e
 echo "==> migrate"
 python manage.py migrate --noinput
 
-echo "==> purge non-admins (idempotent, non bloquant)"
-python scripts/purge_non_admins.py --production || echo "WARN: purge skipped"
+echo "==> jeu de demonstration (cree une seule fois, non bloquant)"
+python scripts/seed_demo_acteurs.py || echo "WARN: seed demo ignore"
 
 echo "==> collectstatic"
 python manage.py collectstatic --noinput
