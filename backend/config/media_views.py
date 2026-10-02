@@ -178,10 +178,18 @@ def _user_can_access_rel(user, rel: str) -> bool:
         uid = m.group(1)
         if str(user.id) == uid:
             return True
-        return role in (
+        if role in (
             Utilisateur.Role.ADMINISTRATEUR,
             Utilisateur.Role.AGENT_MINISTERE,
-        )
+        ):
+            return True
+        from pnlf_platform.models import ConversationParticipant
+        mes_conversations = ConversationParticipant.objects.filter(
+            utilisateur_id=user.id,
+        ).values('conversation_id')
+        return ConversationParticipant.objects.filter(
+            utilisateur_id=uid, conversation_id__in=mes_conversations,
+        ).exists()
 
     if rel.startswith('documents/inscriptions/producteurs/'):
         if role not in (
