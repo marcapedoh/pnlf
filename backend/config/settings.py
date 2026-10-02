@@ -221,8 +221,9 @@ AUTHENTICATION_BACKENDS = [
 DJANGO_ADMIN_ENABLED = os.getenv('DJANGO_ADMIN_ENABLED', 'False').lower() in ('1', 'true', 'yes')
 
 REST_FRAMEWORK = {
-    # Nombre de proxys de confiance devant l'application (Render : 1). Sert au throttling et au journal.
-    'NUM_PROXIES': int(os.getenv('DRF_NUM_PROXIES', '1')),
+    # Proxys de confiance devant l'application : sur Render, Cloudflare puis le répartiteur Render (2).
+    # Sert au throttling et au journal ; sans X-Forwarded-For (local), REMOTE_ADDR est utilisé.
+    'NUM_PROXIES': int(os.getenv('DRF_NUM_PROXIES', '2')),
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'accounts.authentication.PnlfJWTAuthentication',
     ),

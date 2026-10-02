@@ -18,9 +18,9 @@ services:
         generateValue: true
       - key: DJANGO_ALLOWED_HOSTS
         value: ".onrender.com,pfnl.onrender.com"
-      # Nombre de proxys devant gunicorn (adresse IP client pour throttling et audit)
+      # Proxys devant gunicorn : Cloudflare puis répartiteur Render (adresse IP client pour throttling et audit)
       - key: DRF_NUM_PROXIES
-        value: "1"
+        value: "2"
       # Médias persistants (Cloudflare R2) : valeurs saisies dans le dashboard Render
       - key: MEDIA_S3_BUCKET
         sync: false
