@@ -132,6 +132,15 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Stockage objet S3 (Cloudflare R2) : copie persistante des médias en production.
+# Laisser MEDIA_S3_BUCKET vide en local pour ne jamais écrire dans le bucket de prod.
+MEDIA_S3_BUCKET = os.getenv('MEDIA_S3_BUCKET', '').strip()
+MEDIA_S3_ENDPOINT_URL = os.getenv('MEDIA_S3_ENDPOINT_URL', '').strip()
+MEDIA_S3_ACCESS_KEY_ID = os.getenv('MEDIA_S3_ACCESS_KEY_ID', '').strip()
+MEDIA_S3_SECRET_ACCESS_KEY = os.getenv('MEDIA_S3_SECRET_ACCESS_KEY', '').strip()
+MEDIA_S3_REGION = os.getenv('MEDIA_S3_REGION', 'auto').strip()
+MEDIA_S3_PREFIX = os.getenv('MEDIA_S3_PREFIX', 'media/').strip()
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 _DEFAULT_CORS_ORIGINS = [

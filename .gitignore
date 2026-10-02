@@ -19,6 +19,9 @@ local_settings.py
 staticfiles/
 media/
 
+# Sauvegardes de production (base + médias)
+sauvegardes/
+
 # IDE / OS
 .idea/
 .vscode/

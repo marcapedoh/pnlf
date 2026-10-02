@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.exceptions import ValidationError as DrfValidationError
 
 from accounts.models import Utilisateur
+from config import media_store
 
 PLACEHOLDER_PHOTO = '[Photo]'
 PLACEHOLDER_AUDIO = '[Message vocal]'
@@ -91,6 +92,7 @@ def enregistrer_piece_message(fichier, message_id, piece_type: str) -> str:
         image.thumbnail((1600, 1600))
         filename = f'{message_id}.jpg'
         image.save(dest_dir / filename, format='JPEG', quality=85)
+        media_store.pousser(f'chat/{filename}')
         return f'chat/{filename}'
 
     ext = _ext_from_name(getattr(fichier, 'name', ''), '.webm')
@@ -120,6 +122,7 @@ def enregistrer_piece_message(fichier, message_id, piece_type: str) -> str:
     with filepath.open('wb') as out:
         for chunk in fichier.chunks():
             out.write(chunk)
+    media_store.pousser(f'chat/{filename}')
     return f'chat/{filename}'
 
 

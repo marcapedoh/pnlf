@@ -16,6 +16,8 @@ from rest_framework.views import APIView
 from accounts.models import Utilisateur
 from accounts.permissions import user_can_access_lot, user_can_access_producteur
 
+from . import media_store
+
 MEDIA_SIGN_SALT = 'pfnl-media-v1'
 MEDIA_SIGN_MAX_AGE = 60 * 60  # 1 h
 
@@ -77,7 +79,9 @@ def build_media_url(rel: str | None, request=None) -> str | None:
 def _absolute_file(rel: str) -> Path:
     root = Path(settings.MEDIA_ROOT).resolve()
     full = (root / rel).resolve()
-    if not str(full).startswith(str(root)) or not full.is_file():
+    if not str(full).startswith(str(root)):
+        raise Http404('Fichier introuvable.')
+    if not full.is_file() and not media_store.assurer_local(full.relative_to(root).as_posix()):
         raise Http404('Fichier introuvable.')
     return full
 

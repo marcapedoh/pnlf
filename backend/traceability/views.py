@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.audit import request_meta, write_audit
+from config import media_store
 from accounts.messaging import envoyer_email, envoyer_sms
 from accounts.models import Utilisateur
 from accounts.permissions import (
@@ -1040,6 +1041,7 @@ class LotViewSet(viewsets.ModelViewSet):
         chemin = chemin_photo('lots', lot.id, suffixe=f'_{index}')
         if chemin.exists():
             chemin.unlink()
+        media_store.supprimer(f'photos/lots/{lot.id}_{index}.jpg')
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=_user_id(request.user), action='DELETE_PHOTO', table_cible='lots',

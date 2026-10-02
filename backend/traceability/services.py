@@ -9,6 +9,8 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from config import media_store
+
 from .models import Lot, Mouvement
 
 # Transitions lot déclenchées par type de mouvement (cadrage §6.4)
@@ -82,6 +84,7 @@ def generer_qr_image(lot: Lot) -> str:
     img.save(filepath)
 
     rel = f'qr/{filename}'
+    media_store.pousser(rel)
     if lot.qr_payload != payload or lot.qr_image_path != rel:
         lot.qr_payload = payload
         lot.qr_image_path = rel
@@ -158,15 +161,20 @@ def enregistrer_document(fichier, sous_dossier: str, entite_id) -> str:
     doc_dir.mkdir(parents=True, exist_ok=True)
     # Supprime toute variante d'extension précédente pour éviter les doublons.
     for old_ext in DOCUMENT_ALLOWED_EXT:
+        if old_ext == ext:
+            continue
         old_path = doc_dir / f'{entite_id}{old_ext}'
         if old_path.exists():
             old_path.unlink(missing_ok=True)
+        media_store.supprimer(f'documents/{sous_dossier}/{entite_id}{old_ext}')
     filename = f'{entite_id}{ext}'
     filepath = doc_dir / filename
     with open(filepath, 'wb') as out:
         for chunk in fichier.chunks():
             out.write(chunk)
-    return f'documents/{sous_dossier}/{filename}'
+    rel = f'documents/{sous_dossier}/{filename}'
+    media_store.pousser(rel)
+    return rel
 
 
 def document_url(document_path: str | None, request=None) -> str | None:
@@ -211,7 +219,9 @@ def enregistrer_photo(fichier, sous_dossier: str, entite_id, suffixe: str = '') 
     filepath = photo_dir / filename
     image.save(filepath, format='JPEG', quality=85)
 
-    return f'photos/{sous_dossier}/{filename}'
+    rel = f'photos/{sous_dossier}/{filename}'
+    media_store.pousser(rel)
+    return rel
 
 
 def transition_lot_statut(lot: Lot, nouveau_statut: str, *, force: bool = False) -> None:

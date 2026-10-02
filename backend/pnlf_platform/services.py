@@ -423,6 +423,9 @@ def generer_qr_offre(offre) -> str:
     import qrcode
     img = qrcode.make(payload)
     img.save(filepath)
+
+    from config import media_store
+    media_store.pousser(f'qr/{filename}')
     return f'qr/{filename}'
 
 
