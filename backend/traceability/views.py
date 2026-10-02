@@ -922,9 +922,14 @@ class LotViewSet(viewsets.ModelViewSet):
             extra['latitude'] = zone.latitude
             extra['longitude'] = zone.longitude
         extra['statut'] = 'BROUILLON' if self.request.data.get('brouillon') in (True, 'true', '1', 'True') else 'DECLARE'
+        # Code unique côté appli : évite l'INSERT avec code_lot='' (contrainte UNIQUE
+        # + lots orphelins vides en prod si le trigger SQL ne s'applique pas).
+        code_lot = (
+            f"PNLF-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:10].upper()}"
+        )
         lot = serializer.save(
             created_at=now, updated_at=now, sync_statut='SYNCED',
-            declare_par_id=user.id, code_lot='',
+            declare_par_id=user.id, code_lot=code_lot,
             **extra,
         )
         lot.refresh_from_db()

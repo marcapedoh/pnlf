@@ -909,6 +909,20 @@ def bilan() -> None:
 
 
 def creer_jeu(s: Seed) -> None:
+    from django.db import connection
+
+    # Répare les lots avec code vide (bloque la contrainte UNIQUE en prod).
+    with connection.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE lots
+               SET code_lot = 'PNLF-FIX-' || UPPER(SUBSTRING(REPLACE(id::text, '-', '') FROM 1 FOR 12))
+             WHERE code_lot IS NULL OR code_lot = ''
+            """
+        )
+        if cur.rowcount:
+            print(f'> {cur.rowcount} lot(s) au code vide réparé(s)')
+
     etape_comptes(s)
     etape_inscriptions(s)
     etape_validations(s)
