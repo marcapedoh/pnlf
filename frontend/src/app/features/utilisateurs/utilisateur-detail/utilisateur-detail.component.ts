@@ -1,6 +1,7 @@
 import { PnlfDatePipe, PnlfTelephonePipe } from '../../../shared/pipes/format.pipes';
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Observable, of, switchMap } from 'rxjs';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -31,7 +32,7 @@ import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.
 import { TextFieldComponent } from '../../../design-system/text-field/text-field.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
 
-type ActionCompte = 'suspendre' | 'activer' | 'reset' | 'desactiver';
+type ActionCompte = 'suspendre' | 'activer' | 'reset' | 'desactiver' | 'rejeter';
 
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const PHOTO_MAX = 5 * 1024 * 1024;
@@ -99,6 +100,12 @@ export class UtilisateurDetailComponent {
   });
   readonly estMoi = computed(() => this.user()?.id === this.currentUser()?.id);
 
+  /** Seules les inscriptions acheteur en attente se rejettent ici ; producteurs et coopératives passent par « À traiter ». */
+  readonly peutRejeter = computed(() => {
+    const u = this.user();
+    return !!u && u.statut === StatutCompte.EN_ATTENTE && u.role === RoleUtilisateur.ACHETEUR;
+  });
+
   readonly actionDialog = computed(() => {
     const a = this.action();
     const u = this.user();
@@ -117,10 +124,19 @@ export class UtilisateurDetailComponent {
           title: `Activer le compte de ${nom} ?`,
           message:
             u.statut === StatutCompte.EN_ATTENTE
-              ? 'Ce compte est en attente : l’activer valide aussi la fiche liée (producteur, coopérative ou acheteur). Vérifiez les pièces avant de confirmer.'
+              ? u.role === RoleUtilisateur.ACHETEUR
+                ? 'Cette inscription acheteur est en attente : l’activer valide aussi la fiche acheteur. Vérifiez les informations avant de confirmer.'
+                : 'Ce compte est en attente : il ne peut être activé qu’une fois sa fiche (producteur ou coopérative) validée depuis « À traiter ».'
               : 'La personne pourra de nouveau se connecter à la plateforme.',
           confirm: 'Activer le compte',
           danger: false,
+        };
+      case 'rejeter':
+        return {
+          title: `Rejeter l’inscription de ${nom} ?`,
+          message: 'Le compte en attente sera supprimé et le demandeur informé par e-mail. Cette action est définitive.',
+          confirm: 'Rejeter l’inscription',
+          danger: true,
         };
       case 'reset':
         return {
@@ -218,14 +234,21 @@ export class UtilisateurDetailComponent {
     if (controls.prenoms.dirty) payload.prenoms = raw.prenoms.trim();
     if (controls.email.dirty) payload.email = raw.email.trim();
     if (controls.telephone.dirty) payload.telephone = normaliserTelephone(raw.telephone) || null;
-    if (controls.role.dirty && !this.estMoi()) payload.role = raw.role;
-    if (Object.keys(payload).length === 0) {
+    const nouveauRole = !this.estMoi() && raw.role !== this.user()?.role ? raw.role : null;
+    if (Object.keys(payload).length === 0 && !nouveauRole) {
       this.toast.info('Aucune modification à enregistrer');
       this.editMode.set(false);
       return;
     }
     this.saving.set(true);
-    this.service.update(this.id, payload).subscribe({
+    const maj$: Observable<Utilisateur | null> = Object.keys(payload).length
+      ? this.service.update(this.id, payload)
+      : of(null);
+    maj$.pipe(
+      switchMap((u): Observable<Utilisateur> =>
+        nouveauRole ? this.service.changerRole(this.id, nouveauRole) : of(u as Utilisateur),
+      ),
+    ).subscribe({
       next: (u) => {
         this.saving.set(false);
         this.user.set(u);
@@ -274,7 +297,7 @@ export class UtilisateurDetailComponent {
     });
   }
 
-  confirmerAction(): void {
+  confirmerAction(motif = ''): void {
     const a = this.action();
     const u = this.user();
     if (!a || !u) return;
@@ -292,6 +315,14 @@ export class UtilisateurDetailComponent {
     if (a === 'reset') {
       this.service.envoyerReinitialisation(u.id).subscribe({
         next: (res) => done(res.detail || 'Lien de réinitialisation envoyé'),
+        error: fail,
+      });
+    } else if (a === 'rejeter') {
+      this.service.rejeter(u.id, motif.trim()).subscribe({
+        next: (res) => {
+          done(res.detail || 'Inscription rejetée');
+          this.router.navigate(['/app/utilisateurs']);
+        },
         error: fail,
       });
     } else if (a === 'desactiver') {

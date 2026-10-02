@@ -39,6 +39,8 @@ const ACTION_LABELS: Record<string, string> = {
   EXPORT: 'Export',
   IMPORT: 'Import',
   PASSWORD_CHANGE: 'Changement de mot de passe',
+  PASSWORD_RESET: 'Réinitialisation du mot de passe',
+  PASSWORD_RESET_REQUEST: 'Envoi d’un lien de réinitialisation',
   VALIDATE: 'Validation',
   REJECT: 'Rejet',
   ACTIVATE: 'Activation',
@@ -65,9 +67,14 @@ const TABLE_LABELS: Record<string, string> = {
   notifications: 'Notifications',
 };
 
-/** Cellule CSV séparée par des points-virgules (Excel en français), guillemets échappés. */
+/**
+ * Cellule CSV séparée par des points-virgules (Excel en français), guillemets échappés.
+ * Une valeur commençant par = + - @ ou une tabulation est préfixée d'une apostrophe pour
+ * qu'un tableur ne l'interprète jamais comme une formule.
+ */
 function celluleCsv(valeur: unknown): string {
-  const s = valeur === null || valeur === undefined ? '' : String(valeur);
+  let s = valeur === null || valeur === undefined ? '' : String(valeur);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -128,7 +135,7 @@ export class RapportsComponent {
   private readonly filterReload$ = new Subject<string>();
 
   constructor() {
-    this.loadPeriodes();
+    if (this.canExportJournal()) this.loadPeriodes();
     this.filterReload$
       .pipe(debounceTime(250), distinctUntilChanged())
       .subscribe(() => {

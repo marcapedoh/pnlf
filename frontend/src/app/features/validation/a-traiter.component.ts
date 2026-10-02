@@ -57,6 +57,9 @@ export class ATraiterComponent {
   total(): number {
     const d = this.data();
     if (!d) return 0;
-    return d.producteurs.count + d.cooperatives.count + d.certifications.count + d.offres.count + (d.acheteurs?.count ?? 0);
+    const reserves = this.canValidateOffresCertifs
+      ? d.certifications.count + d.offres.count + (d.acheteurs?.count ?? 0)
+      : 0;
+    return d.producteurs.count + d.cooperatives.count + reserves;
   }
 }

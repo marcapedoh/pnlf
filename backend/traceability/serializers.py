@@ -1,5 +1,9 @@
+import re
+from datetime import timedelta
+
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from config.validators import (
     CoordonneesGabonMixin,
@@ -27,9 +31,12 @@ from .models import (
     Village,
     ZoneCollecte,
 )
+from .services import UNITES_MESURE
 from .services import document_url as _document_url
 from .services import photo_url as _photo_url
 from .services import photos_urls_lot as _photos_urls_lot
+
+UNITE_MESSAGE = 'Unité inconnue : « {input} ». Unités acceptées : ' + ', '.join(UNITES_MESURE) + '.'
 
 
 def _documents_administratifs(entite_type: str, entite_id, request=None) -> list[dict]:
@@ -97,15 +104,39 @@ class CooperativeSerializer(serializers.ModelSerializer):
     telephone = TelephoneField(required=False, allow_blank=True, allow_null=True)
     photo_url = serializers.SerializerMethodField()
     documents = serializers.SerializerMethodField()
+    mon_adhesion = serializers.SerializerMethodField()
 
     class Meta:
         model = Cooperative
         fields = (
             'id', 'code', 'nom', 'numero_agrement', 'telephone', 'email', 'adresse',
             'province', 'province_nom', 'utilisateur_id', 'actif', 'statut', 'photo_url', 'documents',
-            'created_at', 'updated_at',
+            'mon_adhesion', 'created_at', 'updated_at',
         )
         read_only_fields = ('created_at', 'updated_at', 'statut', 'utilisateur_id', 'actif')
+        extra_kwargs = {
+            'code': {
+                'required': False,
+                'allow_blank': True,
+                'validators': [UniqueValidator(
+                    queryset=Cooperative.objects.all(), message='Ce code de coopérative est déjà utilisé.',
+                )],
+            },
+            'nom': {
+                'validators': [UniqueValidator(
+                    queryset=Cooperative.objects.all(), lookup='iexact',
+                    message='Une coopérative porte déjà ce nom.',
+                )],
+            },
+        }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        request = self.context.get('request')
+        role = getattr(getattr(request, 'user', None), 'role', None)
+        if self.instance is not None and role not in ('ADMINISTRATEUR', 'AGENT_MINISTERE'):
+            attrs.pop('code', None)
+        return attrs
 
     def get_photo_url(self, obj):
         return _photo_url('cooperatives', obj.id, self.context.get('request'))
@@ -117,18 +148,65 @@ class CooperativeSerializer(serializers.ModelSerializer):
             return []
         return _documents_administratifs('COOPERATIVE', obj.id, request)
 
+    def get_mon_adhesion(self, obj):
+        """Situation du producteur connecté vis-à-vis de cette coopérative."""
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if getattr(user, 'role', None) != 'PRODUCTEUR':
+            return None
+        cache = self.context.setdefault('_adhesion_producteur', {})
+        if 'fiche' not in cache:
+            fiche = Producteur.objects.filter(utilisateur_id=user.id, deleted_at__isnull=True).first()
+            cache['fiche'] = fiche
+            cache['en_attente'] = set(
+                CooperativeMembre.objects.filter(producteur=fiche, actif=False)
+                .values_list('cooperative_id', flat=True)
+            ) if fiche else set()
+        fiche = cache['fiche']
+        if fiche is None:
+            return None
+        if fiche.cooperative_id == obj.id:
+            return 'MEMBRE'
+        if obj.id in cache['en_attente']:
+            return 'EN_ATTENTE'
+        if fiche.cooperative_id:
+            return 'AUTRE_COOPERATIVE'
+        if cache['en_attente']:
+            return 'DEMANDE_AILLEURS'
+        return None
+
 
 class CooperativeMembreSerializer(serializers.ModelSerializer):
+    producteur = serializers.PrimaryKeyRelatedField(
+        queryset=Producteur.objects.filter(deleted_at__isnull=True),
+        pk_field=serializers.UUIDField(error_messages={'invalid': 'Identifiant de producteur invalide.'}),
+        error_messages={
+            'required': 'Indiquez le producteur concerné.',
+            'null': 'Indiquez le producteur concerné.',
+            'does_not_exist': 'Producteur introuvable.',
+            'incorrect_type': 'Identifiant de producteur invalide.',
+        },
+    )
     producteur_nom = serializers.SerializerMethodField()
+    producteur_code = serializers.CharField(source='producteur.code_producteur', read_only=True)
+    producteur_statut = serializers.CharField(source='producteur.statut', read_only=True)
 
     class Meta:
         model = CooperativeMembre
-        fields = ('cooperative', 'producteur', 'producteur_nom', 'date_adhesion', 'actif', 'created_at')
-        read_only_fields = ('created_at',)
+        fields = (
+            'cooperative', 'producteur', 'producteur_nom', 'producteur_code', 'producteur_statut',
+            'date_adhesion', 'actif', 'created_at',
+        )
+        read_only_fields = ('created_at', 'actif')
         extra_kwargs = {'date_adhesion': {'required': False, 'allow_null': True}}
 
+    def validate_date_adhesion(self, valeur):
+        return valider_date_non_future(
+            valeur, 'La date d’adhésion ne peut pas être postérieure à aujourd’hui.',
+        )
+
     def get_producteur_nom(self, obj):
-        return str(obj.producteur)
+        return f'{obj.producteur.prenoms} {obj.producteur.nom}'.strip()
 
 
 class ZoneCollecteSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
@@ -141,7 +219,31 @@ class ZoneCollecteSerializer(CoordonneesGabonMixin, serializers.ModelSerializer)
             'latitude', 'longitude', 'actif', 'created_at', 'updated_at',
         )
         read_only_fields = ('created_at', 'updated_at')
-        extra_kwargs = {'code': {'required': False, 'allow_blank': True}}
+        extra_kwargs = {
+            'code': {
+                'required': False,
+                'allow_blank': True,
+                'validators': [UniqueValidator(
+                    queryset=ZoneCollecte.objects.all(), message='Ce code de zone est déjà utilisé.',
+                )],
+            },
+        }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        libelle = (attrs.get('libelle') or getattr(self.instance, 'libelle', '') or '').strip()
+        province = attrs.get('province') or getattr(self.instance, 'province', None)
+        if 'libelle' in attrs:
+            attrs['libelle'] = libelle
+        if libelle and province is not None:
+            doublons = ZoneCollecte.objects.filter(province=province, libelle__iexact=libelle)
+            if self.instance is not None:
+                doublons = doublons.exclude(pk=self.instance.pk)
+            if doublons.exists():
+                raise serializers.ValidationError({
+                    'libelle': 'Une zone de collecte porte déjà ce libellé dans cette province.',
+                })
+        return attrs
 
 
 ROLES_AGENTS = ('ADMINISTRATEUR', 'AGENT_MINISTERE', 'AGENT_FORESTIER')
@@ -154,6 +256,7 @@ CHAMPS_AGENTS_PRODUCTEUR = ('notes',)
 
 
 class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
+    code_producteur = serializers.CharField(required=False, allow_blank=True, max_length=30)
     province_nom = serializers.CharField(source='province.nom', read_only=True)
     cooperative_nom = serializers.CharField(source='cooperative.nom', read_only=True, default=None)
     telephone = TelephoneField(required=False, allow_blank=True, allow_null=True)
@@ -201,6 +304,7 @@ class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
     def validate(self, attrs):
         attrs = super().validate(attrs)
         if self.instance is not None:
+            attrs.pop('code_producteur', None)
             # Un champ que le demandeur ne peut pas lire (donc renvoyé vide par un formulaire)
             # ne doit jamais écraser la valeur enregistrée.
             if not self._peut_lire_prives(self.instance):
@@ -209,6 +313,31 @@ class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
             if not self._est_agent():
                 for champ in CHAMPS_AGENTS_PRODUCTEUR:
                     attrs.pop(champ, None)
+        else:
+            code = (attrs.pop('code_producteur', '') or '').strip()
+            if code and self._est_agent():
+                if Producteur.objects.filter(code_producteur__iexact=code).exists():
+                    raise serializers.ValidationError({'code_producteur': 'Ce code producteur est déjà utilisé.'})
+                attrs['code_producteur'] = code
+
+        type_piece = attrs.get('type_piece_identite', getattr(self.instance, 'type_piece_identite', None))
+        numero = attrs.get('numero_piece', getattr(self.instance, 'numero_piece', None))
+        if type_piece and numero and ('type_piece_identite' in attrs or 'numero_piece' in attrs):
+            doublons = Producteur.objects.filter(type_piece_identite=type_piece, numero_piece=numero)
+            if self.instance is not None:
+                doublons = doublons.exclude(pk=self.instance.pk)
+            if doublons.exists():
+                raise serializers.ValidationError({
+                    'numero_piece': 'Une fiche est déjà enregistrée avec cette pièce d’identité.',
+                })
+
+        client_uuid = attrs.get('client_uuid')
+        if client_uuid:
+            doublons = Producteur.objects.filter(client_uuid=client_uuid)
+            if self.instance is not None:
+                doublons = doublons.exclude(pk=self.instance.pk)
+            if doublons.exists():
+                raise serializers.ValidationError({'client_uuid': 'Cette fiche a déjà été synchronisée.'})
         return attrs
 
     def to_representation(self, instance):
@@ -262,6 +391,10 @@ class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
 
 class MouvementSerializer(serializers.ModelSerializer):
     date_mouvement = serializers.DateTimeField(required=False)
+    unite = serializers.ChoiceField(
+        choices=UNITES_MESURE, required=False, allow_null=True, allow_blank=True,
+        error_messages={'invalid_choice': UNITE_MESSAGE},
+    )
 
     class Meta:
         model = Mouvement
@@ -281,6 +414,14 @@ class MouvementSerializer(serializers.ModelSerializer):
     def validate_quantite(self, valeur):
         return valider_quantite_positive(valeur)
 
+    def validate_unite(self, valeur):
+        return valeur or None
+
+    def validate_date_mouvement(self, valeur):
+        if valeur is not None and valeur > timezone.now() + timedelta(minutes=5):
+            raise serializers.ValidationError('La date de l’étape ne peut pas être dans le futur.')
+        return valeur
+
     def validate_latitude(self, valeur):
         if valeur is not None and not (-90 <= valeur <= 90):
             raise serializers.ValidationError('La latitude doit être comprise entre -90 et 90.')
@@ -299,6 +440,7 @@ class LotSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
     mouvements = MouvementSerializer(many=True, read_only=True)
     qr_image_url = serializers.SerializerMethodField()
     photos_urls = serializers.SerializerMethodField()
+    unite = serializers.ChoiceField(choices=UNITES_MESURE, error_messages={'invalid_choice': UNITE_MESSAGE})
 
     class Meta:
         model = Lot
@@ -326,6 +468,40 @@ class LotSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
 
     def validate_prix_indicatif(self, valeur):
         return valider_montant_positif(valeur, 'Le prix indicatif ne peut pas être négatif.')
+
+    def validate_devise(self, valeur):
+        devise = (valeur or 'XAF').strip().upper()
+        if not re.fullmatch(r'[A-Z]{3}', devise):
+            raise serializers.ValidationError('La devise doit être un code de 3 lettres (exemple : XAF).')
+        return devise
+
+    def validate_produit(self, produit):
+        changement = self.instance is None or self.instance.produit_id != produit.id
+        if changement and not produit.actif:
+            raise serializers.ValidationError('Ce produit n’est plus proposé dans le référentiel.')
+        return produit
+
+    def validate_producteur(self, producteur):
+        if producteur.deleted_at is not None:
+            raise serializers.ValidationError('Ce producteur a été supprimé.')
+        return producteur
+
+    def validate_zone_collecte(self, zone):
+        if zone is None:
+            return zone
+        changement = self.instance is None or self.instance.zone_collecte_id != zone.id
+        if changement and not zone.actif:
+            raise serializers.ValidationError('Cette zone de collecte est désactivée.')
+        return zone
+
+    def validate_client_uuid(self, valeur):
+        if valeur:
+            doublons = Lot.objects.filter(client_uuid=valeur)
+            if self.instance is not None:
+                doublons = doublons.exclude(pk=self.instance.pk)
+            if doublons.exists():
+                raise serializers.ValidationError('Ce lot a déjà été synchronisé.')
+        return valeur
 
     def get_producteur_nom(self, obj):
         return f'{obj.producteur.prenoms} {obj.producteur.nom}'.strip()
@@ -371,8 +547,18 @@ class CertificationSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             'created_at', 'updated_at', 'valide_par_id', 'document_path',
-            'numero_certificat', 'date_obtention', 'date_expiration', 'statut',
+            'numero_certificat', 'date_demande', 'date_obtention', 'date_expiration', 'statut',
         )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if (
+            instance.statut == 'OBTENUE'
+            and instance.date_expiration is not None
+            and instance.date_expiration < timezone.localdate()
+        ):
+            data['statut'] = 'EXPIREE'
+        return data
 
     def get_producteur_nom(self, obj):
         if not obj.producteur_id:
@@ -408,32 +594,17 @@ class LotVerifySerializer(serializers.ModelSerializer):
         return _photos_urls_lot(obj.id, self.context.get('request'))
 
     def get_statut_libelle(self, obj):
-        return {
-            'BROUILLON': 'Brouillon',
-            'DECLARE': 'Déclaré',
-            'VALIDE': 'Validé',
-            'EN_TRANSIT': 'En transit',
-            'TRANSFORME': 'Transformé',
-            'COMMERCIALISE': 'Commercialisé',
-            'ARCHIVE': 'Archivé',
-            'ANNULE': 'Annulé',
-        }.get(obj.statut, obj.statut)
+        from .services import libelle_statut_lot
+
+        return libelle_statut_lot(obj.statut)
 
     def get_mouvements(self, obj):
-        labels = {
-            'COLLECTE': 'Collecte',
-            'RECEPTION_COOPERATIVE': 'Réception coopérative',
-            'TRANSFERT': 'Transfert',
-            'TRANSFORMATION': 'Transformation',
-            'CONTROLE': 'Contrôle',
-            'VENTE': 'Vente',
-            'EXPORT': 'Export',
-            'AUTRE': 'Autre',
-        }
+        from .services import TYPES_MOUVEMENT_LIBELLES
+
         return [
             {
                 'type_mouvement': m.type_mouvement,
-                'type_libelle': labels.get(m.type_mouvement, m.type_mouvement),
+                'type_libelle': TYPES_MOUVEMENT_LIBELLES.get(m.type_mouvement, m.type_mouvement),
                 'date_mouvement': m.date_mouvement,
                 'lieu_libelle': m.lieu_libelle,
             }

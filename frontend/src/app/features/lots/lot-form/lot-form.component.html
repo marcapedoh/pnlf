@@ -51,7 +51,7 @@
               } @else if (producteurSearchError()) {
                 <li class="lot-form__combo-state" role="alert">{{ producteurSearchError() }}</li>
               } @else if (producteurResults().length === 0) {
-                <li class="lot-form__combo-state" role="status">Aucun producteur ne correspond à « {{ producteurQuery().trim() }} ».</li>
+                <li class="lot-form__combo-state" role="status">Aucun producteur actif (fiche validée) ne correspond à « {{ producteurQuery().trim() }} ».</li>
               } @else {
                 @for (p of producteurResults(); track p.id; let i = $index) {
                   <li

@@ -5,11 +5,12 @@ import { Router, RouterLink } from '@angular/router';
 import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switchMap, tap } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
-import { UNITE_OPTIONS, todayIso } from '../../../core/format/format.util';
+import { todayIso } from '../../../core/format/format.util';
 import { controlError, handleFormApiError, revealFormErrors } from '../../../core/forms/form-errors.util';
 import { toApiError } from '../../../core/http/api-error.util';
 import { RoleUtilisateur } from '../../../core/models/user.model';
 import { unwrapList } from '../../../core/models/common.model';
+import { UNITE_LOT_OPTIONS } from '../../../core/models/lot.model';
 import { Producteur } from '../../../core/models/producteur.model';
 import { ZoneCollecte } from '../../../core/models/reference.model';
 import { LotsService } from '../../../core/services/lots.service';
@@ -65,7 +66,7 @@ export class LotFormComponent {
   readonly today = todayIso();
   readonly loading = signal(false);
   readonly errorMessage = signal('');
-  readonly unites = UNITE_OPTIONS;
+  readonly unites = UNITE_LOT_OPTIONS;
   readonly produits = signal<SelectOption[]>([]);
   readonly zones = signal<SelectOption[]>([]);
   readonly provinces = signal<SelectOption[]>([]);
@@ -162,7 +163,7 @@ export class LotFormComponent {
         switchMap((q) =>
           q.length < 2
             ? of(null)
-            : this.producteursService.list({ search: q, page_size: 6 }).pipe(
+            : this.producteursService.list({ search: q, page_size: 6, statut: 'ACTIF' }).pipe(
                 map((res) => unwrapList(res)),
                 catchError((err) => {
                   this.producteurSearchError.set(toApiError(err).message);

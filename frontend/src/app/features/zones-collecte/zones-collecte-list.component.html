@@ -13,7 +13,7 @@
       <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;" role="alert">{{ errorMessage() }}</pnlf-alert>
     }
     <form [formGroup]="form" (ngSubmit)="submit()" class="zone-form" novalidate>
-      <pnlf-text-field label="Code" formControlName="code" [required]="true" [errorMessage]="err('code', 'Le code est requis.')" />
+      <pnlf-text-field label="Code" formControlName="code" hint="Laissez vide pour générer un code automatiquement." [errorMessage]="err('code')" />
       <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" [errorMessage]="err('libelle', 'Le libellé est requis.')" />
       <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" [errorMessage]="err('province', 'Sélectionnez la province.')" />
       <pnlf-text-field label="Description" formControlName="description" />
@@ -37,8 +37,9 @@
 
   <pnlf-card title="Importer des zones depuis un fichier CSV ou XLSX">
     <p class="text-sm text-muted zone-import__hint">
-      Colonnes attendues (en-tête) : <code>code</code>, <code>libelle</code>, <code>province</code> (code ou nom),
-      <code>description</code>, <code>latitude</code>, <code>longitude</code>. Une zone existante (même code) est mise à jour.
+      Colonnes attendues (en-tête) : <code>code</code>, <code>libelle</code>, <code>province</code> (code ou nom ; la colonne
+      peut aussi s’appeler <code>province_code</code>), <code>description</code>, <code>latitude</code>, <code>longitude</code>.
+      Une zone existante (même code) est mise à jour ; un libellé déjà utilisé dans la même province est refusé.
     </p>
     @if (importError()) {
       <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;" role="alert">{{ importError() }}</pnlf-alert>
@@ -103,6 +104,14 @@
         [ngModel]="search()"
         (ngModelChange)="onSearchInput($event)"
       />
+      @if (canManage) {
+        <label class="pnlf-visually-hidden" for="zone-actif">Filtrer par état</label>
+        <select id="zone-actif" class="pnlf-select" [ngModel]="actifFilter()" (ngModelChange)="onActifFilterChange($event)">
+          @for (o of actifOptions; track o.value) {
+            <option [value]="o.value">{{ o.label }}</option>
+          }
+        </select>
+      }
     </div>
   </div>
 
@@ -143,6 +152,9 @@
             <th scope="col">Libellé</th>
             <th scope="col">Province</th>
             <th scope="col">Coordonnées GPS</th>
+            @if (canManage) {
+              <th scope="col">État</th>
+            }
             <th scope="col"><span class="pnlf-visually-hidden">Fiche</span></th>
           </tr>
         </thead>
@@ -159,6 +171,11 @@
                   -
                 }
               </td>
+              @if (canManage) {
+                <td data-label="État">
+                  <pnlf-status-badge [label]="z.actif ? 'Active' : 'Désactivée'" [tone]="z.actif ? 'success' : 'neutral'" />
+                </td>
+              }
               <td data-label="Fiche"><a class="pnlf-table__link" [routerLink]="['/app/zones-collecte', z.id]" (click)="$event.stopPropagation()" [attr.aria-label]="'Voir la fiche de la zone ' + z.libelle">Voir la fiche →</a></td>
             </tr>
           }

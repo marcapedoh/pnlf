@@ -142,12 +142,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'file-text',
         roles: [R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER],
       },
-      {
-        label: 'Synchronisation',
-        route: '/app/synchronisation',
-        icon: 'refresh-cw',
-        roles: [R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER],
-      },
     ],
   },
   {

@@ -24,7 +24,7 @@ import { ToastService } from '../../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
 import { PnlfDatePipe, PnlfTelephonePipe } from '../../../shared/pipes/format.pipes';
 
-type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer' | 'retirer' | 'adhesion';
+type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer' | 'retirer' | 'adhesion' | 'accepter' | 'refuser';
 
 @Component({
   selector: 'app-cooperative-detail',
@@ -69,11 +69,14 @@ export class CooperativeDetailComponent {
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.COOPERATIVE,
   );
-  readonly canAddMembres = this.auth.hasRole(
+  /** Rattachement direct réservé à l'administration ; la coopérative accepte les demandes reçues. */
+  readonly canAddMembres = this.auth.hasRole(RoleUtilisateur.ADMINISTRATEUR, RoleUtilisateur.AGENT_MINISTERE);
+  readonly canManageMembres = this.auth.hasRole(
     RoleUtilisateur.ADMINISTRATEUR,
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.COOPERATIVE,
   );
+  readonly demandes = signal<CooperativeMembre[]>([]);
   readonly isCoopRole = this.auth.hasRole(RoleUtilisateur.COOPERATIVE);
   readonly isProducteur = this.auth.hasRole(RoleUtilisateur.PRODUCTEUR);
 
@@ -151,6 +154,12 @@ export class CooperativeDetailComponent {
       next: (m) => this.membres.set(m),
       error: () => this.membres.set([]),
     });
+    if (this.canManageMembres) {
+      this.service.demandesAdhesion(this.id).subscribe({
+        next: (d) => this.demandes.set(d),
+        error: () => this.demandes.set([]),
+      });
+    }
   }
 
   onDialogConfirm(value: string): void {
@@ -184,9 +193,25 @@ export class CooperativeDetailComponent {
         break;
       case 'adhesion':
         this.service.demanderAdhesion(this.id).subscribe({
-          next: (res) => done(res.detail || 'Demande d’adhésion envoyée', false),
+          next: (res) => done(res.detail || 'Demande d’adhésion envoyée'),
           error: fail('Demande d’adhésion impossible'),
         });
+        break;
+      case 'accepter':
+        if (d.producteur) {
+          this.service.ajouterMembre(this.id, { producteur: d.producteur }).subscribe({
+            next: () => done('Adhésion acceptée', false),
+            error: fail('Impossible d’accepter cette demande'),
+          });
+        }
+        break;
+      case 'refuser':
+        if (d.producteur) {
+          this.service.refuserAdhesion(this.id, d.producteur, value.trim()).subscribe({
+            next: () => done('Demande d’adhésion refusée', false),
+            error: fail('Impossible de refuser cette demande'),
+          });
+        }
         break;
       case 'retirer':
         if (d.producteur) {

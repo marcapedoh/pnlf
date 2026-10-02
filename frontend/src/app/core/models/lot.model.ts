@@ -51,6 +51,61 @@ export const TYPE_MOUVEMENT_LABELS: Record<TypeMouvement, string> = {
   [TypeMouvement.AUTRE]: 'Autre',
 };
 
+/** Transitions manuelles acceptées par le serveur (traceability/services.py, TRANSITIONS_MANUELLES_LOT). */
+export const TRANSITIONS_MANUELLES_LOT: Record<StatutLot, StatutLot[]> = {
+  [StatutLot.BROUILLON]: [StatutLot.DECLARE, StatutLot.ANNULE],
+  [StatutLot.DECLARE]: [StatutLot.VALIDE, StatutLot.ANNULE, StatutLot.ARCHIVE],
+  [StatutLot.VALIDE]: [StatutLot.EN_TRANSIT, StatutLot.TRANSFORME, StatutLot.COMMERCIALISE, StatutLot.ANNULE, StatutLot.ARCHIVE],
+  [StatutLot.EN_TRANSIT]: [StatutLot.TRANSFORME, StatutLot.COMMERCIALISE, StatutLot.ANNULE, StatutLot.ARCHIVE],
+  [StatutLot.TRANSFORME]: [StatutLot.EN_TRANSIT, StatutLot.COMMERCIALISE, StatutLot.ANNULE, StatutLot.ARCHIVE],
+  [StatutLot.COMMERCIALISE]: [StatutLot.ARCHIVE],
+  [StatutLot.ANNULE]: [StatutLot.ARCHIVE],
+  [StatutLot.ARCHIVE]: [],
+};
+
+/** Statuts pour lesquels un producteur ou une coopérative peut encore modifier ou supprimer le lot. */
+export const STATUTS_LOT_MODIFIABLES: StatutLot[] = [StatutLot.BROUILLON, StatutLot.DECLARE];
+
+/** Statuts sur lesquels aucune étape de traçabilité ne peut être ajoutée. */
+export const STATUTS_LOT_SANS_MOUVEMENT: StatutLot[] = [StatutLot.BROUILLON, StatutLot.ANNULE, StatutLot.ARCHIVE];
+
+const TOUS_TYPES_MOUVEMENT = Object.values(TypeMouvement);
+
+/** Types d'étape autorisés par profil (traceability/services.py, TYPES_MOUVEMENT_PAR_ROLE). */
+export const TYPES_MOUVEMENT_PAR_ROLE: Record<string, TypeMouvement[]> = {
+  ADMINISTRATEUR: TOUS_TYPES_MOUVEMENT,
+  AGENT_MINISTERE: TOUS_TYPES_MOUVEMENT,
+  AGENT_FORESTIER: TOUS_TYPES_MOUVEMENT,
+  COOPERATIVE: [
+    TypeMouvement.RECEPTION_COOPERATIVE,
+    TypeMouvement.TRANSFERT,
+    TypeMouvement.TRANSFORMATION,
+    TypeMouvement.VENTE,
+    TypeMouvement.EXPORT,
+    TypeMouvement.AUTRE,
+  ],
+  PRODUCTEUR: [
+    TypeMouvement.TRANSFERT,
+    TypeMouvement.TRANSFORMATION,
+    TypeMouvement.VENTE,
+    TypeMouvement.EXPORT,
+    TypeMouvement.AUTRE,
+  ],
+};
+
+/** Unités de mesure acceptées par la base (type SQL unite_mesure). */
+export const UNITE_LOT_OPTIONS = [
+  { value: 'KG', label: 'Kilogramme (kg)' },
+  { value: 'G', label: 'Gramme (g)' },
+  { value: 'LITRE', label: 'Litre (L)' },
+  { value: 'ML', label: 'Millilitre (mL)' },
+  { value: 'SAC', label: 'Sac' },
+  { value: 'UNITE', label: 'Unité' },
+  { value: 'BOTTE', label: 'Botte' },
+  { value: 'M3', label: 'Mètre cube (m³)' },
+  { value: 'METRE', label: 'Mètre (m)' },
+];
+
 export interface Mouvement {
   id: string;
   lot: string;

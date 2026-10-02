@@ -105,7 +105,13 @@ class InscriptionPubliqueSerializer(CoordonneesGabonMixin, serializers.Serialize
 
     def validate_email(self, value):
         value = value.strip().lower()
-        if Utilisateur.objects.filter(email__iexact=value, deleted_at__isnull=True).exists():
+        existant = Utilisateur.objects.filter(email__iexact=value).only('deleted_at').first()
+        if existant is not None:
+            if existant.deleted_at is not None:
+                raise serializers.ValidationError(
+                    'Cette adresse e-mail est liée à un ancien compte supprimé : '
+                    'utilisez une autre adresse ou contactez l’administration pour la réactiver.'
+                )
             raise serializers.ValidationError('Un compte existe déjà avec cette adresse e-mail.')
         return value
 
@@ -152,6 +158,8 @@ class InscriptionPubliqueSerializer(CoordonneesGabonMixin, serializers.Serialize
             raise serializers.ValidationError({'prenoms': 'Le prénom est requis.'})
         if type_demande == 'COOPERATIVE' and not attrs.get('nom', '').strip():
             raise serializers.ValidationError({'nom': 'Le nom de la coopérative est requis.'})
+        if type_demande == 'COOPERATIVE' and Cooperative.objects.filter(nom__iexact=attrs['nom'].strip()).exists():
+            raise serializers.ValidationError({'nom': 'Une coopérative porte déjà ce nom.'})
         # La date de naissance est indispensable à l'instruction du dossier (producteur/collecteur) :
         # elle est obligatoire, contrairement à la géolocalisation (latitude/longitude) qui reste
         # un complément optionnel à la localisation administrative (province/département/village).

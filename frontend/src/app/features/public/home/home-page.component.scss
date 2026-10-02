@@ -487,6 +487,27 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   justify-content: center;
+
+  ::ng-deep .pnlf-btn--primary {
+    background: var(--pnlf-gold-500);
+    border-color: var(--pnlf-gold-500);
+    color: var(--pnlf-green-900);
+
+    &:hover:not([disabled]) {
+      background: var(--pnlf-gold-400);
+      border-color: var(--pnlf-gold-400);
+    }
+  }
+
+  ::ng-deep .pnlf-btn--outline {
+    color: var(--text-inverse);
+    border-color: rgba(255, 255, 255, 0.55);
+
+    &:hover:not([disabled]) {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--text-inverse);
+    }
+  }
 }
 
 @media (max-width: 900px) {

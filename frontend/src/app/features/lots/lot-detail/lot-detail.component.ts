@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Title } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
 import { APP_LOCALE } from '../../../core/format/format.util';
@@ -12,9 +12,13 @@ import { environment } from '../../../../environments/environment';
 import {
   Lot,
   STATUT_LOT_LABELS,
+  STATUTS_LOT_MODIFIABLES,
+  STATUTS_LOT_SANS_MOUVEMENT,
   StatutLot,
+  TRANSITIONS_MANUELLES_LOT,
   TypeMouvement,
   TYPE_MOUVEMENT_LABELS,
+  TYPES_MOUVEMENT_PAR_ROLE,
 } from '../../../core/models/lot.model';
 import { RoleUtilisateur } from '../../../core/models/user.model';
 import { LotsService } from '../../../core/services/lots.service';
@@ -30,18 +34,6 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
 import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
 import { PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe } from '../../../shared/pipes/format.pipes';
-
-/** Ordre des statuts appliqué par le serveur (traceability/services.py, STATUT_ORDRE). */
-const ORDRE_SERVEUR: Record<StatutLot, number> = {
-  [StatutLot.BROUILLON]: 0,
-  [StatutLot.DECLARE]: 1,
-  [StatutLot.VALIDE]: 2,
-  [StatutLot.EN_TRANSIT]: 3,
-  [StatutLot.TRANSFORME]: 4,
-  [StatutLot.COMMERCIALISE]: 5,
-  [StatutLot.ARCHIVE]: 6,
-  [StatutLot.ANNULE]: 7,
-};
 
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -76,6 +68,7 @@ export class LotDetailComponent {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly title = inject(Title);
 
@@ -99,7 +92,14 @@ export class LotDetailComponent {
   readonly mouvementLieu = signal('');
   readonly mouvementQuantite = signal('');
   readonly mouvementCommentaire = signal('');
-  readonly mouvementTypes = Object.entries(TYPE_MOUVEMENT_LABELS).map(([value, label]) => ({ value, label }));
+  readonly mouvementTypes = (TYPES_MOUVEMENT_PAR_ROLE[this.auth.currentUser()?.role ?? ''] ?? []).map((value) => ({
+    value,
+    label: TYPE_MOUVEMENT_LABELS[value],
+  }));
+  readonly confirmPublier = signal(false);
+  readonly publishing = signal(false);
+  readonly confirmSuppression = signal(false);
+  readonly deleting = signal(false);
 
   readonly statutLabels = STATUT_LOT_LABELS;
   readonly typeMouvementLabels = TYPE_MOUVEMENT_LABELS;
@@ -131,14 +131,33 @@ export class LotDetailComponent {
     RoleUtilisateur.COOPERATIVE,
   );
 
+  private readonly isAgent = this.canChangeStatus;
+
   /** Statuts proposés : uniquement les transitions acceptées par le serveur. */
   readonly nextStatusOptions = computed<StatutLot[]>(() => {
     const current = this.lot()?.statut as StatutLot | undefined;
-    if (!current) return [];
-    const ordre = ORDRE_SERVEUR[current] ?? 0;
-    return (Object.keys(ORDRE_SERVEUR) as StatutLot[]).filter(
-      (s) => s !== current && (ORDRE_SERVEUR[s] >= ordre || s === StatutLot.ANNULE || s === StatutLot.ARCHIVE),
+    return current ? (TRANSITIONS_MANUELLES_LOT[current] ?? []) : [];
+  });
+
+  /** Le serveur refuse toute étape sur un brouillon, un lot annulé ou archivé. */
+  readonly peutAjouterEtape = computed(() => {
+    const lot = this.lot();
+    return (
+      this.canAddMouvement &&
+      this.mouvementTypes.length > 0 &&
+      !!lot &&
+      !STATUTS_LOT_SANS_MOUVEMENT.includes(lot.statut)
     );
+  });
+
+  readonly peutPublier = computed(() => this.canAddMouvement && this.lot()?.statut === StatutLot.BROUILLON);
+
+  /** Producteurs et coopératives ne suppriment que les lots en brouillon ou déclarés. */
+  readonly peutSupprimer = computed(() => {
+    const statut = this.lot()?.statut;
+    if (!statut || !this.canAddMouvement) return false;
+    if (statut === StatutLot.ANNULE || statut === StatutLot.ARCHIVE) return false;
+    return this.isAgent || STATUTS_LOT_MODIFIABLES.includes(statut);
   });
 
   readonly confirmStatutMessage = computed(() => {
@@ -173,6 +192,41 @@ export class LotDetailComponent {
 
   demanderChangementStatut(): void {
     if (this.nextStatut()) this.confirmStatut.set(true);
+  }
+
+  publier(): void {
+    this.publishing.set(true);
+    this.service.publier(this.id).subscribe({
+      next: (lot) => {
+        this.lot.set(lot);
+        this.publishing.set(false);
+        this.confirmPublier.set(false);
+        this.toast.success('Lot publié', 'Le lot est désormais « Déclaré » et visible des agents.');
+      },
+      error: (err) => {
+        this.publishing.set(false);
+        this.confirmPublier.set(false);
+        const apiError = toApiError(err);
+        this.toast.error('Publication impossible', Object.values(apiError.fieldErrors ?? {}).flat()[0] ?? apiError.message);
+      },
+    });
+  }
+
+  supprimer(): void {
+    this.deleting.set(true);
+    this.service.remove(this.id).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.confirmSuppression.set(false);
+        this.toast.success('Lot supprimé');
+        this.router.navigate(['/app/lots']);
+      },
+      error: (err) => {
+        this.deleting.set(false);
+        this.confirmSuppression.set(false);
+        this.toast.error('Suppression impossible', toApiError(err).message);
+      },
+    });
   }
 
   changerStatut(): void {

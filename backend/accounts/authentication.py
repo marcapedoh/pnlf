@@ -56,8 +56,6 @@ class PnlfJWTAuthentication(JWTAuthentication):
             raise AuthenticationFailed('Utilisateur introuvable', code='user_not_found') from exc
         if not user.is_active:
             raise AuthenticationFailed('Compte inactif', code='user_inactive')
-        expected = password_fingerprint(user)
-        claim = validated_token.get('pwd')
-        if claim and claim != expected:
+        if validated_token.get('pwd') != password_fingerprint(user):
             raise AuthenticationFailed('Session révoquée', code='password_changed')
         return user

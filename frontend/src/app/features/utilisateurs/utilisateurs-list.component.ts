@@ -31,7 +31,7 @@ import { StatusBadgeComponent } from '../../design-system/badge/status-badge.com
 import { TextFieldComponent } from '../../design-system/text-field/text-field.component';
 import { ToastService } from '../../design-system/toast/toast.service';
 
-type ActionCompte = { kind: 'suspendre' | 'activer' | 'reset'; user: Utilisateur };
+type ActionCompte = { kind: 'suspendre' | 'activer' | 'reset' | 'rejeter'; user: Utilisateur };
 
 @Component({
   selector: 'app-utilisateurs-list',
@@ -117,10 +117,20 @@ export class UtilisateursListComponent {
         title: `Activer le compte de ${nom} ?`,
         message:
           a.user.statut === StatutCompte.EN_ATTENTE
-            ? 'Ce compte est en attente : l’activer valide aussi la fiche liée (producteur, coopérative ou acheteur). Vérifiez les pièces avant de confirmer.'
+            ? a.user.role === RoleUtilisateur.ACHETEUR
+              ? 'Cette inscription acheteur est en attente : l’activer valide aussi la fiche acheteur. Vérifiez les informations avant de confirmer.'
+              : 'Ce compte est en attente : il ne peut être activé qu’une fois sa fiche (producteur ou coopérative) validée depuis « À traiter ».'
             : 'La personne pourra de nouveau se connecter à la plateforme.',
         confirm: 'Activer le compte',
         danger: false,
+      };
+    }
+    if (a.kind === 'rejeter') {
+      return {
+        title: `Rejeter l’inscription de ${nom} ?`,
+        message: 'Le compte en attente sera supprimé et le demandeur informé par e-mail. Cette action est définitive.',
+        confirm: 'Rejeter l’inscription',
+        danger: true,
       };
     }
     return {
@@ -248,7 +258,11 @@ export class UtilisateursListComponent {
     this.action.set({ kind, user });
   }
 
-  confirmerAction(): void {
+  peutRejeter(u: Utilisateur): boolean {
+    return u.statut === StatutCompte.EN_ATTENTE && u.role === RoleUtilisateur.ACHETEUR;
+  }
+
+  confirmerAction(motif = ''): void {
     const a = this.action();
     if (!a) return;
     this.actionLoading.set(true);
@@ -265,6 +279,16 @@ export class UtilisateursListComponent {
     if (a.kind === 'reset') {
       this.service.envoyerReinitialisation(a.user.id).subscribe({
         next: (res) => done(res.detail || 'Lien de réinitialisation envoyé'),
+        error: fail,
+      });
+      return;
+    }
+    if (a.kind === 'rejeter') {
+      this.service.rejeter(a.user.id, motif.trim()).subscribe({
+        next: (res) => {
+          done(res.detail || 'Inscription rejetée');
+          this.load();
+        },
         error: fail,
       });
       return;

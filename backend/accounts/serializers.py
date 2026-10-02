@@ -35,6 +35,31 @@ _MDP_ERREURS = {
 }
 
 
+_CHAMPS_ACTIONS_DEDIEES = {
+    'statut': 'Le statut d’un compte se modifie avec les actions dédiées (activer, suspendre, rejeter, désactiver).',
+    'role': 'Le rôle d’un compte se modifie avec l’action dédiée « Changer le rôle ».',
+}
+
+IDENTIFIANTS_INVALIDES = 'Identifiants invalides.'
+VERROU_TENTATIVES = 5
+VERROU_MINUTES = 15
+
+_HASH_FACTICE: str | None = None
+
+
+def _hash_factice() -> str:
+    global _HASH_FACTICE
+    if _HASH_FACTICE is None:
+        import secrets
+
+        import bcrypt as bcrypt_lib
+
+        _HASH_FACTICE = bcrypt_lib.hashpw(
+            secrets.token_bytes(16), bcrypt_lib.gensalt(rounds=12),
+        ).decode('utf-8')
+    return _HASH_FACTICE
+
+
 def _telephone_field():
     return TelephoneField(required=False, allow_blank=True, allow_null=True)
 
@@ -55,6 +80,39 @@ class UtilisateurSerializer(serializers.ModelSerializer):
 
     def get_photo_url(self, obj):
         return _utilisateur_photo_url(obj, self.context.get('request'))
+
+
+class MonProfilSerializer(serializers.ModelSerializer):
+    """Modification de son propre profil : identité et téléphone uniquement."""
+    telephone = _telephone_field()
+
+    class Meta:
+        model = Utilisateur
+        fields = ('nom', 'prenoms', 'telephone')
+        extra_kwargs = {
+            'nom': {'error_messages': {'blank': 'Le nom est requis.'}},
+            'prenoms': {'required': False, 'allow_blank': True},
+        }
+
+    def validate_nom(self, valeur):
+        valeur = (valeur or '').strip()
+        if not valeur:
+            raise serializers.ValidationError('Le nom est requis.')
+        return valeur
+
+    def validate(self, attrs):
+        if 'prenoms' in attrs:
+            attrs['prenoms'] = (attrs['prenoms'] or '').strip()
+            if self.instance.role != Utilisateur.Role.COOPERATIVE and not attrs['prenoms']:
+                raise serializers.ValidationError({'prenoms': 'Les prénoms sont requis.'})
+        return attrs
+
+    def update(self, instance, validated_data):
+        for champ, valeur in validated_data.items():
+            setattr(instance, champ, valeur)
+        instance.updated_at = timezone.now()
+        instance.save(update_fields=[*validated_data.keys(), 'updated_at'])
+        return instance
 
 
 class UtilisateurAdminSerializer(serializers.ModelSerializer):
@@ -79,6 +137,11 @@ class UtilisateurAdminSerializer(serializers.ModelSerializer):
         return _utilisateur_photo_url(obj, self.context.get('request'))
 
     def validate(self, attrs):
+        if self.instance is not None:
+            for champ, message in _CHAMPS_ACTIONS_DEDIEES.items():
+                if champ in attrs and attrs[champ] != getattr(self.instance, champ):
+                    raise serializers.ValidationError({champ: message})
+                attrs.pop(champ, None)
         role = attrs.get('role', getattr(self.instance, 'role', None))
         prenoms = attrs.get('prenoms', getattr(self.instance, 'prenoms', '') or '')
         if role != Utilisateur.Role.COOPERATIVE and not (prenoms or '').strip():
@@ -184,23 +247,30 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
         email = attrs.get('email')
         password = attrs.get('password')
 
-        try:
-            user = Utilisateur.objects.get(email__iexact=email, deleted_at__isnull=True)
-        except Utilisateur.DoesNotExist as exc:
-            raise serializers.ValidationError('Identifiants invalides.') from exc
+        user = Utilisateur.objects.filter(email__iexact=email, deleted_at__isnull=True).first()
+        if user is None:
+            # Même coût de vérification qu'un compte existant (pas d'oracle temporel).
+            Utilisateur(mot_de_passe_hash=_hash_factice()).check_password(password)
+            raise serializers.ValidationError(IDENTIFIANTS_INVALIDES)
 
-        if user.verrouille_jusquau and user.verrouille_jusquau > timezone.now():
-            raise serializers.ValidationError('Compte temporairement verrouillé.')
+        maintenant = timezone.now()
+        verrouille = bool(user.verrouille_jusquau and user.verrouille_jusquau > maintenant)
 
         if not user.check_password(password):
-            user.tentatives_echec = (user.tentatives_echec or 0) + 1
-            if user.tentatives_echec >= 5:
-                user.verrouille_jusquau = timezone.now() + timedelta(minutes=15)
-            Utilisateur.objects.filter(pk=user.pk).update(
-                tentatives_echec=user.tentatives_echec,
-                verrouille_jusquau=user.verrouille_jusquau,
+            if not verrouille:
+                tentatives = (user.tentatives_echec or 0) + 1
+                fin_verrou = maintenant + timedelta(minutes=VERROU_MINUTES) if tentatives >= VERROU_TENTATIVES else None
+                Utilisateur.objects.filter(pk=user.pk).update(
+                    tentatives_echec=tentatives,
+                    verrouille_jusquau=fin_verrou,
+                )
+            raise serializers.ValidationError(IDENTIFIANTS_INVALIDES)
+
+        if verrouille:
+            raise serializers.ValidationError(
+                'Compte temporairement verrouillé après plusieurs tentatives infructueuses. '
+                f'Réessayez dans {VERROU_MINUTES} minutes ou réinitialisez votre mot de passe.'
             )
-            raise serializers.ValidationError('Identifiants invalides.')
 
         if user.statut == Utilisateur.Statut.EN_ATTENTE:
             raise serializers.ValidationError(
@@ -236,7 +306,6 @@ class PnlfTokenRefreshSerializer(TokenRefreshSerializer):
         user = Utilisateur.objects.filter(pk=refresh.get('user_id'), deleted_at__isnull=True).first()
         if user is None or not user.is_active:
             raise AuthenticationFailed('Compte inactif ou introuvable.', code='user_inactive')
-        claim = refresh.get('pwd')
-        if claim and claim != password_fingerprint(user):
+        if refresh.get('pwd') != password_fingerprint(user):
             raise AuthenticationFailed('Session révoquée.', code='password_changed')
         return {'access': str(refresh.access_token)}

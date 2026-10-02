@@ -15,8 +15,21 @@
         <span class="text-sm text-muted">Déclaré le {{ l.created_at | pnlfDate }}</span>
       </div>
     </div>
-    <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
+    <div class="pnlf-page-header__actions">
+      @if (peutPublier()) {
+        <button pnlfButton type="button" variant="primary" (click)="confirmPublier.set(true)">Publier le lot</button>
+      }
+      @if (peutSupprimer()) {
+        <button pnlfButton type="button" variant="outline" (click)="confirmSuppression.set(true)">Supprimer le lot</button>
+      }
+      <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
+    </div>
   </div>
+  @if (l.statut === 'BROUILLON') {
+    <pnlf-alert tone="info" title="Brouillon non publié">
+      Ce lot n’est pas encore déclaré officiellement. Publiez-le pour permettre l’ajout d’étapes de traçabilité.
+    </pnlf-alert>
+  }
 
   <div class="lot-detail__grid">
     <div class="lot-detail__main">
@@ -75,14 +88,14 @@
       </pnlf-card>
 
       <pnlf-card title="Frise de traçabilité" subtitle="Historique chronologique des mouvements du lot">
-        @if (canAddMouvement) {
+        @if (peutAjouterEtape()) {
           <div class="lot-mvt-actions">
             <button pnlfButton type="button" variant="outline" size="sm" (click)="ouvrirMouvementForm()" [attr.aria-expanded]="showMouvementForm()" aria-controls="lot-mvt-form">
               {{ showMouvementForm() ? 'Annuler' : 'Enregistrer une étape' }}
             </button>
           </div>
         }
-        @if (showMouvementForm()) {
+        @if (showMouvementForm() && peutAjouterEtape()) {
           <form class="lot-mvt-form" id="lot-mvt-form" (ngSubmit)="enregistrerMouvement()" novalidate>
             @if (mouvementError()) {
               <pnlf-alert tone="error" class="lot-mvt-form__full" role="alert">{{ mouvementError() }}</pnlf-alert>
@@ -104,8 +117,8 @@
               <input class="pnlf-select" type="text" placeholder="Village, marché, entrepôt…" [ngModel]="mouvementLieu()" (ngModelChange)="mouvementLieu.set($event)" name="lieu" />
             </label>
             <label>
-              Quantité en {{ l.unite | pnlfUnite: 2 }} (facultatif)
-              <input class="pnlf-select" type="number" min="0" step="any" inputmode="decimal" [ngModel]="mouvementQuantite()" (ngModelChange)="mouvementQuantite.set($event)" name="qte" />
+              Quantité en {{ l.unite | pnlfUnite: 2 }} (facultatif, {{ l.quantite | pnlfQuantite: l.unite }} au maximum)
+              <input class="pnlf-select" type="number" min="0" [max]="l.quantite" step="any" inputmode="decimal" [ngModel]="mouvementQuantite()" (ngModelChange)="mouvementQuantite.set($event)" name="qte" />
             </label>
             <label class="lot-mvt-form__full">
               Commentaire
@@ -116,7 +129,7 @@
         }
         @if (l.mouvements.length === 0) {
           <pnlf-empty-state icon="clock" title="Aucun mouvement enregistré" description="Les étapes de collecte, transfert et transformation apparaîtront ici.">
-            @if (canAddMouvement && !showMouvementForm()) {
+            @if (peutAjouterEtape() && !showMouvementForm()) {
               <button pnlfButton type="button" variant="primary" (click)="ouvrirMouvementForm()">Enregistrer une étape</button>
             }
           </pnlf-empty-state>
@@ -197,6 +210,25 @@
   [loading]="changingStatus()"
   (confirmed)="changerStatut()"
   (cancelled)="confirmStatut.set(false)"
+/>
+<pnlf-confirm-dialog
+  [open]="confirmPublier()"
+  title="Publier ce lot ?"
+  message="Le brouillon passera au statut « Déclaré » : il sera visible des agents et l’étape de collecte sera enregistrée."
+  confirmLabel="Publier le lot"
+  [loading]="publishing()"
+  (confirmed)="publier()"
+  (cancelled)="confirmPublier.set(false)"
+/>
+<pnlf-confirm-dialog
+  [open]="confirmSuppression()"
+  title="Supprimer ce lot ?"
+  message="Le lot disparaîtra de vos listes et de la vérification publique. Cette action est définitive."
+  confirmLabel="Supprimer le lot"
+  [danger]="true"
+  [loading]="deleting()"
+  (confirmed)="supprimer()"
+  (cancelled)="confirmSuppression.set(false)"
 />
 <pnlf-confirm-dialog
   [open]="!!photoToRemove()"

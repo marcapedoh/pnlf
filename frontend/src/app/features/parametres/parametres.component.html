@@ -8,13 +8,48 @@
 
 <div class="parametres-grid">
   <pnlf-card title="Informations du compte">
-    <dl class="parametres-dl">
-      <div><dt>Nom complet</dt><dd>{{ auth.fullName() }}</dd></div>
-      <div><dt>E-mail</dt><dd>{{ auth.currentUser()?.email }}</dd></div>
-      <div><dt>Téléphone</dt><dd>{{ auth.currentUser()?.telephone || 'Non renseigné' }}</dd></div>
-      <div><dt>Profil</dt><dd>{{ roleLabels[auth.currentUser()!.role] }}</dd></div>
-      <div><dt>Statut du compte</dt><dd>{{ statutLabel(auth.currentUser()?.statut) }}</dd></div>
-    </dl>
+    <div class="parametres-photo">
+      <div class="parametres-photo__avatar">
+        @if (auth.currentUser()?.photo_url) {
+          <img [src]="auth.currentUser()!.photo_url" alt="" />
+        } @else {
+          <span aria-hidden="true">{{ auth.initials() || '?' }}</span>
+        }
+      </div>
+      <button pnlfButton variant="outline" size="sm" type="button" [loading]="uploadingPhoto()" (click)="openPhotoPicker()">
+        {{ auth.currentUser()?.photo_url ? 'Changer ma photo' : 'Ajouter une photo' }}
+      </button>
+      <input #photoInput type="file" accept="image/jpeg,image/png,image/webp" class="pnlf-visually-hidden" tabindex="-1" aria-hidden="true" (change)="onPhotoSelected($event)" />
+    </div>
+
+    @if (editMode()) {
+      @if (formError()) {
+        <pnlf-alert tone="error" style="display:block; margin-bottom: 1rem;">{{ formError() }}</pnlf-alert>
+      }
+      <form [formGroup]="form" (ngSubmit)="save()" class="parametres-form" novalidate>
+        <pnlf-text-field [label]="estCooperative() ? 'Nom de la coopérative' : 'Nom'" formControlName="nom" autocomplete="family-name" [required]="true" [errorMessage]="err('nom')" />
+        @if (!estCooperative()) {
+          <pnlf-text-field label="Prénoms" formControlName="prenoms" autocomplete="given-name" [required]="true" [errorMessage]="err('prenoms')" />
+        }
+        <pnlf-text-field label="Téléphone" type="tel" formControlName="telephone" inputmode="tel" autocomplete="tel" placeholder="+241 77 00 01 02" [errorMessage]="err('telephone')" />
+        <p class="text-xs text-muted">L’adresse e-mail et le profil ne se modifient pas ici : contactez un administrateur si nécessaire.</p>
+        <div class="parametres-form__actions">
+          <button pnlfButton variant="ghost" type="button" (click)="cancelEdit()">Annuler</button>
+          <button pnlfButton variant="primary" type="submit" [loading]="saving()">Enregistrer</button>
+        </div>
+      </form>
+    } @else {
+      <dl class="parametres-dl">
+        <div><dt>Nom complet</dt><dd>{{ auth.fullName() }}</dd></div>
+        <div><dt>E-mail</dt><dd>{{ auth.currentUser()?.email }}</dd></div>
+        <div><dt>Téléphone</dt><dd>{{ auth.currentUser()?.telephone || 'Non renseigné' }}</dd></div>
+        <div><dt>Profil</dt><dd>{{ roleLabels[auth.currentUser()!.role] }}</dd></div>
+        <div><dt>Statut du compte</dt><dd>{{ statutLabel(auth.currentUser()?.statut) }}</dd></div>
+      </dl>
+      <div class="parametres-form__actions">
+        <button pnlfButton variant="outline" type="button" (click)="startEdit()">Modifier mes informations</button>
+      </div>
+    }
   </pnlf-card>
 
   <pnlf-card title="Sécurité">

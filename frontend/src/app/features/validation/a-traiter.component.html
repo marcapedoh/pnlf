@@ -92,6 +92,7 @@
         }
       </pnlf-card>
 
+      @if (canValidateOffresCertifs) {
       <pnlf-card title="Inscriptions acheteurs" [subtitle]="(d.acheteurs?.count ?? 0) + ' en attente'">
         @if (!d.acheteurs?.results?.length) {
           <p class="text-sm text-muted">Aucun compte acheteur à activer.</p>
@@ -107,6 +108,7 @@
           <a pnlfButton routerLink="/app/utilisateurs" [queryParams]="{ role: 'ACHETEUR', statut: 'EN_ATTENTE' }" variant="ghost">Voir tous →</a>
         }
       </pnlf-card>
+      }
     </div>
   }
 }

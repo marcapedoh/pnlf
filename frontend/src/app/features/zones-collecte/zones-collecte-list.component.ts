@@ -19,6 +19,7 @@ import { EmptyStateComponent } from '../../design-system/empty-state/empty-state
 import { PaginationComponent } from '../../design-system/pagination/pagination.component';
 import { SelectFieldComponent, SelectOption } from '../../design-system/select-field/select-field.component';
 import { SkeletonComponent } from '../../design-system/skeleton/skeleton.component';
+import { StatusBadgeComponent } from '../../design-system/badge/status-badge.component';
 import { TextFieldComponent } from '../../design-system/text-field/text-field.component';
 import { ToastService } from '../../design-system/toast/toast.service';
 import { triggerBrowserDownload } from '../../core/http/download-file.util';
@@ -37,6 +38,7 @@ import { triggerBrowserDownload } from '../../core/http/download-file.util';
     AlertBannerComponent,
     PaginationComponent,
     SkeletonComponent,
+    StatusBadgeComponent,
   ],
   templateUrl: './zones-collecte-list.component.html',
   styleUrl: './zones-collecte-list.component.scss',
@@ -78,8 +80,15 @@ export class ZonesCollecteListComponent {
     RoleUtilisateur.AGENT_FORESTIER,
   );
 
+  readonly actifFilter = signal<'' | 'true' | 'false'>('true');
+  readonly actifOptions: SelectOption[] = [
+    { value: 'true', label: 'Zones actives' },
+    { value: 'false', label: 'Zones désactivées' },
+    { value: '', label: 'Toutes les zones' },
+  ];
+
   readonly form = this.fb.nonNullable.group({
-    code: ['', Validators.required],
+    code: [''],
     libelle: ['', Validators.required],
     province: ['', Validators.required],
     description: [''],
@@ -111,11 +120,23 @@ export class ZonesCollecteListComponent {
     this.load();
   }
 
+  onActifFilterChange(value: string): void {
+    this.actifFilter.set(value === 'true' || value === 'false' ? value : '');
+    this.page.set(1);
+    this.load();
+  }
+
   load(): void {
     this.loading.set(true);
     this.loadError.set('');
+    const params: Record<string, string> = {
+      page: String(this.page()),
+      page_size: String(this.pageSize),
+      search: this.search(),
+    };
+    if (this.canManage && this.actifFilter()) params['actif'] = this.actifFilter();
     this.referenceService
-      .zonesCollecte({ page: String(this.page()), page_size: String(this.pageSize), search: this.search() })
+      .zonesCollecte(params)
       .subscribe({
         next: (res) => {
           this.items.set(unwrapList(res));
@@ -151,6 +172,7 @@ export class ZonesCollecteListComponent {
     const nombre = (v: string) => (v.trim() ? Number(v.trim().replace(',', '.')) : null);
     const payload = {
       ...raw,
+      code: raw.code.trim(),
       latitude: nombre(raw.latitude),
       longitude: nombre(raw.longitude),
     };

@@ -53,6 +53,17 @@
         <option [value]="s">{{ statutLabels[s] }}</option>
       }
     </select>
+
+    <select
+      class="pnlf-select"
+      aria-label="Filtrer par type d’acteur"
+      [ngModel]="typeActeurFilter()"
+      (ngModelChange)="typeActeurFilter.set($event); onFilterChange()"
+    >
+      <option value="">Producteurs et collecteurs</option>
+      <option [value]="TypeActeur.PRODUCTEUR">Producteurs</option>
+      <option [value]="TypeActeur.COLLECTEUR">Collecteurs</option>
+    </select>
   </div>
 </div>
 

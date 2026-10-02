@@ -4,7 +4,6 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { toApiError } from '../../core/http/api-error.util';
 import { AuthService } from '../../core/auth/auth.service';
-import { todayIso } from '../../core/format/format.util';
 import { controlError, handleFormApiError, revealFormErrors } from '../../core/forms/form-errors.util';
 import { unwrapList } from '../../core/models/common.model';
 import { Certification, STATUT_CERTIFICATION_LABELS, StatutCertification } from '../../core/models/certification.model';
@@ -12,7 +11,6 @@ import { RoleUtilisateur } from '../../core/models/user.model';
 import { CertificationsService } from '../../core/services/certifications.service';
 import { LotsService } from '../../core/services/lots.service';
 import { ProducteursService } from '../../core/services/producteurs.service';
-import { dateNotFutureValidator } from '../../core/validators/pnlf.validators';
 import { ConfirmDialogComponent } from '../../design-system/confirm-dialog/confirm-dialog.component';
 import { ModalA11yDirective } from '../../design-system/modal/modal-a11y.directive';
 import { TextFieldComponent } from '../../design-system/text-field/text-field.component';
@@ -29,7 +27,7 @@ import { ToastService } from '../../design-system/toast/toast.service';
 import { unwrapCount } from '../../core/models/common.model';
 import { PnlfDatePipe } from '../../shared/pipes/format.pipes';
 
-type FormKey = 'type_certification' | 'producteur' | 'date_demande';
+type FormKey = 'type_certification' | 'producteur';
 
 @Component({
   selector: 'app-certifications-list',
@@ -61,7 +59,6 @@ export class CertificationsListComponent {
   private readonly toast = inject(ToastService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
-  readonly today = todayIso();
   readonly items = signal<Certification[]>([]);
   readonly loading = signal(true);
   readonly loadError = signal('');
@@ -103,7 +100,6 @@ export class CertificationsListComponent {
     type_certification: ['', Validators.required],
     producteur: ['', this.needsProducteurChoice ? Validators.required : []],
     lot: [''],
-    date_demande: [this.today, [Validators.required, dateNotFutureValidator]],
     observations: [''],
   });
 
@@ -200,7 +196,6 @@ export class CertificationsListComponent {
     const raw = this.form.getRawValue();
     const payload: Record<string, string> = {
       type_certification: raw.type_certification,
-      date_demande: raw.date_demande,
       observations: raw.observations,
     };
     if (raw.producteur) {

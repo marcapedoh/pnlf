@@ -444,6 +444,8 @@ def etape_validations(s: Seed) -> None:
 
 
 def etape_fiches_terrain(s: Seed) -> dict:
+    from traceability.models import Producteur
+
     print('> Fiches créées par les agents et les coopératives (acteurs sans compte)')
     forestier, ministere = email('forestier.demo'), email('ministere.demo')
     fiches = {}
@@ -480,6 +482,10 @@ def etape_fiches_terrain(s: Seed) -> dict:
         loc = s.localisation(champs.pop('loc'))
         data = s.api(auteur, 'post', '/api/producteurs/', {**champs, **loc, 'client_uuid': cle(f'fiche-{code}')})
         fiches[code] = data['id']
+        if data.get('code_producteur') != champs['code_producteur']:
+            # Seuls les agents choisissent le code : la fiche saisie par la coopérative
+            # garde son code de démonstration pour être retrouvée par assurer_fichiers().
+            Producteur.objects.filter(pk=data['id']).update(code_producteur=champs['code_producteur'])
     for code in ('t01', 't02', 'c01'):
         s.api(ministere, 'post', f'/api/producteurs/{fiches[code]}/valider/')
     return fiches
@@ -490,6 +496,7 @@ def etape_membres(s: Seed, fiches: dict) -> None:
     ivindo, ngounie = s.coop(email('coop.ivindo')), s.coop(email('coop.ngounie'))
     aujourd_hui = _aujourdhui()
     for adresse, jours in (('producteur.kola', 210), ('collecteur.ogooue', 150)):
+        s.api(email(adresse), 'post', f'/api/cooperatives/{ivindo.id}/demander-adhesion/')
         s.api(email('coop.ivindo'), 'post', f'/api/cooperatives/{ivindo.id}/membres/', {
             'producteur': str(s.fiche(email(adresse)).id), 'date_adhesion': str(aujourd_hui - timedelta(days=jours)),
         })

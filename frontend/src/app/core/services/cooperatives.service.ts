@@ -82,6 +82,15 @@ export class CooperativesService {
     return this.http.post<{ detail: string }>(`${this.base}${id}/demander-adhesion/`, {});
   }
 
+  /** Demandes d'adhésion en attente (coopérative titulaire, administrateur, agent du ministère). */
+  demandesAdhesion(id: string): Observable<CooperativeMembre[]> {
+    return this.http.get<CooperativeMembre[]>(`${this.base}${id}/demandes-adhesion/`);
+  }
+
+  refuserAdhesion(id: string, producteur: string, motif?: string): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(`${this.base}${id}/membres/refuser/`, { producteur, motif });
+  }
+
   /** Récupère la fiche PDF de cette coopérative en Blob authentifié. */
   fichePdfBlob(id: string): Observable<Blob> {
     return this.http.post(
@@ -111,6 +120,8 @@ export interface CooperativeMembre {
   cooperative: string;
   producteur: string;
   producteur_nom: string;
+  producteur_code?: string;
+  producteur_statut?: string;
   date_adhesion: string;
   actif: boolean;
   created_at: string;

@@ -109,7 +109,11 @@
             </ul>
           }
         } @else if (fil().length === 0) {
-          <p class="offre-detail__desc">Présentez-vous et précisez votre besoin. L’auteur pourra vous répondre ici.</p>
+          @if (peutEcrire()) {
+            <p class="offre-detail__desc">Présentez-vous et précisez votre besoin. L’auteur pourra vous répondre ici.</p>
+          } @else {
+            <p class="offre-detail__desc">Cette annonce n’est pas ouverte aux échanges.</p>
+          }
         }
 
         @if (conversationId() && fil().length) {

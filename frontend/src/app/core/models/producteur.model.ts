@@ -85,9 +85,13 @@ export interface Cooperative {
   actif: boolean;
   statut: StatutCooperative;
   photo_url?: string | null;
+  /** Situation du producteur connecté vis-à-vis de cette coopérative (null pour les autres profils). */
+  mon_adhesion?: MonAdhesion | null;
   created_at: string;
   updated_at: string;
 }
+
+export type MonAdhesion = 'MEMBRE' | 'EN_ATTENTE' | 'AUTRE_COOPERATIVE' | 'DEMANDE_AILLEURS';
 
 export interface CooperativeMembre {
   cooperative: string;

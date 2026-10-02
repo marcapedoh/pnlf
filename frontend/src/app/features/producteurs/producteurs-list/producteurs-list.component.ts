@@ -75,6 +75,7 @@ export class ProducteursListComponent {
   readonly search = signal('');
   readonly provinceFilter = signal('');
   readonly statutFilter = signal('');
+  readonly typeActeurFilter = signal('');
   readonly provinces = signal<{ value: string; label: string }[]>([]);
 
   readonly statutLabels = STATUT_PRODUCTEUR_LABELS;
@@ -160,6 +161,7 @@ export class ProducteursListComponent {
         search: this.search(),
         province: this.provinceFilter(),
         statut: this.statutFilter(),
+        type_acteur: this.typeActeurFilter(),
       })
       .subscribe({
         next: (res) => {
@@ -207,6 +209,7 @@ export class ProducteursListComponent {
         search: this.search(),
         province: this.provinceFilter(),
         statut: this.statutFilter(),
+        type_acteur: this.typeActeurFilter(),
       }),
     );
   }

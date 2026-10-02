@@ -517,7 +517,10 @@ def _header_table_portrait(styles, subtitle: str) -> Table:
     return inner
 
 
-def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
+CONTACT_MASQUE = 'Réservé aux agents habilités'
+
+
+def export_producteur_fiche_pdf(producteur, request=None, *, masquer_contacts: bool = False) -> HttpResponse:
     """Fiche individuelle imprimable d'un producteur/collecteur (portrait, 1 page utile)."""
     from traceability.models import Certification, Lot
     from traceability.services import photo_url as _prod_photo_url
@@ -564,8 +567,8 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
         ('Code', producteur.code_producteur or 'Non renseigné'),
         ('Type', type_acteur),
         ('Nom complet', f'{producteur.prenoms} {producteur.nom}'.strip()),
-        ('Téléphone', producteur.telephone or 'Non renseigné'),
-        ('E-mail', producteur.email or 'Non renseigné'),
+        ('Téléphone', CONTACT_MASQUE if masquer_contacts else (producteur.telephone or 'Non renseigné')),
+        ('E-mail', CONTACT_MASQUE if masquer_contacts else (producteur.email or 'Non renseigné')),
         ('Localisation', localisation),
         ('Communauté', producteur.communaute or 'Non renseignée'),
         ('Statut', STATUT_PRODUCTEUR_FR.get(producteur.statut, producteur.statut or 'Non renseigné')),
@@ -635,7 +638,7 @@ def export_producteur_fiche_pdf(producteur, request=None) -> HttpResponse:
     )
 
 
-def export_producteurs_liste_pdf(queryset) -> HttpResponse:
+def export_producteurs_liste_pdf(queryset, *, masquer_contacts: bool = False) -> HttpResponse:
     """Liste imprimable des producteurs/collecteurs (paysage)."""
     styles = _styles()
     now = timezone.localtime()
@@ -656,19 +659,33 @@ def export_producteurs_liste_pdf(queryset) -> HttpResponse:
     if not items:
         story.append(Paragraph('Aucun producteur à exporter pour ce périmètre.', styles['empty']))
     else:
-        header = ['N°', 'Code', 'Nom complet', 'Téléphone', 'Province', 'Statut']
-        rows = [
-            [
-                str(i),
-                p.code_producteur or '-',
-                f'{p.prenoms} {p.nom}'.strip(),
-                p.telephone or '-',
-                getattr(p.province, 'nom', None) or '-',
-                STATUT_PRODUCTEUR_FR.get(p.statut, p.statut or '-'),
+        if masquer_contacts:
+            header = ['N°', 'Code', 'Nom complet', 'Province', 'Statut']
+            rows = [
+                [
+                    str(i),
+                    p.code_producteur or '-',
+                    f'{p.prenoms} {p.nom}'.strip(),
+                    getattr(p.province, 'nom', None) or '-',
+                    STATUT_PRODUCTEUR_FR.get(p.statut, p.statut or '-'),
+                ]
+                for i, p in enumerate(items, start=1)
             ]
-            for i, p in enumerate(items, start=1)
-        ]
-        widths = [12 * mm, 32 * mm, 62 * mm, 36 * mm, 46 * mm, 42 * mm]
+            widths = [12 * mm, 36 * mm, 84 * mm, 52 * mm, 46 * mm]
+        else:
+            header = ['N°', 'Code', 'Nom complet', 'Téléphone', 'Province', 'Statut']
+            rows = [
+                [
+                    str(i),
+                    p.code_producteur or '-',
+                    f'{p.prenoms} {p.nom}'.strip(),
+                    p.telephone or '-',
+                    getattr(p.province, 'nom', None) or '-',
+                    STATUT_PRODUCTEUR_FR.get(p.statut, p.statut or '-'),
+                ]
+                for i, p in enumerate(items, start=1)
+            ]
+            widths = [12 * mm, 32 * mm, 62 * mm, 36 * mm, 46 * mm, 42 * mm]
         story.append(_data_table(header, rows, widths, styles, center_cols=(0,)))
 
     filename = f'PFNL-producteurs-{now:%Y%m%d-%H%M}.pdf'
@@ -678,7 +695,7 @@ def export_producteurs_liste_pdf(queryset) -> HttpResponse:
     )
 
 
-def export_cooperative_fiche_pdf(cooperative, request=None) -> HttpResponse:
+def export_cooperative_fiche_pdf(cooperative, request=None, *, masquer_contacts: bool = False) -> HttpResponse:
     """Fiche individuelle imprimable d'une coopérative (portrait)."""
     from traceability.models import CooperativeMembre
 
@@ -718,7 +735,7 @@ def export_cooperative_fiche_pdf(cooperative, request=None) -> HttpResponse:
         rows = [
             [
                 str(m.producteur),
-                getattr(m.producteur, 'telephone', None) or '-',
+                CONTACT_MASQUE if masquer_contacts else (getattr(m.producteur, 'telephone', None) or '-'),
                 STATUT_PRODUCTEUR_FR.get(getattr(m.producteur, 'statut', None), getattr(m.producteur, 'statut', None) or '-'),
                 m.date_adhesion.strftime('%d/%m/%Y') if m.date_adhesion else '-',
             ]
@@ -788,8 +805,8 @@ def _build_pdf_portrait(story, *, filename: str, title: str, footer: str) -> Htt
     return pdf_file_response(_render_pdf_portrait(story, title=title, footer=footer), filename)
 
 
-def producteur_fiche_pdf_bytes(producteur) -> tuple[bytes, str]:
-    response = export_producteur_fiche_pdf(producteur)
+def producteur_fiche_pdf_bytes(producteur, *, masquer_contacts: bool = False) -> tuple[bytes, str]:
+    response = export_producteur_fiche_pdf(producteur, masquer_contacts=masquer_contacts)
     filename = f'PFNL-fiche-{producteur.code_producteur or str(producteur.id)[:8]}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
@@ -797,8 +814,8 @@ def producteur_fiche_pdf_bytes(producteur) -> tuple[bytes, str]:
     return bytes(response.content), filename
 
 
-def producteurs_liste_pdf_bytes(queryset) -> tuple[bytes, str]:
-    response = export_producteurs_liste_pdf(queryset)
+def producteurs_liste_pdf_bytes(queryset, *, masquer_contacts: bool = False) -> tuple[bytes, str]:
+    response = export_producteurs_liste_pdf(queryset, masquer_contacts=masquer_contacts)
     filename = f'PFNL-producteurs-{timezone.localtime():%Y%m%d-%H%M}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
@@ -806,8 +823,8 @@ def producteurs_liste_pdf_bytes(queryset) -> tuple[bytes, str]:
     return bytes(response.content), filename
 
 
-def cooperative_fiche_pdf_bytes(cooperative) -> tuple[bytes, str]:
-    response = export_cooperative_fiche_pdf(cooperative)
+def cooperative_fiche_pdf_bytes(cooperative, *, masquer_contacts: bool = False) -> tuple[bytes, str]:
+    response = export_cooperative_fiche_pdf(cooperative, masquer_contacts=masquer_contacts)
     filename = f'PFNL-fiche-coop-{cooperative.code or str(cooperative.id)[:8]}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:

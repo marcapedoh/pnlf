@@ -1,10 +1,11 @@
-"""Configuration Django — PFNL."""
+"""Configuration Django : PFNL."""
 
 from datetime import timedelta
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+import logging
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,6 +26,11 @@ def _resolve_secret_key() -> str:
             return val
     if DEBUG:
         return 'insecure-dev-key'
+    logging.getLogger('pfnl.security').warning(
+        'SÉCURITÉ : DJANGO_SECRET_KEY absente en production. Une clé de repli dérivée de '
+        'variables d’hébergement est utilisée : définissez DJANGO_SECRET_KEY (valeur aléatoire '
+        'de 50 caractères ou plus) dans l’environnement Render.'
+    )
     # Render injecte toujours RENDER_SERVICE_ID + DATABASE_URL
     material = '|'.join(
         [
@@ -143,23 +149,24 @@ MEDIA_S3_PREFIX = os.getenv('MEDIA_S3_PREFIX', 'media/').strip()
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+PNLF_FRONTEND_ORIGIN = 'https://plateformedetracabilite-pnlf.netlify.app'
 _DEFAULT_CORS_ORIGINS = [
     'http://localhost:4200',
     'http://127.0.0.1:4200',
-    'https://platformedetracabilite-pnlf.netlify.app',
-    'https://platformedetracabilite-pnfl.netlify.app',
+    PNLF_FRONTEND_ORIGIN,
 ]
 _ENV_CORS = [
-    o.strip()
+    o.strip().rstrip('/')
     for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
-    if o.strip()
+    if o.strip() and o.strip() != '*'
 ]
 # Union env Render + origines Netlify/local (sinon inscription front bloquée).
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_ENV_CORS + _DEFAULT_CORS_ORIGINS))
 CORS_ALLOW_CREDENTIALS = True
 CORS_EXPOSE_HEADERS = ['Content-Disposition']
+# Aperçus de déploiement Netlify de CE site uniquement (le cookie de refresh est envoyé avec credentials).
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r'^https://.*\.netlify\.app$',
+    r'^https://deploy-preview-\d+--plateformedetracabilite-pnlf\.netlify\.app$',
 ]
 
 # Sécurité production
@@ -211,7 +218,11 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
+DJANGO_ADMIN_ENABLED = os.getenv('DJANGO_ADMIN_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+
 REST_FRAMEWORK = {
+    # Nombre de proxys de confiance devant l'application (Render : 1). Sert au throttling et au journal.
+    'NUM_PROXIES': int(os.getenv('DRF_NUM_PROXIES', '1')),
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'accounts.authentication.PnlfJWTAuthentication',
     ),
@@ -231,6 +242,7 @@ REST_FRAMEWORK = {
         'anon': '60/min',
         'user': '300/min',
         'login': '8/min',
+        'refresh': '30/min',
         'contact_public': '5/min',
         'inscription_public': '5/min',
         'password_reset': '5/min',

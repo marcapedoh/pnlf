@@ -36,26 +36,25 @@
       <h2>Assistance</h2>
       <p>
         Pour toute question sur votre compte, un signalement d'anomalie ou une demande d'aide sur le
-        fonctionnement de la plateforme, contactez le service d'assistance de l'ENEF.
+        fonctionnement de la plateforme, contactez le support technique.
       </p>
       <div class="dev-card">
-        <div class="dev-card__avatar" aria-hidden="true">
-          <pnlf-icon name="mail" [size]="28" />
-        </div>
+        <div class="dev-card__avatar" aria-hidden="true">WM</div>
         <div class="dev-card__body">
-          <p class="dev-card__name">{{ assistance.nom }}</p>
-          <p class="dev-card__role">École Nationale des Eaux et Forêts</p>
+          <p class="dev-card__name">{{ assistance.responsable }}</p>
+          <p class="dev-card__role">{{ assistance.fonction }}</p>
           <div class="dev-card__contacts">
             <a [href]="'mailto:' + assistance.email">
               <pnlf-icon name="mail" [size]="16" />
               {{ assistance.email }}
             </a>
+            <a [href]="'tel:' + assistance.telephone">
+              <pnlf-icon name="phone" [size]="16" />
+              {{ assistance.telephoneAffiche }}
+            </a>
           </div>
         </div>
       </div>
-      <p class="text-sm text-muted">
-        Conception et développement de la plateforme : Wadrice MPAMBOU MOUKAGNI.
-      </p>
     </article>
 
     <article class="legal-section">
@@ -63,7 +62,7 @@
       <p>
         Consultez nos <a routerLink="/conditions-utilisation">conditions d'utilisation</a> et notre
         <a routerLink="/politique-confidentialite">politique de confidentialité</a>, ou contactez
-        directement le service d'assistance ci-dessus.
+        directement le support technique ci-dessus.
       </p>
     </article>
   </div>

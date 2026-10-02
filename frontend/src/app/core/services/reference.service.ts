@@ -38,7 +38,7 @@ export class ReferenceService {
 
   categories(): Observable<ApiListResponse<CategorieProduit>> {
     return this.http.get<ApiListResponse<CategorieProduit>>(
-      `${environment.apiUrl}/categories-produit/`,
+      `${environment.apiUrl}/categories-produits/`,
       { params: { page_size: '100' } },
     );
   }

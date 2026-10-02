@@ -38,6 +38,16 @@ export class UsersAdminService {
     return this.http.post<Utilisateur>(`${this.base}${id}/suspendre/`, {});
   }
 
+  /** Rejette une inscription acheteur en attente (le compte est supprimé, le demandeur informé). */
+  rejeter(id: string, motif: string): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(`${this.base}${id}/rejeter/`, { motif });
+  }
+
+  /** Le rôle ne se modifie plus par PATCH : action dédiée côté API. */
+  changerRole(id: string, role: string): Observable<Utilisateur> {
+    return this.http.post<Utilisateur>(`${this.base}${id}/changer-role/`, { role });
+  }
+
   envoyerReinitialisation(id: string): Observable<{ detail: string }> {
     return this.http.post<{ detail: string }>(`${this.base}${id}/envoyer-reinitialisation/`, {});
   }

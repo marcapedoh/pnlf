@@ -41,8 +41,14 @@
         @if (canValidate && c.statut === StatutCooperative.INACTIF) {
           <button pnlfButton variant="outline" (click)="dialog.set({ kind: 'activer' })">Réactiver</button>
         }
-        @if (isProducteur && c.statut === StatutCooperative.ACTIF) {
+        @if (isProducteur && c.statut === StatutCooperative.ACTIF && !c.mon_adhesion) {
           <button pnlfButton variant="primary" (click)="dialog.set({ kind: 'adhesion' })">Demander à rejoindre</button>
+        }
+        @if (isProducteur && c.mon_adhesion === 'MEMBRE') {
+          <pnlf-status-badge label="Vous êtes membre" tone="success" />
+        }
+        @if (isProducteur && c.mon_adhesion === 'EN_ATTENTE') {
+          <pnlf-status-badge label="Demande d’adhésion en attente" tone="warning" />
         }
         @if (!isProducteur) {
           <button pnlfButton variant="outline" type="button" (click)="exporterPdf()">
@@ -76,6 +82,57 @@
       </dl>
     </pnlf-card>
   </div>
+
+  @if (isProducteur && c.mon_adhesion === 'AUTRE_COOPERATIVE') {
+    <pnlf-alert tone="info">
+      Vous êtes déjà membre d’une autre coopérative : demandez d’abord votre retrait à celle-ci pour rejoindre {{ c.nom }}.
+    </pnlf-alert>
+  }
+  @if (isProducteur && c.mon_adhesion === 'DEMANDE_AILLEURS') {
+    <pnlf-alert tone="info">
+      Vous avez déjà une demande d’adhésion en attente auprès d’une autre coopérative : attendez sa réponse avant d’en envoyer une nouvelle.
+    </pnlf-alert>
+  }
+
+  @if (canManageMembres) {
+    <pnlf-card title="Demandes d’adhésion" subtitle="Producteurs et collecteurs ayant demandé à rejoindre la coopérative">
+      @if (demandes().length === 0) {
+        <p class="text-sm text-muted">Aucune demande en attente.</p>
+      } @else {
+        <div class="pnlf-table-wrapper">
+          <table class="pnlf-table">
+            <caption class="pnlf-visually-hidden">Demandes d’adhésion en attente</caption>
+            <thead>
+              <tr>
+                <th scope="col">Producteur / collecteur</th>
+                <th scope="col">Code</th>
+                <th scope="col">Demande reçue le</th>
+                <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (d of demandes(); track d.producteur) {
+                <tr>
+                  <td><a class="pnlf-table__link" [routerLink]="['/app/producteurs', d.producteur]">{{ d.producteur_nom }}</a></td>
+                  <td>{{ d.producteur_code || '-' }}</td>
+                  <td>{{ (d.created_at | pnlfDate) || '-' }}</td>
+                  <td>
+                    <div class="pnlf-table__actions">
+                      <button pnlfButton type="button" variant="outline" size="sm" [disabled]="c.statut !== StatutCooperative.ACTIF" (click)="dialog.set({ kind: 'accepter', producteur: d.producteur, nom: d.producteur_nom })" [attr.aria-label]="'Accepter la demande de ' + d.producteur_nom">Accepter</button>
+                      <button pnlfButton type="button" variant="ghost" size="sm" (click)="dialog.set({ kind: 'refuser', producteur: d.producteur, nom: d.producteur_nom })" [attr.aria-label]="'Refuser la demande de ' + d.producteur_nom">Refuser</button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (c.statut !== StatutCooperative.ACTIF) {
+          <p class="text-sm text-muted">La coopérative doit être active pour accepter de nouveaux membres.</p>
+        }
+      }
+    </pnlf-card>
+  }
 
   <pnlf-card title="Membres de la coopérative" subtitle="Producteurs et collecteurs rattachés">
     @if (canAddMembres) {
@@ -133,7 +190,7 @@
       <pnlf-empty-state
         icon="users"
         title="Aucun membre rattaché"
-        [description]="canAddMembres ? 'Recherchez un producteur ci-dessus pour l’enregistrer comme membre.' : 'Les membres de la coopérative apparaîtront ici.'"
+        [description]="canAddMembres ? 'Recherchez un producteur ci-dessus pour l’enregistrer comme membre.' : isCoopRole ? 'Acceptez les demandes d’adhésion reçues ou enregistrez une nouvelle fiche depuis la page Producteurs.' : 'Les membres de la coopérative apparaîtront ici.'"
       />
     } @else {
       <div class="pnlf-table-wrapper">
@@ -144,7 +201,7 @@
               <th scope="col">Producteur / collecteur</th>
               <th scope="col">Adhésion</th>
               <th scope="col">Statut</th>
-              @if (canAddMembres) {
+              @if (canManageMembres) {
                 <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
               }
             </tr>
@@ -161,7 +218,7 @@
                 </td>
                 <td>{{ (m.date_adhesion | pnlfDate) || '-' }}</td>
                 <td><pnlf-status-badge [label]="m.actif ? 'Actif' : 'Inactif'" [tone]="m.actif ? 'success' : 'neutral'" /></td>
-                @if (canAddMembres) {
+                @if (canManageMembres) {
                   <td>
                     <button pnlfButton type="button" variant="ghost" size="sm" (click)="dialog.set({ kind: 'retirer', producteur: m.producteur, nom: m.producteur_nom })" [attr.aria-label]="'Retirer ' + m.producteur_nom + ' de la coopérative'">Retirer</button>
                   </td>
@@ -237,6 +294,27 @@
   [message]="(dialog()?.nom || 'Ce producteur') + ' ne fera plus partie de la coopérative.'"
   confirmLabel="Retirer"
   [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'accepter'"
+  title="Accepter cette demande d’adhésion ?"
+  [message]="(dialog()?.nom || 'Ce producteur') + ' deviendra membre de ' + coopNom() + ' et en sera informé.'"
+  confirmLabel="Accepter"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'refuser'"
+  title="Refuser cette demande d’adhésion ?"
+  [message]="(dialog()?.nom || 'Ce producteur') + ' sera informé que sa demande n’a pas été retenue.'"
+  confirmLabel="Refuser"
+  [danger]="true"
+  [inputRequired]="false"
+  inputLabel="Motif (facultatif)"
   [loading]="dialogLoading()"
   (confirmed)="onDialogConfirm($event)"
   (cancelled)="dialog.set(null)"

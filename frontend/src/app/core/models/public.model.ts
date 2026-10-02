@@ -28,7 +28,6 @@ export interface PublicLotInfo {
   statut: string;
   statut_libelle?: string;
   uuid_public?: string | null;
-  observations: string | null;
   latitude?: number | null;
   longitude?: number | null;
   photos_urls: string[];

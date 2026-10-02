@@ -21,9 +21,8 @@ django.setup()
 import urllib.request
 
 import fitz
-from rest_framework_simplejwt.tokens import RefreshToken
-
 from accounts.models import Utilisateur
+from accounts.serializers import PnlfTokenObtainPairSerializer
 from traceability.models import Cooperative, Producteur
 
 
@@ -33,7 +32,7 @@ def jwt_for_admin() -> str:
         user = Utilisateur.objects.filter(role='ADMINISTRATEUR', deleted_at__isnull=True).first()
     if user is None:
         raise SystemExit('Aucun administrateur trouvé.')
-    return str(RefreshToken.for_user(user).access_token)
+    return str(PnlfTokenObtainPairSerializer.get_token(user).access_token)
 
 
 def post_json(url: str, token: str, payload: dict) -> dict:

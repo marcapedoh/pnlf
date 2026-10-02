@@ -1,8 +1,12 @@
+import datetime as dt
+
+from django.db import transaction
 from django.db.models import F, OuterRef, Q, Subquery
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -29,6 +33,7 @@ from pnlf_platform.serializers import (
     ConversationSerializer,
     MessageSerializer,
     NotificationSerializer,
+    OffreDemandePubliqueSerializer,
     OffreDemandeSerializer,
     SyncConflictSerializer,
     SyncPushSerializer,
@@ -54,11 +59,75 @@ from pnlf_platform.services import (
     journal_detail,
     journal_periodes,
 )
-from pnlf_platform.offre_statut import enum_supports, published_ids, write_statut
+from pnlf_platform.offre_statut import enum_supports, ids_par_statut, published_ids, read_statut, write_statut
 from traceability.db_utils import column_exists
 from traceability.models import Lot, Producteur
 
 ROLES_VALIDATION_OFFRES = (Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE)
+STATUTS_OFFRE_FIGES = ('CLOTUREE', 'REJETEE', 'ANNULEE')
+CHAMPS_CONTENU_OFFRE = (
+    'type_annonce', 'produit_id', 'province_id', 'quantite', 'unite', 'prix_unitaire',
+    'devise', 'titre', 'description', 'certification_requise', 'expire_at',
+)
+FORMATS_EXPORT = ('csv', 'xlsx', 'pdf')
+MESSAGES_MAX = 500
+
+
+def _param_date(request, nom: str):
+    texte = (request.query_params.get(nom) or '').strip()
+    if not texte:
+        return None
+    try:
+        valeur = parse_date(texte)
+    except ValueError:
+        valeur = None
+    if valeur is None:
+        raise ValidationError({nom: 'Date invalide (format attendu : AAAA-MM-JJ).'})
+    return valeur
+
+
+def _param_uuid(request, nom: str):
+    texte = (request.query_params.get(nom) or '').strip()
+    if not texte:
+        return None
+    try:
+        return uuid_lib.UUID(texte)
+    except ValueError as exc:
+        raise ValidationError({nom: 'Identifiant invalide.'}) from exc
+
+
+def _param_since(request):
+    """Paramètre ``since`` ISO 8601 (date ou date et heure) ; 400 s'il est illisible."""
+    texte = (request.query_params.get('since') or '').strip()
+    if not texte:
+        return None
+    valeur = None
+    for candidat in (texte, texte.replace(' ', '+')):
+        try:
+            valeur = parse_datetime(candidat)
+        except ValueError:
+            valeur = None
+        if valeur is not None:
+            break
+    if valeur is None:
+        try:
+            jour = parse_date(texte)
+        except ValueError:
+            jour = None
+        if jour is not None:
+            valeur = dt.datetime.combine(jour, dt.time.min)
+    if valeur is None:
+        raise ValidationError({'since': 'Date invalide (format ISO 8601 attendu, ex. 2026-10-02T08:00:00Z).'})
+    if timezone.is_naive(valeur):
+        valeur = timezone.make_aware(valeur)
+    return valeur
+
+
+def _format_export(request, defaut: str = 'csv') -> str:
+    fmt = (request.query_params.get('export_format') or defaut).strip().lower()
+    if fmt not in FORMATS_EXPORT:
+        raise ValidationError({'export_format': 'Format d’export inconnu (csv, xlsx ou pdf).'})
+    return fmt
 
 
 class ExportFileView(APIView):
@@ -74,11 +143,15 @@ class DashboardView(APIView):
     permission_classes = [CanViewDashboard]
 
     def get(self, request):
+        date_debut = _param_date(request, 'date_debut')
+        date_fin = _param_date(request, 'date_fin')
+        if date_debut and date_fin and date_fin < date_debut:
+            raise ValidationError({'date_fin': 'La date de fin doit être postérieure ou égale à la date de début.'})
         data = dashboard_stats(
-            province_id=request.query_params.get('province'),
-            produit_id=request.query_params.get('produit'),
-            date_debut=request.query_params.get('date_debut'),
-            date_fin=request.query_params.get('date_fin'),
+            province_id=_param_uuid(request, 'province'),
+            produit_id=_param_uuid(request, 'produit'),
+            date_debut=date_debut,
+            date_fin=date_fin,
         )
         return Response(data)
 
@@ -88,7 +161,6 @@ class InboxValidationView(APIView):
     permission_classes = [CanViewDashboard]
 
     def get(self, request):
-        from pnlf_platform.offre_statut import read_statut
         from traceability.models import Certification, Cooperative, Producteur
 
         producteurs = list(
@@ -106,19 +178,11 @@ class InboxValidationView(APIView):
             .select_related('type_certification', 'producteur')
             .order_by('-created_at')[:20]
         )
-        offres = []
-        for o in OffreDemande.objects.order_by('-created_at')[:80]:
-            if read_statut(o) != 'EN_VALIDATION':
-                continue
-            offres.append({
-                'id': o.id,
-                'titre': o.titre,
-                'type_annonce': o.type_annonce,
-                'created_at': o.created_at,
-                'statut': 'EN_VALIDATION',
-            })
-            if len(offres) >= 20:
-                break
+        offres_en_attente = OffreDemande.objects.filter(id__in=ids_par_statut('EN_VALIDATION'))
+        offres = [
+            {**o, 'statut': 'EN_VALIDATION'}
+            for o in offres_en_attente.order_by('-created_at').values('id', 'titre', 'type_annonce', 'created_at')[:20]
+        ]
         items_cert = [
             {
                 'id': c.id,
@@ -151,7 +215,7 @@ class InboxValidationView(APIView):
                 'count': Certification.objects.filter(statut__in=('DEMANDEE', 'EN_COURS')).count(),
                 'results': items_cert,
             },
-            'offres': {'count': len(offres), 'results': offres},
+            'offres': {'count': offres_en_attente.count(), 'results': offres},
             'acheteurs': {
                 'count': Utilisateur.objects.filter(
                     deleted_at__isnull=True,
@@ -168,7 +232,7 @@ class ExportLotsView(ExportFileView):
     def get(self, request):
         from accounts.permissions import scope_lots_qs
         qs = scope_lots_qs(Lot.objects.filter(deleted_at__isnull=True), request.user)
-        fmt = request.query_params.get('export_format', 'csv').lower()
+        fmt = _format_export(request)
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='EXPORT', table_cible='lots',
@@ -182,8 +246,9 @@ class ExportLotsView(ExportFileView):
 
 
 class JournalPeriodesView(APIView):
-    """Historique des périodes (jour / semaine / mois) pour lesquelles un journal d'audit existe."""
-    permission_classes = [CanViewDashboard]
+    """Historique des périodes (jour / semaine / mois) pour lesquelles un journal d'audit existe.
+    Mêmes droits que l'export : le journal contient adresses IP et navigateurs (SEC-15)."""
+    permission_classes = [CanExportJournal]
 
     def get(self, request):
         granularite = (request.query_params.get('granularite') or 'jour').lower()
@@ -203,17 +268,36 @@ class JournalPeriodesView(APIView):
 def _journal_filtres(request):
     """Extrait les filtres communs aux endpoints journal (GET query ou POST body)."""
     src = request.query_params if request.method == 'GET' else request.data
+    utilisateur_id = (str(src.get('utilisateur_id') or '')).strip() or None
+    if utilisateur_id:
+        try:
+            uuid_lib.UUID(utilisateur_id)
+        except ValueError as exc:
+            raise ValidationError({'utilisateur_id': 'Identifiant invalide.'}) from exc
+    dates = {}
+    for nom in ('date_debut', 'date_fin', 'date'):
+        texte = (str(src.get(nom) or '')).strip()
+        if not texte:
+            dates[nom] = None
+            continue
+        try:
+            valide = parse_date(texte) is not None
+        except ValueError:
+            valide = False
+        if not valide:
+            raise ValidationError({nom: 'Date invalide (format attendu : AAAA-MM-JJ).'})
+        dates[nom] = texte
     return {
-        'utilisateur_id': src.get('utilisateur_id') or None,
+        'utilisateur_id': utilisateur_id,
         'action': (src.get('action') or '').strip().upper() or None,
         'q': (src.get('q') or '').strip() or None,
-        'date_debut': src.get('date_debut') or None,
-        'date_fin': src.get('date_fin') or None,
+        'date_debut': dates['date_debut'],
+        'date_fin': dates['date_fin'],
     }
 
 
 class JournalDetailView(APIView):
-    permission_classes = [CanViewDashboard]
+    permission_classes = [CanExportJournal]
 
     def get(self, request):
         granularite = (request.query_params.get('granularite') or 'jour').lower()
@@ -242,7 +326,7 @@ class ExportJournalView(ExportFileView):
         if granularite not in ('jour', 'semaine', 'mois'):
             granularite = 'jour'
         date_ref = request.query_params.get('date')
-        fmt = (request.query_params.get('export_format') or 'csv').lower()
+        fmt = _format_export(request)
         filtres = _journal_filtres(request)
         ip, ua = request_meta(request)
         write_audit(
@@ -261,7 +345,7 @@ class ExportLotsTicketView(APIView):
     navigation asynchrone (ERR_ABORTED, considéré comme un téléchargement automatique
     non rattaché à un geste utilisateur direct). Le frontend récupère désormais ce PDF
     en Blob authentifié (fetch/XHR classique) puis l'affiche dans un aperçu intégré à la
-    page — robuste sur tous les navigateurs, sans dépendre du blocage anti-pop-up.
+    page : robuste sur tous les navigateurs, sans dépendre du blocage anti-pop-up.
     """
 
     permission_classes = [CanViewDashboard]
@@ -316,7 +400,7 @@ class ExportJournalTicketView(APIView):
 
 
 class ExportDownloadView(APIView):
-    """Ancien endpoint ticket sans JWT — désactivé (SEC-12). Utiliser /exports/*/ticket/."""
+    """Ancien endpoint ticket sans JWT : désactivé (SEC-12). Utiliser /exports/*/ticket/."""
 
     permission_classes = [CanViewDashboard]
 
@@ -331,18 +415,21 @@ class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     # 'post' est indispensable : les actions personnalisées lire/ et lire-tout/
     # (ci-dessous) sont exposées en POST. Sans lui, DRF rejette ces requêtes en
-    # 405 avant même d'atteindre l'action — bug à l'origine du bouton
+    # 405 avant même d'atteindre l'action : bug à l'origine du bouton
     # « tout marquer comme lu » silencieusement inopérant.
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
     def get_queryset(self):
-        return Notification.objects.filter(destinataire_id=self.request.user.id)
+        # Les traces d'envoi EMAIL / SMS (accounts.messaging) ne sont pas des notifications à lire.
+        return Notification.objects.filter(destinataire_id=self.request.user.id, type_notif='INTERNE')
+
+    def create(self, request, *args, **kwargs):
+        raise MethodNotAllowed('POST')
 
     @action(detail=False, methods=['get'], url_path='non-lues')
     def non_lues(self, request):
         """Compteur pour la cloche (ex. demandes d'inscription en attente non traitées)."""
-        count = Notification.objects.filter(destinataire_id=request.user.id, lue=False).count()
-        return Response({'count': count})
+        return Response({'count': self.get_queryset().filter(lue=False).count()})
 
     @action(detail=True, methods=['post'])
     def lire(self, request, pk=None):
@@ -353,39 +440,71 @@ class NotificationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='lire-tout')
     def lire_tout(self, request):
-        Notification.objects.filter(destinataire_id=request.user.id, lue=False).update(lue=True)
+        self.get_queryset().filter(lue=False).update(lue=True)
         return Response({'detail': 'OK'})
 
 
+def _notifier_moderateurs_offre(offre, *, titre: str, corps: str, sauf=None) -> None:
+    moderateurs = Utilisateur.objects.filter(
+        role__in=ROLES_VALIDATION_OFFRES, statut=Utilisateur.Statut.ACTIF, deleted_at__isnull=True,
+    ).exclude(id=sauf).values_list('id', flat=True)
+    for moderateur_id in moderateurs:
+        creer_notification(
+            moderateur_id, titre, corps,
+            metadata={'table_cible': 'offres_demandes', 'enregistrement_id': str(offre.id)},
+        )
+
+
 class OffreDemandeViewSet(viewsets.ModelViewSet):
+    """Annonces : création soumise à modération, modification par l'auteur (re-modération si
+    l'annonce était publiée), clôture ; pas de suppression (clôturer ou rejeter à la place)."""
     permission_classes = [CanUseMarketplace]
     serializer_class = OffreDemandeSerializer
-    filterset_fields = ('type_annonce', 'produit_id', 'province_id')
+    filterset_fields = ('produit_id', 'province_id')
     search_fields = ('titre', 'description')
     parser_classes = [FormParser, MultiPartParser, JSONParser]
+    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
 
     def get_queryset(self):
         user = self.request.user
         qs = OffreDemande.objects.all().order_by('-created_at')
-        statut = (self.request.query_params.get('statut') or '').strip()
         if user.role not in ROLES_VALIDATION_OFFRES:
             if enum_supports('EN_VALIDATION'):
                 qs = qs.filter(Q(statut='OUVERTE') | Q(auteur_id=user.id))
             else:
                 qs = qs.filter(Q(id__in=published_ids()) | Q(auteur_id=user.id))
+        if self.action != 'list':
+            return qs
+        type_annonce = (self.request.query_params.get('type_annonce') or '').strip().upper()
+        if type_annonce:
+            if type_annonce not in ('OFFRE', 'DEMANDE'):
+                raise ValidationError({'type_annonce': 'Type d’annonce invalide (OFFRE ou DEMANDE).'})
+            qs = qs.filter(type_annonce=type_annonce)
+        statut = (self.request.query_params.get('statut') or '').strip().upper()
         if statut:
-            if enum_supports(statut) and enum_supports('EN_VALIDATION'):
-                qs = qs.filter(statut=statut)
-            else:
-                from django.db import connection
-                with connection.cursor() as cur:
-                    cur.execute(
-                        'SELECT offre_id::text FROM offres_statut_workflow WHERE statut = %s',
-                        [statut],
-                    )
-                    ids = [row[0] for row in cur.fetchall()]
-                qs = qs.filter(id__in=ids)
+            if statut not in ('EN_VALIDATION', 'OUVERTE', 'REJETEE', 'CLOTUREE', 'ANNULEE'):
+                raise ValidationError({'statut': 'Statut d’annonce invalide.'})
+            qs = qs.filter(id__in=ids_par_statut(statut))
         return qs
+
+    def _est_moderateur(self) -> bool:
+        return self.request.user.role in ROLES_VALIDATION_OFFRES
+
+    def _verifier_modifiable(self, obj) -> str:
+        if obj.auteur_id != self.request.user.id and not self._est_moderateur():
+            raise PermissionDenied('Vous ne pouvez modifier que vos propres annonces.')
+        statut = read_statut(obj)
+        if statut in STATUTS_OFFRE_FIGES:
+            raise ValidationError({'detail': 'Une annonce clôturée, rejetée ou annulée ne peut plus être modifiée.'})
+        return statut
+
+    def _remettre_en_moderation(self, obj) -> None:
+        write_statut(obj, 'EN_VALIDATION')
+        _notifier_moderateurs_offre(
+            obj, titre='Annonce modifiée à revalider',
+            corps=f'L’annonce « {obj.titre} » a été modifiée par son auteur et attend une nouvelle validation.',
+            sauf=self.request.user.id,
+        )
 
     def perform_create(self, serializer):
         now = timezone.now()
@@ -399,12 +518,30 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
             utilisateur_id=self.request.user.id, action='CREATE', table_cible='offres_demandes',
             enregistrement_id=obj.id, ip_adresse=ip, user_agent=ua,
         )
+        type_libelle = 'offre' if obj.type_annonce == 'OFFRE' else 'demande'
+        _notifier_moderateurs_offre(
+            obj, titre='Nouvelle annonce à valider',
+            corps=f'Nouvelle {type_libelle} « {obj.titre} » en attente de validation.',
+            sauf=self.request.user.id,
+        )
 
     def perform_update(self, serializer):
-        obj = self.get_object()
-        if obj.auteur_id != self.request.user.id and self.request.user.role != Utilisateur.Role.ADMINISTRATEUR:
-            raise PermissionDenied()
-        serializer.save(updated_at=timezone.now())
+        obj = serializer.instance
+        statut = self._verifier_modifiable(obj)
+        modifies = sorted(
+            champ for champ in CHAMPS_CONTENU_OFFRE
+            if champ in serializer.validated_data and serializer.validated_data[champ] != getattr(obj, champ)
+        )
+        obj = serializer.save(updated_at=timezone.now())
+        remoderation = statut == 'OUVERTE' and bool(modifies) and not self._est_moderateur()
+        if remoderation:
+            self._remettre_en_moderation(obj)
+        ip, ua = request_meta(self.request)
+        write_audit(
+            utilisateur_id=self.request.user.id, action='UPDATE', table_cible='offres_demandes',
+            enregistrement_id=obj.id, ip_adresse=ip, user_agent=ua,
+            nouvelles_valeurs={'champs': modifies, **({'statut': 'EN_VALIDATION'} if remoderation else {})},
+        )
 
     @action(detail=True, methods=['post'], url_path='photos')
     def photos(self, request, pk=None):
@@ -412,8 +549,7 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
         from traceability.services import enregistrer_photo, photo_url
 
         obj = self.get_object()
-        if obj.auteur_id != request.user.id and request.user.role not in ROLES_VALIDATION_OFFRES:
-            raise PermissionDenied('Vous ne pouvez modifier que vos propres annonces.')
+        statut = self._verifier_modifiable(obj)
         fichiers = request.FILES.getlist('photos')
         if not fichiers and 'photo' in request.FILES:
             fichiers = [request.FILES['photo']]
@@ -421,10 +557,15 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
             raise ValidationError({'photos': 'Aucun fichier reçu.'})
 
         libres = [i for i in (1, 2) if not photo_url('offres', obj.id, suffixe=f'_{i}')]
-        if not libres:
-            raise ValidationError({'photos': 'Deux photos maximum par annonce. Supprimez-en une avant d\'en ajouter.'})
-        for fichier in fichiers[: len(libres)]:
+        if len(fichiers) > len(libres):
+            deja = 2 - len(libres)
+            raise ValidationError({
+                'photos': f'Deux photos maximum par annonce ({deja} déjà enregistrée{"s" if deja > 1 else ""}).',
+            })
+        for fichier in fichiers:
             enregistrer_photo(fichier, 'offres', obj.id, suffixe=f'_{libres.pop(0)}')
+        if statut == 'OUVERTE' and not self._est_moderateur():
+            self._remettre_en_moderation(obj)
 
         return Response(OffreDemandeSerializer(obj, context={'request': request}).data)
 
@@ -434,6 +575,8 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
         obj = self.get_object()
         if request.user.role not in ROLES_VALIDATION_OFFRES:
             raise PermissionDenied('Seuls les administrateurs et agents du ministère peuvent valider une annonce.')
+        if read_statut(obj) != 'EN_VALIDATION':
+            raise ValidationError({'detail': 'Seule une annonce en attente de validation peut être validée.'})
         if column_exists('offres_demandes', 'uuid_public'):
             from traceability.db_utils import get_optional_column, set_optional_column
 
@@ -463,11 +606,16 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
     def rejeter(self, request, pk=None):
         obj = self.get_object()
         if request.user.role not in ROLES_VALIDATION_OFFRES:
-            raise PermissionDenied()
+            raise PermissionDenied('Seuls les administrateurs et agents du ministère peuvent rejeter une annonce.')
+        if read_statut(obj) != 'EN_VALIDATION':
+            raise ValidationError({'detail': 'Seule une annonce en attente de validation peut être rejetée.'})
         motif = (request.data.get('motif') or '').strip()
+        if not motif:
+            raise ValidationError({'motif': 'Le motif du rejet est obligatoire : il est communiqué à l’auteur.'})
+        motif = motif[:1000]
         write_statut(obj, 'REJETEE')
 
-        corps = f'Votre annonce « {obj.titre} » a été rejetée.' + (f' Motif : {motif}' if motif else '')
+        corps = f'Votre annonce « {obj.titre} » a été rejetée. Motif : {motif}'
         creer_notification(
             obj.auteur_id, 'Annonce rejetée', corps,
             metadata={'table_cible': 'offres_demandes', 'enregistrement_id': str(obj.id)},
@@ -475,21 +623,18 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
         ip, ua = request_meta(request)
         write_audit(
             utilisateur_id=request.user.id, action='REJECT', table_cible='offres_demandes',
-            enregistrement_id=obj.id, ip_adresse=ip, user_agent=ua,
+            enregistrement_id=obj.id, ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'motif': motif},
         )
         return Response(OffreDemandeSerializer(obj, context={'request': request}).data)
 
     @action(detail=True, methods=['post'], url_path='cloturer')
     def cloturer(self, request, pk=None):
         obj = self.get_object()
-        # L'auteur ou un modérateur (admin, agent ministère — mêmes rôles habilités à
-        # valider/rejeter une annonce) peut clôturer. Sans agent ministère ici, le bouton
-        # « Clôturer » visible côté frontend pour ce rôle échouait systématiquement en 403.
-        est_moderateur = request.user.role in (
-            Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE,
-        )
-        if obj.auteur_id != request.user.id and not est_moderateur:
-            raise PermissionDenied()
+        # L'auteur ou un modérateur (rôles habilités à valider / rejeter) peut clôturer.
+        if obj.auteur_id != request.user.id and not self._est_moderateur():
+            raise PermissionDenied('Seuls l’auteur et les modérateurs peuvent clôturer une annonce.')
+        if read_statut(obj) != 'OUVERTE':
+            raise ValidationError({'detail': 'Seule une annonce publiée peut être clôturée.'})
         write_statut(obj, 'CLOTUREE')
         ip, ua = request_meta(request)
         write_audit(
@@ -509,16 +654,19 @@ class PublicOffresDemandesListView(APIView):
             qs = OffreDemande.objects.filter(statut='OUVERTE').order_by('-updated_at')
         else:
             qs = OffreDemande.objects.filter(id__in=published_ids()).order_by('-updated_at')
-        type_annonce = request.query_params.get('type_annonce')
+        qs = qs.filter(Q(expire_at__isnull=True) | Q(expire_at__gt=timezone.now()))
+        type_annonce = (request.query_params.get('type_annonce') or '').strip().upper()
         if type_annonce:
+            if type_annonce not in ('OFFRE', 'DEMANDE'):
+                raise ValidationError({'type_annonce': 'Type d’annonce invalide (OFFRE ou DEMANDE).'})
             qs = qs.filter(type_annonce=type_annonce)
         recherche = (request.query_params.get('q') or '').strip()
         if recherche:
             qs = qs.filter(Q(titre__icontains=recherche) | Q(description__icontains=recherche))
-        province = request.query_params.get('province')
+        province = _param_uuid(request, 'province')
         if province:
             qs = qs.filter(province_id=province)
-        produit = request.query_params.get('produit')
+        produit = _param_uuid(request, 'produit')
         if produit:
             qs = qs.filter(produit_id=produit)
 
@@ -533,11 +681,17 @@ class PublicOffresDemandesListView(APIView):
         total = qs.count()
         start = (page - 1) * page_size
         rows = list(qs[start:start + page_size])
-        data = OffreDemandeSerializer(rows, many=True, context={'request': request}).data
+        data = OffreDemandePubliqueSerializer(rows, many=True, context={'request': request}).data
+
+        def url_page(numero: int) -> str:
+            params = request.query_params.copy()
+            params['page'] = str(numero)
+            return request.build_absolute_uri(f'{request.path}?{params.urlencode()}')
+
         return Response({
             'count': total,
-            'next': None,
-            'previous': None,
+            'next': url_page(page + 1) if start + page_size < total else None,
+            'previous': url_page(page - 1) if page > 1 and start - page_size < total else None,
             'results': data,
             'page': page,
             'page_size': page_size,
@@ -548,11 +702,13 @@ class PublicOffreDemandeDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, pk=None):
-        obj = OffreDemande.objects.filter(pk=pk).first()
-        from pnlf_platform.offre_statut import read_statut
+        try:
+            obj = OffreDemande.objects.filter(pk=uuid_lib.UUID(str(pk))).first()
+        except ValueError:
+            obj = None
         if not obj or read_statut(obj) != 'OUVERTE':
             return Response({'detail': 'Annonce introuvable ou non publiée.'}, status=404)
-        return Response(OffreDemandeSerializer(obj, context={'request': request}).data)
+        return Response(OffreDemandePubliqueSerializer(obj, context={'request': request}).data)
 
 
 class PublicContactOffreView(APIView):
@@ -620,13 +776,46 @@ class PublicContactOffreView(APIView):
         return Response({'detail': 'Message transmis à l’auteur de l’annonce.'}, status=201)
 
 
-def _uuid_or_none(value):
+def _uuid_or_none(value, champ: str = 'detail'):
     if value is None:
         return None
     text = str(value).strip()
     if not text or text.lower() in ('null', 'undefined', 'none'):
         return None
-    return text
+    try:
+        return str(uuid_lib.UUID(text))
+    except ValueError as exc:
+        raise ValidationError({champ: 'Identifiant invalide.'}) from exc
+
+
+ROLES_FILIERE_CHAT = (Utilisateur.Role.PRODUCTEUR, Utilisateur.Role.COOPERATIVE)
+
+
+def _messages_recents(qs) -> list:
+    """Les MESSAGES_MAX messages les plus récents, restitués dans l'ordre chronologique."""
+    recents = list(qs.order_by('-created_at', '-id')[:MESSAGES_MAX])
+    recents.reverse()
+    return recents
+
+
+def _controler_interlocuteur(user, destinataire_id, champ: str):
+    """Règles de contact communes à tous les points d'entrée (destinataire, fiche, annonce) :
+    destinataire actif ; hors agents, acheteur vers producteur / coopérative et inversement,
+    ou vers un agent institutionnel."""
+    dest = Utilisateur.objects.filter(
+        pk=destinataire_id, deleted_at__isnull=True, statut=Utilisateur.Statut.ACTIF,
+    ).first()
+    if not dest:
+        raise ValidationError({champ: 'Destinataire introuvable ou inactif.'})
+    if is_staff_chat(user) or is_staff_chat(dest):
+        return dest
+    if user.role == Utilisateur.Role.ACHETEUR and dest.role in ROLES_FILIERE_CHAT:
+        return dest
+    if user.role in ROLES_FILIERE_CHAT and dest.role == Utilisateur.Role.ACHETEUR:
+        return dest
+    raise PermissionDenied(
+        'Vous ne pouvez ouvrir une discussion qu’avec un acheteur, un producteur ou une coopérative.'
+    )
 
 
 def _conversation_queryset(user):
@@ -865,8 +1054,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = _conversation_queryset(self.request.user)
-        producteur_id = self.request.query_params.get('producteur_id')
-        cooperative_id = self.request.query_params.get('cooperative_id')
+        producteur_id = _param_uuid(self.request, 'producteur_id')
+        cooperative_id = _param_uuid(self.request, 'cooperative_id')
         if producteur_id:
             qs = qs.filter(
                 id__in=ConversationContext.objects.filter(producteur_id=producteur_id).values_list('conversation_id', flat=True),
@@ -912,10 +1101,10 @@ class ConversationViewSet(viewsets.ModelViewSet):
         from traceability.models import Cooperative, Producteur
 
         est_groupe = str(request.data.get('est_groupe', '')).lower() in ('1', 'true', 'yes')
-        offre_id = _uuid_or_none(request.data.get('offre_id'))
-        producteur_id = _uuid_or_none(request.data.get('producteur_id'))
-        cooperative_id = _uuid_or_none(request.data.get('cooperative_id'))
-        destinataire_id = _uuid_or_none(request.data.get('destinataire_id'))
+        offre_id = _uuid_or_none(request.data.get('offre_id'), 'offre_id')
+        producteur_id = _uuid_or_none(request.data.get('producteur_id'), 'producteur_id')
+        cooperative_id = _uuid_or_none(request.data.get('cooperative_id'), 'cooperative_id')
+        destinataire_id = _uuid_or_none(request.data.get('destinataire_id'), 'destinataire_id')
         sujet = (request.data.get('sujet') or '').strip() or None
         raw_participants = request.data.get('participants') or request.data.get('participant_ids') or []
         if isinstance(raw_participants, str):
@@ -997,60 +1186,53 @@ class ConversationViewSet(viewsets.ModelViewSet):
             ser = self.get_serializer(existing)
             return Response(ser.data)
 
-        other_id = None
-        if producteur_id:
-            fiche = Producteur.objects.filter(pk=producteur_id, deleted_at__isnull=True).first()
-            if not fiche or not fiche.utilisateur_id:
-                raise ValidationError({
-                    'producteur_id': "Ce producteur n'a pas de compte connecté : utilisez le formulaire de contact.",
-                })
-            if str(fiche.utilisateur_id) == str(request.user.id):
-                raise ValidationError({'producteur_id': 'Vous ne pouvez pas discuter avec vous-même.'})
-            other_id = fiche.utilisateur_id
-            sujet = sujet or f'Discussion avec {fiche.prenoms} {fiche.nom}'.strip()
-        elif cooperative_id:
-            coop = Cooperative.objects.filter(pk=cooperative_id).first()
-            if not coop or not coop.utilisateur_id:
-                raise ValidationError({
-                    'cooperative_id': "Cette coopérative n'a pas de compte connecté.",
-                })
-            if str(coop.utilisateur_id) == str(request.user.id):
-                raise ValidationError({'cooperative_id': 'Vous ne pouvez pas discuter avec vous-même.'})
-            other_id = coop.utilisateur_id
-            sujet = sujet or f'Discussion avec {coop.nom}'
-        elif offre_id:
+        offre = None
+        if offre_id:
             offre = OffreDemande.objects.filter(pk=offre_id).first()
             if not offre:
                 raise ValidationError({'offre_id': 'Annonce introuvable.'})
-            if str(offre.auteur_id) != str(request.user.id):
-                other_id = offre.auteur_id
+            if read_statut(offre) != 'OUVERTE' and not is_staff_chat(request.user):
+                raise ValidationError({'offre_id': 'Cette annonce n’est pas ouverte aux échanges.'})
+
+        other_id = None
+        champ = None
+        if producteur_id:
+            champ = 'producteur_id'
+            fiche = Producteur.objects.filter(pk=producteur_id, deleted_at__isnull=True).first()
+            if not fiche or fiche.statut != 'ACTIF':
+                raise ValidationError({'producteur_id': 'Producteur introuvable ou inactif.'})
+            if not fiche.utilisateur_id:
+                raise ValidationError({
+                    'producteur_id': "Ce producteur n'a pas de compte connecté : utilisez le formulaire de contact.",
+                })
+            other_id = fiche.utilisateur_id
+            sujet = sujet or f'Discussion avec {fiche.prenoms} {fiche.nom}'.strip()
+        elif cooperative_id:
+            champ = 'cooperative_id'
+            coop = Cooperative.objects.filter(pk=cooperative_id).first()
+            if not coop or not coop.actif or (coop.statut or 'ACTIF') != 'ACTIF':
+                raise ValidationError({'cooperative_id': 'Coopérative introuvable ou inactive.'})
+            if not coop.utilisateur_id:
+                raise ValidationError({
+                    'cooperative_id': "Cette coopérative n'a pas de compte connecté.",
+                })
+            other_id = coop.utilisateur_id
+            sujet = sujet or f'Discussion avec {coop.nom}'
+        elif offre is not None:
+            champ = 'offre_id'
+            other_id = offre.auteur_id
             sujet = sujet or offre.titre
         elif destinataire_id:
-            if str(destinataire_id) == str(request.user.id):
-                raise ValidationError({'destinataire_id': 'Vous ne pouvez pas discuter avec vous-même.'})
-            dest = Utilisateur.objects.filter(
-                pk=destinataire_id, deleted_at__isnull=True, statut=Utilisateur.Statut.ACTIF,
-            ).first()
-            if not dest:
-                raise ValidationError({'destinataire_id': 'Destinataire introuvable ou inactif.'})
-            if not is_staff_chat(request.user):
-                allowed = is_staff_chat(dest)
-                if request.user.role == Utilisateur.Role.ACHETEUR and dest.role in (
-                    Utilisateur.Role.PRODUCTEUR, Utilisateur.Role.COOPERATIVE,
-                ):
-                    allowed = True
-                if request.user.role in (
-                    Utilisateur.Role.PRODUCTEUR, Utilisateur.Role.COOPERATIVE,
-                ) and dest.role == Utilisateur.Role.ACHETEUR:
-                    allowed = True
-                if not allowed:
-                    raise PermissionDenied(
-                        'Vous ne pouvez ouvrir une discussion qu’avec un acheteur, un producteur ou une coopérative.'
-                    )
-            other_id = dest.id
-            sujet = sujet or f'Discussion avec {nom_utilisateur(dest)}'
+            champ = 'destinataire_id'
+            other_id = destinataire_id
         else:
             raise ValidationError({'detail': 'Indiquez une offre, un producteur, une coopérative ou un destinataire.'})
+
+        if str(other_id) == str(request.user.id):
+            raise ValidationError({champ: 'Vous ne pouvez pas discuter avec vous-même.'})
+        dest = _controler_interlocuteur(request.user, other_id, champ)
+        if champ == 'destinataire_id':
+            sujet = sujet or f'Discussion avec {nom_utilisateur(dest)}'
 
         now = timezone.now()
         conv = Conversation.objects.create(
@@ -1067,8 +1249,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 est_groupe=False,
             )
         _ajouter_participant(conv, request.user.id, now)
-        if other_id:
-            _ajouter_participant(conv, other_id, now)
+        _ajouter_participant(conv, dest.id, now)
         ser = self.get_serializer(conv)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
@@ -1146,7 +1327,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='supervision')
     def supervision(self, request):
-        """Recherche admin en lecture seule — hors inbox personnelle."""
+        """Recherche admin en lecture seule : hors inbox personnelle."""
         if not is_admin_superviseur(request.user):
             raise PermissionDenied('Réservé à l’administrateur.')
         q = (request.query_params.get('q') or '').strip()
@@ -1167,10 +1348,13 @@ class ConversationViewSet(viewsets.ModelViewSet):
         """Lecture seule d'un fil par l'administrateur (sans devenir participant)."""
         if not is_admin_superviseur(request.user):
             raise PermissionDenied('Réservé à l’administrateur.')
-        conv = Conversation.objects.prefetch_related('participants').filter(pk=pk).first()
+        try:
+            conv = Conversation.objects.prefetch_related('participants').filter(pk=uuid_lib.UUID(str(pk))).first()
+        except ValueError:
+            conv = None
         if not conv:
             raise ValidationError({'detail': 'Conversation introuvable.'})
-        msgs = list(Message.objects.filter(conversation=conv).order_by('created_at')[:500])
+        msgs = _messages_recents(Message.objects.filter(conversation=conv))
         ser = MessageSerializer(msgs, many=True, context={'request': request})
         _hydrate_message_users(ser, msgs, conversation=conv, request=request)
         return Response({'conversation_id': str(conv.id), 'lecture_seule': True, 'results': ser.data})
@@ -1192,12 +1376,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Vous n’êtes pas participant de cette discussion.')
 
         if request.method == 'GET':
+            since = _param_since(request)
             _marquer_lu(conv.id, request.user.id)
-            msgs = Message.objects.filter(conversation=conv).order_by('created_at')
-            since = request.query_params.get('since')
+            msgs = Message.objects.filter(conversation=conv)
             if since:
                 msgs = msgs.filter(created_at__gt=since)
-            msgs = list(msgs[:500])
+            msgs = _messages_recents(msgs)
             ser = MessageSerializer(msgs, many=True, context={'request': request})
             _hydrate_message_users(ser, msgs, conversation=conv, request=request)
             return Response(ser.data)
@@ -1260,47 +1444,69 @@ class AppareilSyncViewSet(viewsets.ModelViewSet):
 
 
 class SyncPushView(APIView):
-    """Push offline — lots et producteurs par client_uuid."""
+    """Push hors ligne (prise en charge partielle) : seule la mise à jour du nom d'un producteur
+    existant, dans le périmètre de l'utilisateur, est appliquée. Les créations et les lots sont
+    comptés comme ignorés : la réponse ne déclare synchronisé que ce qui l'a réellement été."""
     permission_classes = [CanSyncTerrain]
 
     def post(self, request):
+        from accounts.permissions import scope_producteurs_qs
+
         ser = SyncPushSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         device_id = ser.validated_data['device_id']
+        producteurs = ser.validated_data.get('producteurs', [])
+        lots = ser.validated_data.get('lots', [])
         now = timezone.now()
-        appareil, _ = AppareilSync.objects.update_or_create(
-            utilisateur_id=request.user.id, device_id=device_id,
-            defaults={'libelle': ser.validated_data.get('libelle'), 'actif': True, 'created_at': now},
-        )
         synced = {'producteurs': 0, 'lots': 0, 'conflits': 0}
-        for item in ser.validated_data.get('producteurs', []):
-            client_uuid = item.get('client_uuid')
-            if not client_uuid:
-                continue
-            existing = Producteur.objects.filter(client_uuid=client_uuid).first()
-            if existing and existing.sync_version > item.get('sync_version', 0):
-                SyncConflict.objects.create(
-                    appareil_id=appareil.id, entite='producteurs', client_uuid=client_uuid,
-                    payload_client=item, payload_serveur={'id': str(existing.id)},
-                    created_at=now,
-                )
-                synced['conflits'] += 1
-                continue
-            if existing:
+        ignores = {'producteurs': 0, 'lots': len(lots)}
+        with transaction.atomic():
+            appareil, _ = AppareilSync.objects.update_or_create(
+                utilisateur_id=request.user.id, device_id=device_id,
+                defaults={'libelle': ser.validated_data.get('libelle'), 'actif': True, 'created_at': now},
+            )
+            perimetre = scope_producteurs_qs(Producteur.objects.filter(deleted_at__isnull=True), request.user)
+            for item in producteurs:
+                try:
+                    client_uuid = uuid_lib.UUID(str(item.get('client_uuid') or ''))
+                    version = int(item.get('sync_version') or 0)
+                except (TypeError, ValueError):
+                    ignores['producteurs'] += 1
+                    continue
+                nom = (item.get('nom') or '').strip()[:100]
+                existing = perimetre.filter(client_uuid=client_uuid).first()
+                if not existing or not nom:
+                    ignores['producteurs'] += 1
+                    continue
+                if existing.sync_version > version:
+                    SyncConflict.objects.create(
+                        appareil_id=appareil.id, entite='producteurs', client_uuid=client_uuid,
+                        payload_client={**item, 'client_uuid': str(client_uuid)},
+                        payload_serveur={'id': str(existing.id)},
+                        created_at=now,
+                    )
+                    synced['conflits'] += 1
+                    continue
                 Producteur.objects.filter(pk=existing.pk).update(
-                    nom=item.get('nom', existing.nom),
-                    updated_at=now, sync_statut='SYNCED',
+                    nom=nom, updated_at=now, sync_statut='SYNCED',
                 )
-            synced['producteurs'] += 1
-        appareil.dernier_sync_at = now
-        appareil.save(update_fields=['dernier_sync_at'])
-        return Response({'synced': synced, 'server_time': now.isoformat()})
+                synced['producteurs'] += 1
+            appareil.dernier_sync_at = now
+            appareil.save(update_fields=['dernier_sync_at'])
+        reponse = {'synced': synced, 'ignores': ignores, 'server_time': now.isoformat()}
+        if ignores['producteurs'] or ignores['lots']:
+            reponse['detail'] = (
+                'Synchronisation partielle : seule la mise à jour du nom de producteurs existants '
+                'est prise en charge. Les créations et les lots doivent être saisis en ligne.'
+            )
+        return Response(reponse)
 
 
 class SyncPullView(APIView):
     permission_classes = [CanSyncTerrain]
+
     def get(self, request):
-        since = request.query_params.get('since')
+        since = _param_since(request)
         from accounts.permissions import scope_lots_qs, scope_producteurs_qs
         prods = scope_producteurs_qs(Producteur.objects.filter(deleted_at__isnull=True), request.user)
         lots = scope_lots_qs(Lot.objects.filter(deleted_at__isnull=True), request.user)
@@ -1335,7 +1541,7 @@ class SyncConflictViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class AnnuaireView(APIView):
-    """Annuaire producteurs / coopératives — module 6.9."""
+    """Annuaire producteurs / coopératives : module 6.9."""
     permission_classes = [CanUseMarketplace]
 
     def get(self, request):

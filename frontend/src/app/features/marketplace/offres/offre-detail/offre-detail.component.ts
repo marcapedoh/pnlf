@@ -66,6 +66,11 @@ export class OffreDetailComponent {
 
   readonly currentUserId = this.auth.currentUser()?.id;
   readonly canValidate = this.auth.hasRole(RoleUtilisateur.ADMINISTRATEUR, RoleUtilisateur.AGENT_MINISTERE);
+  private readonly estAgent = this.auth.hasRole(
+    RoleUtilisateur.ADMINISTRATEUR,
+    RoleUtilisateur.AGENT_MINISTERE,
+    RoleUtilisateur.AGENT_FORESTIER,
+  );
   readonly dialog = signal<{ kind: 'valider' | 'rejeter' | 'cloturer' } | null>(null);
   readonly dialogLoading = signal(false);
   readonly message = signal('');
@@ -135,8 +140,11 @@ export class OffreDetailComponent {
     return this.conversations().find((c) => c.id === convId)?.interlocuteur_nom || 'votre interlocuteur';
   }
 
+  /** Un fil existant reste ouvert ; un nouveau fil n'est possible que sur une annonce publiée (sauf agents). */
   peutEcrire(): boolean {
-    return !this.isAuteur() || !!this.conversationId();
+    if (this.conversationId()) return true;
+    if (this.isAuteur()) return false;
+    return this.offre()?.statut === 'OUVERTE' || this.estAgent;
   }
 
   onDialogConfirm(value: string): void {

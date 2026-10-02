@@ -13,74 +13,100 @@ from django.utils import timezone
 
 from traceability.models import Lot, Producteur, Produit
 
+# Lots « actifs » : déclarés et encore en circulation dans la filière.
+STATUTS_LOTS_INACTIFS = ('BROUILLON', 'ARCHIVE', 'ANNULE')
+
+_PREFIXES_FORMULE = ('=', '+', '-', '@', '\t', '\r')
+
+
+def cellule_sure(valeur):
+    """Neutralise l'injection de formules (CSV/XLSX ouverts dans un tableur)."""
+    if isinstance(valeur, str) and valeur.startswith(_PREFIXES_FORMULE):
+        return "'" + valeur
+    return valeur
+
+
+def ligne_sure(valeurs) -> list:
+    return [cellule_sure(v) for v in valeurs]
+
+
+def _ajouter_ligne_xlsx(ws, valeurs) -> None:
+    ws.append(ligne_sure(valeurs))
+    for cell in ws[ws.max_row]:
+        if isinstance(cell.value, str):
+            cell.data_type = 's'
+
 
 def dashboard_stats(*, province_id=None, produit_id=None, date_debut=None, date_fin=None) -> dict:
-    """Agrégats dashboard — vues SQL si disponibles, sinon ORM."""
-    lots_rows, prod_rows, mvt_rows = [], [], []
-    try:
-        params: list = []
-        clauses_lots = ['1=1']
-        if province_id:
-            clauses_lots.append('province_id = %s')
-            params.append(str(province_id))
-        if produit_id:
-            clauses_lots.append('produit_id = %s')
-            params.append(str(produit_id))
-        where = ' AND '.join(clauses_lots)
-        with connection.cursor() as cur:
-            cur.execute(
-                f'SELECT province_nom, produit_nom, statut, periode_mois, nb_lots, quantite_totale, unite '
-                f'FROM v_dashboard_lots WHERE {where} ORDER BY periode_mois DESC LIMIT 500',
-                params,
-            )
-            lots_rows = [
-                {'province': r[0], 'produit': r[1], 'statut': r[2],
-                 'periode': r[3].isoformat() if r[3] else None,
-                 'nb_lots': r[4], 'quantite': float(r[5]), 'unite': r[6]}
-                for r in cur.fetchall()
-            ]
-            cur.execute('SELECT province_nom, type_acteur, statut, nombre FROM v_dashboard_producteurs ORDER BY province_nom')
-            prod_rows = [
-                {'province': r[0], 'type_acteur': r[1], 'statut': r[2], 'nombre': r[3]}
-                for r in cur.fetchall()
-            ]
-            cur.execute(
-                'SELECT type_mouvement, periode_mois, nb_mouvements FROM v_dashboard_mouvements ORDER BY periode_mois DESC LIMIT 200'
-            )
-            mvt_rows = [
-                {'type': r[0], 'periode': r[1].isoformat() if r[1] else None, 'nombre': r[2]}
-                for r in cur.fetchall()
-            ]
-    except Exception:
-        from django.db.models import Count, Sum
-        from traceability.models import Mouvement
+    """Agrégats du tableau de bord, filtres appliqués de façon cohérente à toutes les séries.
 
-        qs_lots = Lot.objects.filter(deleted_at__isnull=True)
-        if province_id:
-            qs_lots = qs_lots.filter(producteur__province_id=province_id)
-        if produit_id:
-            qs_lots = qs_lots.filter(produit_id=produit_id)
-        lots_rows = list(
-            qs_lots.values('producteur__province__nom', 'produit__nom', 'statut')
-            .annotate(nb_lots=Count('id'), quantite_totale=Sum('quantite'))[:100]
-        )
-        prod_rows = list(
-            Producteur.objects.filter(deleted_at__isnull=True)
-            .values('province__nom', 'statut')
-            .annotate(nombre=Count('id'))
-        )
-        mvt_rows = list(
-            Mouvement.objects.filter(lot__deleted_at__isnull=True)
-            .values('type_mouvement').annotate(nombre=Count('id'))[:50]
-        )
+    Les dates bornent la date de collecte (lots) et la date du mouvement (mouvements) ; la province
+    et le produit s'appliquent aux lots, aux mouvements et (province seule) aux producteurs."""
+    from django.db.models import Count, Sum
+    from django.db.models.functions import TruncMonth
+
+    from traceability.models import Mouvement
+
+    lots = Lot.objects.filter(deleted_at__isnull=True)
+    mouvements = Mouvement.objects.filter(lot__deleted_at__isnull=True)
+    producteurs = Producteur.objects.filter(deleted_at__isnull=True, statut='ACTIF')
+    if province_id:
+        lots = lots.filter(producteur__province_id=province_id)
+        mouvements = mouvements.filter(lot__producteur__province_id=province_id)
+        producteurs = producteurs.filter(province_id=province_id)
+    if produit_id:
+        lots = lots.filter(produit_id=produit_id)
+        mouvements = mouvements.filter(lot__produit_id=produit_id)
+        producteurs = producteurs.filter(lot__produit_id=produit_id, lot__deleted_at__isnull=True)
+    if date_debut:
+        lots = lots.filter(date_collecte__gte=date_debut)
+        mouvements = mouvements.filter(date_mouvement__date__gte=date_debut)
+    if date_fin:
+        lots = lots.filter(date_collecte__lte=date_fin)
+        mouvements = mouvements.filter(date_mouvement__date__lte=date_fin)
+
+    lots_rows = [
+        {
+            'province': r['producteur__province__nom'],
+            'produit': r['produit__nom'],
+            'statut': r['statut'],
+            'periode': r['periode'].isoformat() if r['periode'] else None,
+            'nb_lots': r['nb_lots'],
+            'quantite': float(r['quantite_totale'] or 0),
+            'unite': r['unite'],
+        }
+        for r in lots.annotate(periode=TruncMonth('date_collecte'))
+        .values('producteur__province__nom', 'produit__nom', 'statut', 'periode', 'unite')
+        .annotate(nb_lots=Count('id'), quantite_totale=Sum('quantite'))
+        .order_by('-periode')[:500]
+    ]
+    prod_rows = [
+        {'province': r['province__nom'], 'statut': r['statut'], 'nombre': r['nombre']}
+        for r in producteurs.values('province__nom', 'statut')
+        .annotate(nombre=Count('id', distinct=True))
+        .order_by('province__nom')
+    ]
+    mvt_rows = [
+        {'type': r['type_mouvement'], 'periode': r['periode'].isoformat() if r['periode'] else None, 'nombre': r['nombre']}
+        for r in mouvements.annotate(periode=TruncMonth('date_mouvement'))
+        .values('type_mouvement', 'periode')
+        .annotate(nombre=Count('id'))
+        .order_by('-periode')[:200]
+    ]
 
     return {
         'producteurs': prod_rows,
         'lots': lots_rows,
         'mouvements': mvt_rows,
+        'filtres': {
+            'province': str(province_id) if province_id else None,
+            'produit': str(produit_id) if produit_id else None,
+            'date_debut': date_debut.isoformat() if date_debut else None,
+            'date_fin': date_fin.isoformat() if date_fin else None,
+        },
         'totaux': {
-            'producteurs_actifs': Producteur.objects.filter(deleted_at__isnull=True, statut='ACTIF').count(),
-            'lots_actifs': Lot.objects.filter(deleted_at__isnull=True).count(),
+            'producteurs_actifs': producteurs.values('id').distinct().count(),
+            'lots_actifs': lots.exclude(statut__in=STATUTS_LOTS_INACTIFS).count(),
             'produits_referentiel': Produit.objects.filter(actif=True).count(),
         },
     }
@@ -96,11 +122,11 @@ def export_lots_csv(queryset) -> HttpResponse:
     w = csv.writer(response)
     w.writerow(['code_lot', 'uuid_public', 'produit', 'producteur', 'date_collecte', 'quantite', 'unite', 'statut'])
     for lot in queryset.select_related('produit', 'producteur'):
-        w.writerow([
+        w.writerow(ligne_sure([
             lot.code_lot, lot.uuid_public, lot.produit.nom,
             f'{lot.producteur.prenoms} {lot.producteur.nom}',
             lot.date_collecte, lot.quantite, lot.unite, lot.statut,
-        ])
+        ]))
     return response
 
 
@@ -112,7 +138,7 @@ def export_lots_xlsx(queryset) -> HttpResponse:
     ws.title = 'Lots PFNL'
     ws.append(['code_lot', 'uuid_public', 'produit', 'producteur', 'date_collecte', 'quantite', 'unite', 'statut'])
     for lot in queryset.select_related('produit', 'producteur'):
-        ws.append([
+        _ajouter_ligne_xlsx(ws, [
             lot.code_lot, str(lot.uuid_public), lot.produit.nom,
             f'{lot.producteur.prenoms} {lot.producteur.nom}',
             str(lot.date_collecte), float(lot.quantite), lot.unite, lot.statut,
@@ -387,7 +413,7 @@ def export_journal(
         ws.append([libelle])
         ws.append(headers)
         for r in rows:
-            ws.append(_line(r))
+            _ajouter_ligne_xlsx(ws, _line(r))
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -409,7 +435,7 @@ def export_journal(
     w.writerow([libelle])
     w.writerow(headers)
     for r in rows:
-        w.writerow(_line(r))
+        w.writerow(ligne_sure(_line(r)))
     return response
 
 

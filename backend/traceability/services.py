@@ -52,29 +52,93 @@ TYPES_MOUVEMENT = {
     'CONTROLE', 'VENTE', 'EXPORT', 'AUTRE',
 }
 
+TYPES_MOUVEMENT_LIBELLES = {
+    'COLLECTE': 'Collecte',
+    'RECEPTION_COOPERATIVE': 'Réception coopérative',
+    'TRANSFERT': 'Transfert',
+    'TRANSFORMATION': 'Transformation',
+    'CONTROLE': 'Contrôle',
+    'VENTE': 'Vente',
+    'EXPORT': 'Export',
+    'AUTRE': 'Autre',
+}
+
+UNITES_MESURE = ('KG', 'G', 'LITRE', 'ML', 'UNITE', 'BOTTE', 'SAC', 'M3', 'METRE')
+
+ROLES_AGENTS = ('ADMINISTRATEUR', 'AGENT_MINISTERE', 'AGENT_FORESTIER')
+
+TYPES_MOUVEMENT_PAR_ROLE: dict[str, set[str]] = {
+    'ADMINISTRATEUR': set(TYPES_MOUVEMENT),
+    'AGENT_MINISTERE': set(TYPES_MOUVEMENT),
+    'AGENT_FORESTIER': set(TYPES_MOUVEMENT),
+    'COOPERATIVE': {'RECEPTION_COOPERATIVE', 'TRANSFERT', 'TRANSFORMATION', 'VENTE', 'EXPORT', 'AUTRE'},
+    'PRODUCTEUR': {'TRANSFERT', 'TRANSFORMATION', 'VENTE', 'EXPORT', 'AUTRE'},
+}
+
+STATUTS_LOT_SANS_MOUVEMENT = ('BROUILLON', 'ANNULE', 'ARCHIVE')
+
+STATUTS_LOT_MODIFIABLES = ('BROUILLON', 'DECLARE')
+
+TRANSITIONS_MANUELLES_LOT: dict[str, tuple[str, ...]] = {
+    'BROUILLON': ('DECLARE', 'ANNULE'),
+    'DECLARE': ('VALIDE', 'ANNULE', 'ARCHIVE'),
+    'VALIDE': ('EN_TRANSIT', 'TRANSFORME', 'COMMERCIALISE', 'ANNULE', 'ARCHIVE'),
+    'EN_TRANSIT': ('TRANSFORME', 'COMMERCIALISE', 'ANNULE', 'ARCHIVE'),
+    'TRANSFORME': ('EN_TRANSIT', 'COMMERCIALISE', 'ANNULE', 'ARCHIVE'),
+    'COMMERCIALISE': ('ARCHIVE',),
+    'ANNULE': ('ARCHIVE',),
+    'ARCHIVE': (),
+}
+
+
+def libelle_statut_lot(statut: str) -> str:
+    return STATUT_LIBELLES.get(statut, statut)
+
 
 def valider_type_mouvement(type_mouvement: str) -> str:
     t = (type_mouvement or '').upper()
     if t not in TYPES_MOUVEMENT:
-        raise ValidationError({'type_mouvement': f'Type invalide. Valeurs: {sorted(TYPES_MOUVEMENT)}'})
+        valeurs = ', '.join(TYPES_MOUVEMENT_LIBELLES[k] for k in sorted(TYPES_MOUVEMENT))
+        raise ValidationError({'type_mouvement': f'Type de mouvement inconnu. Valeurs acceptées : {valeurs}.'})
     return t
 
 
-def appliquer_mouvement_sur_lot(lot: Lot, type_mouvement: str, *, force: bool = False) -> None:
-    """Met à jour le statut du lot selon le mouvement enregistré."""
-    nouveau = MOUVEMENT_STATUT_LOT.get(type_mouvement)
-    if not nouveau or lot.statut == nouveau:
-        return
-    if not force:
-        cur = STATUT_ORDRE.get(lot.statut, 0)
-        nxt = STATUT_ORDRE.get(nouveau, 0)
-        if nxt < cur and nouveau not in ('ANNULE', 'ARCHIVE'):
-            raise ValidationError(
-                {'type_mouvement': f'Transition interdite : lot {lot.statut} → {nouveau}'}
-            )
+def valider_type_mouvement_pour_role(type_mouvement: str, role: str | None) -> None:
+    autorises = TYPES_MOUVEMENT_PAR_ROLE.get(role or '', set())
+    if type_mouvement not in autorises:
+        libelle = TYPES_MOUVEMENT_LIBELLES.get(type_mouvement, type_mouvement)
+        raise ValidationError({
+            'type_mouvement': f'Votre profil ne permet pas d’enregistrer une étape « {libelle} ».',
+        })
+
+
+def verifier_lot_accepte_mouvement(lot: Lot) -> None:
+    if lot.statut in STATUTS_LOT_SANS_MOUVEMENT:
+        message = f'Aucune étape ne peut être ajoutée à un lot « {libelle_statut_lot(lot.statut)} ».'
+        if lot.statut == 'BROUILLON':
+            message += ' Publiez d’abord le brouillon.'
+        raise ValidationError({'lot': message})
+
+
+def statut_apres_mouvement(lot: Lot, type_mouvement: str) -> str:
+    """Statut du lot après un mouvement : progression uniquement, jamais de retour arrière."""
+    cible = MOUVEMENT_STATUT_LOT.get(type_mouvement)
+    if not cible or cible == lot.statut:
+        return lot.statut
+    if STATUT_ORDRE.get(cible, 0) > STATUT_ORDRE.get(lot.statut, 0):
+        return cible
+    return lot.statut
+
+
+def appliquer_mouvement_sur_lot(lot: Lot, type_mouvement: str) -> bool:
+    """Met à jour le statut du lot selon le mouvement enregistré. Retourne True si le statut change."""
+    nouveau = statut_apres_mouvement(lot, type_mouvement)
+    if nouveau == lot.statut:
+        return False
     lot.statut = nouveau
     lot.updated_at = timezone.now()
     lot.save(update_fields=['statut', 'updated_at'])
+    return True
 
 
 def generer_qr_payload(lot: Lot) -> str:
@@ -235,19 +299,37 @@ def enregistrer_photo(fichier, sous_dossier: str, entite_id, suffixe: str = '') 
     return rel
 
 
-def transition_lot_statut(lot: Lot, nouveau_statut: str, *, force: bool = False) -> None:
-    """Transition manuelle (validation agent / admin)."""
+def valider_transition_manuelle(statut_actuel: str, nouveau_statut: str) -> None:
     if nouveau_statut not in STATUT_ORDRE:
-        raise ValidationError({'statut': 'Statut de lot invalide.'})
+        raise ValidationError({'statut': 'Statut de lot inconnu.'})
+    if nouveau_statut == statut_actuel:
+        raise ValidationError({
+            'statut': f'Le lot est déjà au statut « {libelle_statut_lot(nouveau_statut)} ».',
+        })
+    autorises = TRANSITIONS_MANUELLES_LOT.get(statut_actuel, ())
+    if nouveau_statut not in autorises:
+        avant = libelle_statut_lot(statut_actuel)
+        apres = libelle_statut_lot(nouveau_statut)
+        if autorises:
+            possibles = ', '.join(f'« {libelle_statut_lot(s)} »' for s in autorises)
+            detail = f' Statuts possibles : {possibles}.'
+        else:
+            detail = ' Ce statut est définitif.'
+        raise ValidationError({
+            'statut': f'Un lot « {avant} » ne peut pas passer au statut « {apres} ».{detail}',
+        })
+
+
+def transition_lot_statut(lot: Lot, nouveau_statut: str, *, force: bool = False) -> None:
+    """Transition manuelle (validation agent / admin). `force` réservé à l'administrateur."""
+    if nouveau_statut not in STATUT_ORDRE:
+        raise ValidationError({'statut': 'Statut de lot inconnu.'})
     if not force:
-        cur = STATUT_ORDRE.get(lot.statut, 0)
-        nxt = STATUT_ORDRE.get(nouveau_statut, 0)
-        if nxt < cur and nouveau_statut not in ('ANNULE', 'ARCHIVE'):
-            avant = STATUT_LIBELLES.get(lot.statut, lot.statut)
-            apres = STATUT_LIBELLES.get(nouveau_statut, nouveau_statut)
-            raise ValidationError({
-                'statut': f'Un lot « {avant} » ne peut pas revenir au statut « {apres} ».',
-            })
+        valider_transition_manuelle(lot.statut, nouveau_statut)
+    elif nouveau_statut == lot.statut:
+        raise ValidationError({
+            'statut': f'Le lot est déjà au statut « {libelle_statut_lot(nouveau_statut)} ».',
+        })
     lot.statut = nouveau_statut
     lot.updated_at = timezone.now()
     lot.save(update_fields=['statut', 'updated_at'])

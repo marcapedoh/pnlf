@@ -98,6 +98,26 @@ def write_statut(offre, statut: str) -> None:
             raise
 
 
+def ids_par_statut(statut: str) -> list[str]:
+    """Identifiants des annonces dont le statut métier (workflow prioritaire) vaut ``statut``."""
+    with connection.cursor() as cur:
+        cur.execute("SELECT to_regclass('offres_statut_workflow') IS NOT NULL")
+        workflow = cur.fetchone()[0]
+        if workflow:
+            cur.execute(
+                """
+                SELECT o.id::text
+                FROM offres_demandes o
+                LEFT JOIN offres_statut_workflow w ON w.offre_id = o.id
+                WHERE COALESCE(w.statut, o.statut::text) = %s
+                """,
+                [statut],
+            )
+        else:
+            cur.execute('SELECT id::text FROM offres_demandes WHERE statut::text = %s', [statut])
+        return [row[0] for row in cur.fetchall()]
+
+
 def published_ids() -> list[str]:
     """Annonces visibles publiquement (validées)."""
     with connection.cursor() as cur:

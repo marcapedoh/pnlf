@@ -24,7 +24,6 @@ const UNITES: Record<string, LibelleUnite> = {
 /** Options d'unités proposées dans les formulaires (valeurs envoyées à l'API). */
 export const UNITE_OPTIONS = [
   { value: 'KG', label: 'Kilogramme (kg)' },
-  { value: 'TONNE', label: 'Tonne' },
   { value: 'LITRE', label: 'Litre (L)' },
   { value: 'SAC', label: 'Sac' },
   { value: 'UNITE', label: 'Unité' },

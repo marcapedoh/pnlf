@@ -1,6 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { NgApexchartsModule, ApexOptions } from 'ng-apexcharts';
+
+import { toApiError } from '../../core/http/api-error.util';
+import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
+import { TextFieldComponent } from '../../design-system/text-field/text-field.component';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { displayName } from '../../core/auth/display-name.util';
@@ -28,7 +33,10 @@ const CHART_PALETTE = ['#146b3f', '#e4b91a', '#3260a3', '#6bc48a', '#a4650a', '#
   selector: 'app-dashboard',
   imports: [
     RouterLink,
+    FormsModule,
     NgApexchartsModule,
+    TextFieldComponent,
+    AlertBannerComponent,
     CardComponent,
     KpiCardComponent,
     SkeletonComponent,
@@ -82,6 +90,13 @@ export class DashboardComponent {
   readonly statutLotLabels = STATUT_LOT_LABELS;
   readonly lotStatusTone = lotStatusTone;
 
+  /** Période des indicateurs (date de collecte des lots), vide = toute la période. */
+  dateDebut = '';
+  dateFin = '';
+  readonly loadingStats = signal(false);
+  readonly statsError = signal('');
+  readonly periodeActive = signal(false);
+
   readonly statusChart = computed<ApexOptions>(() => {
     const rows = this.stats()?.lots ?? [];
     const byStatus = new Map<string, number>();
@@ -130,17 +145,48 @@ export class DashboardComponent {
     return d.producteurs.count + d.cooperatives.count + d.certifications.count + d.offres.count + (d.acheteurs?.count ?? 0);
   }
 
+  appliquerPeriode(): void {
+    const debut = this.dateDebut.trim();
+    const fin = this.dateFin.trim();
+    if (debut && fin && debut > fin) {
+      this.statsError.set('La date de début doit précéder la date de fin.');
+      return;
+    }
+    this.loadStats();
+  }
+
+  reinitialiserPeriode(): void {
+    this.dateDebut = '';
+    this.dateFin = '';
+    this.loadStats();
+  }
+
+  private loadStats(): void {
+    const params: Record<string, string> = {};
+    if (this.dateDebut.trim()) params['date_debut'] = this.dateDebut.trim();
+    if (this.dateFin.trim()) params['date_fin'] = this.dateFin.trim();
+    this.statsError.set('');
+    this.loadingStats.set(true);
+    this.dashboardService.stats(params).subscribe({
+      next: (data) => {
+        this.stats.set(data);
+        this.periodeActive.set(!!(params['date_debut'] || params['date_fin']));
+        this.loadingStats.set(false);
+        this.loading.set(false);
+      },
+      error: (err) => {
+        this.statsError.set(toApiError(err).message);
+        this.loadingStats.set(false);
+        this.loading.set(false);
+      },
+    });
+  }
+
   private load(): void {
     this.loading.set(true);
 
     if (this.isInstitutional()) {
-      this.dashboardService.stats().subscribe({
-        next: (data) => {
-          this.stats.set(data);
-          this.loading.set(false);
-        },
-        error: () => this.loading.set(false),
-      });
+      this.loadStats();
       this.dashboardService.aTraiter().subscribe({ next: (d) => this.inbox.set(d) });
     }
 

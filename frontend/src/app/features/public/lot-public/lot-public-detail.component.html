@@ -51,15 +51,6 @@
           }
         </section>
 
-        @if (l.observations) {
-          <section class="panel">
-            <header class="panel__head">
-              <h2><pnlf-icon name="file-text" [size]="18" /> Description</h2>
-            </header>
-            <p class="panel__prose">{{ l.observations }}</p>
-          </section>
-        }
-
         @if (l.mouvements?.length) {
           <section class="panel">
             <header class="panel__head">

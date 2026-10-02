@@ -20,7 +20,6 @@
         <pnlf-select-field label="Producteur / collecteur" formControlName="producteur" [options]="producteurs()" [required]="true" [errorMessage]="err('producteur', 'Sélectionnez le producteur concerné.')" />
       }
       <pnlf-select-field label="Lot concerné (facultatif)" formControlName="lot" [options]="lots()" [placeholder]="lotPlaceholder" />
-      <pnlf-text-field label="Date de la demande" type="date" formControlName="date_demande" [required]="true" [max]="today" [errorMessage]="err('date_demande', 'Indiquez la date de la demande.')" />
       <pnlf-text-field label="Observations" formControlName="observations" placeholder="Précisez le contexte, un justificatif, etc." />
       <div class="cert-form__actions">
         <button pnlfButton type="button" variant="ghost" (click)="showForm.set(false)">Annuler</button>

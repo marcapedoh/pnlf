@@ -123,9 +123,14 @@
                     } @else if (u.statut !== StatutCompte.INACTIF) {
                       <button pnlfButton variant="ghost" size="sm" type="button" (click)="demander('activer', u)">Activer</button>
                     }
-                    <button pnlfButton variant="ghost" size="sm" type="button" (click)="demander('reset', u)">
-                      Réinitialiser le mot de passe
-                    </button>
+                    @if (peutRejeter(u)) {
+                      <button pnlfButton variant="ghost" size="sm" type="button" (click)="demander('rejeter', u)">Rejeter</button>
+                    }
+                    @if (u.statut === StatutCompte.ACTIF) {
+                      <button pnlfButton variant="ghost" size="sm" type="button" (click)="demander('reset', u)">
+                        Réinitialiser le mot de passe
+                      </button>
+                    }
                   </div>
                 } @else {
                   <span class="text-xs text-muted">{{ u.id === currentUserId() ? 'Votre compte' : 'Réservé à l’administrateur' }}</span>
@@ -148,8 +153,11 @@
     [message]="d.message"
     [confirmLabel]="d.confirm"
     [danger]="d.danger"
+    [inputLabel]="action()?.kind === 'rejeter' ? 'Motif du rejet (facultatif)' : ''"
+    inputPlaceholder="Ex. informations d’identification incomplètes"
+    inputHint="Le motif est communiqué au demandeur."
     [loading]="actionLoading()"
-    (confirmed)="confirmerAction()"
+    (confirmed)="confirmerAction($event)"
     (cancelled)="action.set(null)"
   />
 }

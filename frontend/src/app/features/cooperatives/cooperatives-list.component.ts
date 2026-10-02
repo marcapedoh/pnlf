@@ -100,7 +100,7 @@ export class CooperativesListComponent {
   readonly dialogLoading = signal(false);
 
   readonly form = this.fb.nonNullable.group({
-    code: ['', Validators.required],
+    code: [''],
     nom: ['', Validators.required],
     numero_agrement: [''],
     province: [''],
@@ -181,6 +181,7 @@ export class CooperativesListComponent {
     this.service
       .create({
         ...raw,
+        code: raw.code.trim(),
         province: raw.province || null,
         telephone: raw.telephone ? normaliserTelephone(raw.telephone) : null,
         email: raw.email.trim() || null,
@@ -221,7 +222,7 @@ export class CooperativesListComponent {
         this.dialog.set(null);
         const detail = d.kind === 'adhesion' ? (res as { detail?: string } | null)?.detail : d.item.nom;
         this.toast.success(DIALOG_MESSAGES[d.kind].ok, detail);
-        if (d.kind !== 'adhesion') this.load();
+        this.load();
       },
       error: (err: unknown) => {
         this.dialogLoading.set(false);

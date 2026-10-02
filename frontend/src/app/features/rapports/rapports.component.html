@@ -3,7 +3,11 @@
     <p class="text-eyebrow">Administration</p>
     <h1 class="pnlf-page-header__title">Rapports &amp; exports</h1>
     <p class="pnlf-page-header__subtitle">
-      Journal d'activité de la plateforme par jour, semaine ou mois, avec historique et export institutionnel.
+      @if (canExportJournal()) {
+        Journal d'activité de la plateforme par jour, semaine ou mois, avec historique et export institutionnel.
+      } @else {
+        Exports institutionnels des lots, producteurs et certifications de votre périmètre.
+      }
     </p>
   </div>
 </div>
@@ -23,6 +27,7 @@
   </div>
 </pnlf-card>
 
+@if (canExportJournal()) {
 <pnlf-card title="Journal d'activité" subtitle="Historique des actions (création, validation, connexion, export…)">
   <div class="journal-tabs" role="group" aria-label="Regroupement du journal">
     <button type="button" class="journal-tab" [class.is-active]="granularite() === 'jour'" [attr.aria-pressed]="granularite() === 'jour'" (click)="setGranularite('jour')">Par jour</button>
@@ -79,11 +84,9 @@
     </div>
 
     <div class="rapports-actions" style="margin-bottom: 1rem;">
-      @if (canExportJournal()) {
-        <button pnlfButton variant="outline" [loading]="downloading() === 'journal-csv'" (click)="downloadJournal('csv')">CSV</button>
-        <button pnlfButton variant="outline" [loading]="downloading() === 'journal-xlsx'" (click)="downloadJournal('xlsx')">Excel (XLSX)</button>
-        <button pnlfButton variant="primary" (click)="downloadJournal('pdf')">Imprimer / PDF</button>
-      }
+      <button pnlfButton variant="outline" [loading]="downloading() === 'journal-csv'" (click)="downloadJournal('csv')">CSV</button>
+      <button pnlfButton variant="outline" [loading]="downloading() === 'journal-xlsx'" (click)="downloadJournal('xlsx')">Excel (XLSX)</button>
+      <button pnlfButton variant="primary" (click)="downloadJournal('pdf')">Imprimer / PDF</button>
     </div>
 
     @if (loadingEvents()) {
@@ -116,4 +119,5 @@
       <pnlf-pagination label="Pagination du journal" [page]="eventsPage()" [pageSize]="eventsPageSize" [total]="eventsTotal()" (pageChange)="goToEventsPage($event)" />
     }
   </pnlf-card>
+}
 }

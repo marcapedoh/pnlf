@@ -1,5 +1,7 @@
 """Vitrine publique — annuaire, fiche producteur, stats et contact (sans authentification)."""
 
+import uuid
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count, Q
 from django.http import Http404
@@ -46,9 +48,25 @@ def _producteurs_publics_qs():
     return qs
 
 
+def _uuid_ou_none(valeur):
+    try:
+        return uuid.UUID(str(valeur))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _lots_publics_qs():
+    return Lot.objects.filter(deleted_at__isnull=True, statut__in=STATUTS_LOTS_PUBLICS)
+
+
+def _gps_public(valeur):
+    """Position arrondie (environ 1 km) : la parcelle exacte n'est pas diffusée publiquement."""
+    return round(valeur, 2) if valeur is not None else None
+
+
 def _produits_par_producteur(producteur_ids: list) -> dict:
     rows = (
-        Lot.objects.filter(producteur_id__in=producteur_ids, deleted_at__isnull=True)
+        _lots_publics_qs().filter(producteur_id__in=producteur_ids)
         .values_list('producteur_id', 'produit__nom')
         .distinct()
     )
@@ -62,7 +80,7 @@ def _produits_par_producteur(producteur_ids: list) -> dict:
 
 def _nb_lots_par_producteur(producteur_ids: list) -> dict:
     rows = (
-        Lot.objects.filter(producteur_id__in=producteur_ids, deleted_at__isnull=True)
+        _lots_publics_qs().filter(producteur_id__in=producteur_ids)
         .values('producteur_id')
         .annotate(n=Count('id'))
     )
@@ -110,9 +128,8 @@ def _lot_public_payload(lot, request=None) -> dict:
         'date_collecte': lot.date_collecte,
         'statut': lot.statut,
         'statut_libelle': labels.get(lot.statut, lot.statut),
-        'observations': lot.observations,
-        'latitude': lot.latitude,
-        'longitude': lot.longitude,
+        'latitude': _gps_public(lot.latitude),
+        'longitude': _gps_public(lot.longitude),
         'photos_urls': photos_urls_lot(lot.id, request),
         'mouvements': mouvements,
     }
@@ -141,6 +158,7 @@ def _lots_par_producteur(producteur_ids: list, request=None) -> dict:
 def _certifications_par_producteur(producteur_ids: list) -> dict:
     rows = (
         Certification.objects.filter(producteur_id__in=producteur_ids, statut='OBTENUE')
+        .exclude(date_expiration__lt=timezone.localdate())
         .select_related('type_certification')
         .values_list('producteur_id', 'type_certification__libelle')
     )
@@ -174,13 +192,14 @@ class PublicProducteursListView(generics.ListAPIView):
         produit = self.request.query_params.get('produit')
         recherche = (self.request.query_params.get('q') or '').strip()
 
-        if province:
-            qs = qs.filter(province_id=province)
-        if type_acteur and column_exists('producteurs', 'type_acteur'):
-            qs = qs.extra(where=['type_acteur = %s'], params=[type_acteur])
+        province_id = _uuid_ou_none(province) if province else None
+        if province_id:
+            qs = qs.filter(province_id=province_id)
+        if type_acteur in ('PRODUCTEUR', 'COLLECTEUR') and column_exists('producteurs', 'type_acteur'):
+            qs = qs.extra(where=["COALESCE(producteurs.type_acteur::text, 'PRODUCTEUR') = %s"], params=[type_acteur])
         if recherche:
             ids_par_produit = (
-                Lot.objects.filter(deleted_at__isnull=True, produit__nom__icontains=recherche)
+                _lots_publics_qs().filter(produit__nom__icontains=recherche)
                 .values_list('producteur_id', flat=True)
             )
             qs = qs.filter(
@@ -191,7 +210,7 @@ class PublicProducteursListView(generics.ListAPIView):
             )
         if produit:
             ids_avec_produit = (
-                Lot.objects.filter(deleted_at__isnull=True, produit__nom__icontains=produit)
+                _lots_publics_qs().filter(produit__nom__icontains=produit)
                 .values_list('producteur_id', flat=True)
                 .distinct()
             )
@@ -305,7 +324,7 @@ class PublicDepartementsListView(generics.ListAPIView):
         qs = Departement.objects.filter(actif=True)
         province = request.query_params.get('province')
         if province:
-            qs = qs.filter(province_id=province)
+            qs = qs.filter(province_id=_uuid_ou_none(province))
         rows = qs.order_by('nom').values('id', 'nom', 'code', 'province_id')
         return Response(list(rows))
 
@@ -319,7 +338,7 @@ class PublicVillagesListView(generics.ListAPIView):
         qs = Village.objects.filter(actif=True)
         departement = request.query_params.get('departement')
         if departement:
-            qs = qs.filter(departement_id=departement)
+            qs = qs.filter(departement_id=_uuid_ou_none(departement))
         rows = qs.order_by('nom').values('id', 'nom', 'departement_id')
         return Response(list(rows))
 
@@ -366,7 +385,7 @@ class PublicContactProducteurView(generics.CreateAPIView):
         producteur_id = kwargs.get('producteur_id') or request.data.get('producteur')
         try:
             producteur = Producteur.objects.get(pk=producteur_id, deleted_at__isnull=True, statut='ACTIF')
-        except (Producteur.DoesNotExist, ValueError, TypeError):
+        except (Producteur.DoesNotExist, ValueError, TypeError, DjangoValidationError):
             return Response({'detail': 'Producteur introuvable.'}, status=404)
 
         if not get_optional_column('producteurs', 'visible_public', producteur.id, default=True):

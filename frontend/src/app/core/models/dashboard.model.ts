@@ -30,6 +30,12 @@ export interface DashboardStats {
   producteurs: DashboardProducteurRow[];
   lots: DashboardLotRow[];
   mouvements: DashboardMouvementRow[];
+  filtres?: {
+    province: string | null;
+    produit: string | null;
+    date_debut: string | null;
+    date_fin: string | null;
+  };
   totaux: {
     producteurs_actifs: number;
     lots_actifs: number;

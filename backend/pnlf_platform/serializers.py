@@ -20,7 +20,18 @@ class NotificationSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'type_notif', 'titre', 'corps', 'envoyee_at', 'metadata', 'created_at')
 
 
+UNITES_MESURE = ('KG', 'G', 'LITRE', 'ML', 'UNITE', 'BOTTE', 'SAC', 'M3', 'METRE')
+
+
 class OffreDemandeSerializer(serializers.ModelSerializer):
+    type_annonce = serializers.ChoiceField(
+        choices=(('OFFRE', 'Offre'), ('DEMANDE', 'Demande')),
+        error_messages={'invalid_choice': 'Type d’annonce invalide (OFFRE ou DEMANDE).'},
+    )
+    unite = serializers.ChoiceField(
+        choices=UNITES_MESURE, required=False, allow_null=True, allow_blank=True,
+        error_messages={'invalid_choice': 'Unité de mesure invalide.'},
+    )
     produit_nom = serializers.SerializerMethodField()
     province_nom = serializers.SerializerMethodField()
     auteur_nom = serializers.SerializerMethodField()
@@ -47,6 +58,33 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
     def validate_prix_unitaire(self, valeur):
         from config.validators import valider_montant_positif
         return valider_montant_positif(valeur, 'Le prix unitaire ne peut pas être négatif.')
+
+    def validate_unite(self, valeur):
+        return valeur or None
+
+    def validate_titre(self, valeur):
+        valeur = (valeur or '').strip()
+        if not valeur:
+            raise serializers.ValidationError('Donnez un titre à votre annonce.')
+        return valeur
+
+    def validate_expire_at(self, valeur):
+        from django.utils import timezone
+        if valeur is not None and valeur <= timezone.now():
+            raise serializers.ValidationError('La date d’expiration doit être dans le futur.')
+        return valeur
+
+    def validate_produit_id(self, valeur):
+        from traceability.models import Produit
+        if not Produit.objects.filter(pk=valeur, actif=True).exists():
+            raise serializers.ValidationError('Produit introuvable.')
+        return valeur
+
+    def validate_province_id(self, valeur):
+        from traceability.models import Province
+        if valeur is not None and not Province.objects.filter(pk=valeur).exists():
+            raise serializers.ValidationError('Province introuvable.')
+        return valeur
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -94,6 +132,13 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
         from traceability.db_utils import get_optional_column
         value = get_optional_column('offres_demandes', 'uuid_public', obj.id)
         return str(value) if value else None
+
+
+class OffreDemandePubliqueSerializer(OffreDemandeSerializer):
+    """Vitrine publique : sans identifiant interne de l'auteur."""
+
+    class Meta(OffreDemandeSerializer.Meta):
+        fields = tuple(f for f in OffreDemandeSerializer.Meta.fields if f != 'auteur_id')
 
 
 class ConversationSerializer(serializers.ModelSerializer):

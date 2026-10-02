@@ -43,6 +43,19 @@
 }
 
 @if (isInstitutional()) {
+  <form class="dash-periode" (ngSubmit)="appliquerPeriode()" aria-label="Période des indicateurs">
+    <pnlf-text-field label="Lots collectés du" type="date" name="date_debut" [(ngModel)]="dateDebut" />
+    <pnlf-text-field label="au" type="date" name="date_fin" [(ngModel)]="dateFin" />
+    <div class="dash-periode__actions">
+      <button pnlfButton variant="primary" type="submit" [loading]="loadingStats()">Appliquer</button>
+      @if (periodeActive()) {
+        <button pnlfButton variant="ghost" type="button" (click)="reinitialiserPeriode()">Toute la période</button>
+      }
+    </div>
+  </form>
+  @if (statsError()) {
+    <pnlf-alert tone="error" style="display:block; margin-bottom: 1rem;">{{ statsError() }}</pnlf-alert>
+  }
   <div class="dashboard-kpis">
     <pnlf-kpi-card label="Producteurs actifs" icon="users" tone="green" [value]="stats()?.totaux?.producteurs_actifs ?? 0" [loading]="loading()" />
     <pnlf-kpi-card label="Lots actifs" icon="package" tone="gold" [value]="stats()?.totaux?.lots_actifs ?? 0" [loading]="loading()" />
@@ -57,14 +70,14 @@
   }
 
   <div class="dashboard-charts">
-    <pnlf-card title="Répartition des lots par statut" subtitle="Vue nationale, tous produits confondus">
+    <pnlf-card title="Répartition des lots par statut" [subtitle]="periodeActive() ? 'Lots collectés sur la période choisie' : 'Vue nationale, tous produits confondus'">
       @if (loading()) {
         <pnlf-skeleton height="280px" radius="12px" />
       } @else {
         <apx-chart [series]="statusChart().series!" [chart]="statusChart().chart!" [xaxis]="statusChart().xaxis!" [yaxis]="statusChart().yaxis!" [plotOptions]="statusChart().plotOptions!" [colors]="statusChart().colors!" [dataLabels]="statusChart().dataLabels!" [grid]="statusChart().grid!" [legend]="statusChart().legend!" />
       }
     </pnlf-card>
-    <pnlf-card title="Producteurs par province" subtitle="Top 8 provinces les plus actives">
+    <pnlf-card title="Producteurs actifs par province" subtitle="Top 8 provinces les plus actives">
       @if (loading()) {
         <pnlf-skeleton height="280px" radius="12px" />
       } @else {

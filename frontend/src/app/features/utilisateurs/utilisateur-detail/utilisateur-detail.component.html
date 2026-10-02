@@ -43,7 +43,12 @@
         } @else if (u.statut !== StatutCompte.INACTIF) {
           <button pnlfButton variant="outline" type="button" (click)="action.set('activer')">Activer le compte</button>
         }
-        <button pnlfButton variant="ghost" type="button" (click)="action.set('reset')">Réinitialiser le mot de passe</button>
+        @if (peutRejeter()) {
+          <button pnlfButton variant="outline" type="button" (click)="action.set('rejeter')">Rejeter l’inscription</button>
+        }
+        @if (u.statut === StatutCompte.ACTIF) {
+          <button pnlfButton variant="ghost" type="button" (click)="action.set('reset')">Réinitialiser le mot de passe</button>
+        }
         @if (u.role !== 'ADMINISTRATEUR') {
           <button pnlfButton variant="ghost" type="button" (click)="action.set('desactiver')">Désactiver le compte</button>
         }
@@ -72,7 +77,11 @@
           <pnlf-text-field label="Adresse e-mail" type="email" formControlName="email" [required]="true" [errorMessage]="err('email')" />
           <pnlf-text-field label="Téléphone" type="tel" formControlName="telephone" inputmode="tel" placeholder="+241 77 00 01 02" [errorMessage]="err('telephone')" />
           @if (!estMoi()) {
-            <pnlf-select-field label="Rôle" formControlName="role" [options]="roleOptions()" [required]="true" />
+            @if (u.role === 'PRODUCTEUR' || u.role === 'COOPERATIVE') {
+              <p class="text-sm text-muted">Rôle : {{ roleLabels[u.role] }}. Ce compte est lié à une fiche, son rôle ne peut pas être modifié.</p>
+            } @else {
+              <pnlf-select-field label="Rôle" formControlName="role" [options]="roleOptions()" [required]="true" />
+            }
           }
           <div class="user-detail__form-actions">
             <button pnlfButton variant="ghost" type="button" (click)="cancelEdit()">Annuler</button>
@@ -120,8 +129,11 @@
       [message]="d.message"
       [confirmLabel]="d.confirm"
       [danger]="d.danger"
+      [inputLabel]="action() === 'rejeter' ? 'Motif du rejet (facultatif)' : ''"
+      inputPlaceholder="Ex. informations d’identification incomplètes"
+      inputHint="Le motif est communiqué au demandeur."
       [loading]="actionLoading()"
-      (confirmed)="confirmerAction()"
+      (confirmed)="confirmerAction($event)"
       (cancelled)="action.set(null)"
     />
   }

@@ -14,6 +14,7 @@ import { latitudeGabonValidator, longitudeGabonValidator } from '../../../core/v
 import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { CardComponent } from '../../../design-system/card/card.component';
+import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
 import { EmptyStateComponent } from '../../../design-system/empty-state/empty-state.component';
 import { SelectFieldComponent, SelectOption } from '../../../design-system/select-field/select-field.component';
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
@@ -34,6 +35,7 @@ import { PnlfDatePipe } from '../../../shared/pipes/format.pipes';
     TextFieldComponent,
     SelectFieldComponent,
     AlertBannerComponent,
+    ConfirmDialogComponent,
   ],
   templateUrl: './zone-collecte-detail.component.html',
   styleUrl: './zone-collecte-detail.component.scss',
@@ -56,6 +58,8 @@ export class ZoneCollecteDetailComponent {
   readonly saving = signal(false);
   readonly errorMessage = signal('');
   readonly provinces = signal<SelectOption[]>([]);
+  readonly confirmToggle = signal(false);
+  readonly toggling = signal(false);
 
   readonly canManage = this.auth.hasRole(
     RoleUtilisateur.ADMINISTRATEUR,
@@ -141,6 +145,25 @@ export class ZoneCollecteDetailComponent {
       error: (err) => {
         this.saving.set(false);
         this.errorMessage.set(handleFormApiError(this.form, toApiError(err), this.host));
+      },
+    });
+  }
+
+  basculerActif(): void {
+    const z = this.zone();
+    if (!z) return;
+    this.toggling.set(true);
+    this.service.modifierZoneCollecte(this.id, { actif: !z.actif }).subscribe({
+      next: (maj) => {
+        this.zone.set(maj);
+        this.toggling.set(false);
+        this.confirmToggle.set(false);
+        this.toast.success(maj.actif ? 'Zone réactivée' : 'Zone désactivée');
+      },
+      error: (err) => {
+        this.toggling.set(false);
+        this.confirmToggle.set(false);
+        this.toast.error('Modification impossible', toApiError(err).message);
       },
     });
   }

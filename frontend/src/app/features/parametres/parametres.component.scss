@@ -31,3 +31,41 @@
     font-weight: 600;
   }
 }
+
+.parametres-photo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.parametres-photo__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--border-subtle);
+  font-weight: 700;
+  color: var(--text-muted);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.parametres-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.parametres-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}

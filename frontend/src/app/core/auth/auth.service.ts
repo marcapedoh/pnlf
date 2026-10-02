@@ -85,6 +85,10 @@ export class AuthService {
         }),
       );
     }
+    if (!this.tokens.hasSessionHint()) {
+      this._bootstrapped.set(true);
+      return of(false);
+    }
     return this.refresh().pipe(
       switchMap((access) => {
         if (!access) {
@@ -104,6 +108,21 @@ export class AuthService {
   hasRole(...roles: RoleUtilisateur[]): boolean {
     const role = this._currentUser()?.role;
     return !!role && roles.includes(role);
+  }
+
+  /** Mise à jour de son propre profil (nom, prénoms, téléphone). */
+  updateMonProfil(payload: Pick<Utilisateur, 'nom' | 'prenoms' | 'telephone'>): Observable<Utilisateur> {
+    return this.http
+      .patch<Utilisateur>(`${environment.apiUrl}/accounts/me/`, payload)
+      .pipe(tap((user) => this._currentUser.set(user)));
+  }
+
+  uploadMaPhoto(file: File): Observable<Utilisateur> {
+    const form = new FormData();
+    form.append('photo', file);
+    return this.http
+      .post<Utilisateur>(`${environment.apiUrl}/accounts/me/photo/`, form)
+      .pipe(tap((user) => this._currentUser.set(user)));
   }
 
   updateCurrentUser(patch: Partial<Utilisateur>): void {

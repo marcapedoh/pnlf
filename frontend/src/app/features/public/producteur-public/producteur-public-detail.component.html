@@ -133,9 +133,6 @@
                       }
                       <span>{{ lot.date_collecte | pnlfDate }}</span>
                     </div>
-                    @if (lot.observations) {
-                      <p class="lot-tile__desc">{{ lot.observations }}</p>
-                    }
                     <div class="lot-tile__foot">
                       @if (lot.prix_indicatif) {
                         <p class="lot-tile__price">

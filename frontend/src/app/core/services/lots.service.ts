@@ -43,8 +43,16 @@ export class LotsService {
     return this.http.patch<Lot>(`${this.base}${id}/`, payload);
   }
 
-  changerStatut(id: string, statut: string, force = false): Observable<Lot> {
-    return this.http.post<Lot>(`${this.base}${id}/changer-statut/`, { statut, force });
+  changerStatut(id: string, statut: string): Observable<Lot> {
+    return this.http.post<Lot>(`${this.base}${id}/changer-statut/`, { statut });
+  }
+
+  publier(id: string): Observable<Lot> {
+    return this.http.post<Lot>(`${this.base}${id}/publier/`, {});
+  }
+
+  remove(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}${id}/`);
   }
 
   qrDownloadUrl(id: string): string {

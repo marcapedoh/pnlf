@@ -116,13 +116,15 @@
 
     <article class="legal-section" id="contact">
       <h2>9. Contact</h2>
-      <p>Pour toute question relative aux présentes conditions, contactez le service d'assistance :</p>
+      <p>Pour toute question relative aux présentes conditions, contactez le support technique :</p>
       <div class="legal-contact-card">
         <pnlf-icon name="mail" [size]="20" />
         <div>
           <p style="margin:0;">
             {{ assistance.nom }} :
             <a [href]="'mailto:' + assistance.email">{{ assistance.email }}</a>
+            &nbsp;·&nbsp;
+            <a [href]="'tel:' + assistance.telephone">{{ assistance.telephoneAffiche }}</a>
           </p>
         </div>
       </div>
