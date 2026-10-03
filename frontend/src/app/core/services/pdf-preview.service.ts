@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 
+import { toApiErrorAsync } from '../http/api-error.util';
 import { messageFromDownloadError, triggerBrowserDownload } from '../http/download-file.util';
 
 export interface PdfPreviewState {
@@ -72,8 +73,9 @@ export class PdfPreviewService {
         const objectUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
         this._state.update((s) => ({ ...s, loading: false, objectUrl }));
       },
-      error: (err) => {
-        this._state.update((s) => ({ ...s, loading: false, error: this.resolveError(err) }));
+      error: async (err) => {
+        const message = await this.resolveError(err);
+        this._state.update((s) => ({ ...s, loading: false, error: message }));
       },
     });
   }
@@ -90,10 +92,10 @@ export class PdfPreviewService {
     this.reset();
   }
 
-  private resolveError(err: unknown): string {
-    if (err instanceof HttpErrorResponse && err.error instanceof Blob) {
-      // Le backend a répondu avec un Blob JSON d'erreur (ex: 403/500) au lieu d'un PDF.
-      return messageFromDownloadError(err);
+  private async resolveError(err: unknown): Promise<string> {
+    if (err instanceof HttpErrorResponse && err.error instanceof Blob && err.status !== 403) {
+      // Le backend a répondu avec un Blob JSON d'erreur au lieu d'un PDF : on en extrait le message.
+      return (await toApiErrorAsync(err)).message;
     }
     return messageFromDownloadError(err);
   }

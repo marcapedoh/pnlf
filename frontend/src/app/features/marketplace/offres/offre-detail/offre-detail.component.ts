@@ -17,7 +17,15 @@ import { SkeletonComponent } from '../../../../design-system/skeleton/skeleton.c
 import { StatusBadgeComponent } from '../../../../design-system/badge/status-badge.component';
 import { ToastService } from '../../../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../../design-system/confirm-dialog/confirm-dialog.component';
-import { PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe } from '../../../../shared/pipes/format.pipes';
+import { IconComponent } from '../../../../design-system/icon/icon.component';
+import { libelleModeRemise, libelleMoyenPaiement, toneStatutAnnonce } from '../../../../core/models/annonce.model';
+import {
+  PnlfDatePipe,
+  PnlfMontantPipe,
+  PnlfQuantitePipe,
+  PnlfTelephonePipe,
+  PnlfUnitePipe,
+} from '../../../../shared/pipes/format.pipes';
 
 type MessageFil = {
   id: string;
@@ -37,6 +45,8 @@ type MessageFil = {
     PnlfMontantPipe,
     PnlfQuantitePipe,
     PnlfUnitePipe,
+    PnlfTelephonePipe,
+    IconComponent,
     CardComponent,
     ButtonComponent,
     SkeletonComponent,
@@ -106,11 +116,20 @@ export class OffreDetailComponent {
     return this.offre()?.auteur_id === this.currentUserId;
   }
 
-  tone(statut: string): 'success' | 'warning' | 'danger' | 'neutral' {
-    if (statut === 'OUVERTE') return 'success';
-    if (statut === 'EN_VALIDATION') return 'warning';
-    if (statut === 'REJETEE') return 'danger';
-    return 'neutral';
+  readonly tone = toneStatutAnnonce;
+  readonly libelleModeRemise = libelleModeRemise;
+
+  modifiable(o: OffreDemande): boolean {
+    return o.statut !== 'CLOTUREE';
+  }
+
+  moyensPaiement(o: OffreDemande): string {
+    return (o.moyens_paiement ?? []).map(libelleMoyenPaiement).join(', ');
+  }
+
+  initiales(nom: string | null | undefined): string {
+    const mots = (nom ?? '').trim().split(/\s+/).filter(Boolean);
+    return (mots.slice(0, 2).map((m) => m[0]).join('') || '?').toUpperCase();
   }
 
   /** L'auteur voit toutes les conversations reçues ; un visiteur ne voit que la sienne. */

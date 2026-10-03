@@ -14,6 +14,10 @@ COPY requirements.txt .
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Modèle IA de modération des images (URL figée + empreinte SHA-256 vérifiée), couche mise en cache.
+COPY scripts/telecharger_modele_nsfw.py scripts/
+RUN python scripts/telecharger_modele_nsfw.py
+
 COPY . .
 
 RUN chmod +x entrypoint.sh

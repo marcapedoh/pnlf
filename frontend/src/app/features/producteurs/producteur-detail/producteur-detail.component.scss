@@ -116,6 +116,54 @@
   }
 }
 
+.producteur-detail__soustitre {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.producteur-detail__produits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: var(--pnlf-green-100);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+
+    &.is-principal {
+      outline: 1px solid var(--pnlf-green-600);
+    }
+
+    small {
+      font-weight: 400;
+    }
+  }
+}
+
+.producteur-detail__vide {
+  margin: 0;
+  color: var(--color-warning);
+  font-style: italic;
+}
+
+.producteur-detail__aide {
+  margin: var(--space-3) 0 0;
+}
+
+.producteur-documents__ok {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--color-success, #146b3f);
+}
+
 .producteur-detail__notes {
   margin: 0;
   font-size: var(--fs-sm);

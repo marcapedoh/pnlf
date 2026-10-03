@@ -239,7 +239,7 @@ def run_tests():
         'date_collecte': str(date.today()),
         'quantite': '15.000',
         'unite': 'KG',
-        'statut': 'DECLARE',
+        'statut': 'BROUILLON',
     }, format='json')
     if r.status_code == 201:
         code_lot = r.data.get('code_lot', '')

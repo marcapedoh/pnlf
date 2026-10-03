@@ -1,14 +1,15 @@
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map, Observable } from 'rxjs';
+import { catchError, from, map, Observable, switchMap, throwError } from 'rxjs';
 
+import { toApiError, toApiErrorAsync } from './api-error.util';
 import { SKIP_GLOBAL_ERROR_TOAST, SKIP_LOADING_BAR } from './http-context-tokens';
 
 /**
  * En-tête standard signalant un appel AJAX (et non une navigation/téléchargement natif).
  * De nombreux gestionnaires de téléchargement tiers installés dans le navigateur
  * (Internet Download Manager, EagleGet, Free Download Manager...) excluent les requêtes
- * portant cet en-tête de leur interception — utile en complément de la suppression des
+ * portant cet en-tête de leur interception, utile en complément de la suppression des
  * en-têtes `Content-Disposition` côté serveur pour ces mêmes endpoints.
  */
 export const AJAX_EXPORT_HEADERS = { 'X-Requested-With': 'XMLHttpRequest' };
@@ -53,13 +54,12 @@ function looksLikeJsonError(buffer: ArrayBuffer): string | null {
 
 export function messageFromDownloadError(error: unknown): string {
   if (error instanceof HttpErrorResponse) {
-    if (error.status === 403) return "Vous n'avez pas les droits pour exporter ce document.";
-    if (error.status === 401) return 'Session expirée, veuillez vous reconnecter.';
-    if (error.status === 0) {
-      return 'Impossible de joindre le serveur. Vérifiez votre connexion, puis réessayez.';
-    }
+    if (error.status === 403) return 'Votre profil ne permet pas d’exporter ce document (exports réservés à l’administrateur et à l’agent du ministère).';
     if (error.status === 406) return 'Le serveur a refusé le type de fichier. Rechargez la page puis réessayez.';
-    if (error.status >= 500) return 'Erreur serveur pendant la génération du document.';
+    if (error.status >= 500 && error.status < 502) {
+      return 'Le serveur n’a pas pu générer le document. Réessayez dans un instant ou choisissez un autre format.';
+    }
+    return toApiError(error).message;
   }
   if (error instanceof Error && error.message) {
     if (/failed to fetch/i.test(error.message)) {
@@ -93,6 +93,11 @@ export class FileDownloadService {
           if (jsonError) throw new Error(jsonError);
           triggerBrowserDownload(new Blob([buffer], { type: mime }), filename);
         }),
+        catchError((err: unknown) =>
+          err instanceof HttpErrorResponse && err.status >= 400 && err.status < 500 && err.status !== 403
+            ? from(toApiErrorAsync(err)).pipe(switchMap((e) => throwError(() => new Error(e.message))))
+            : throwError(() => err),
+        ),
       );
   }
 }

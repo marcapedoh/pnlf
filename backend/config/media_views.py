@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 from accounts.models import Utilisateur
 from accounts.permissions import user_can_access_lot, user_can_access_producteur
 
-from . import media_store
+from . import media_store, moderation_images
 
 MEDIA_SIGN_SALT = 'pfnl-media-v1'
 MEDIA_SIGN_MAX_AGE = 60 * 60  # 1 h
@@ -35,6 +35,7 @@ SENSITIVE_PREFIXES = (
     'documents/',
     'chat/',
     'photos/utilisateurs/',
+    'photos/acheteurs/',
 )
 
 # Photos publiques seulement si la fiche est validée (ACTIF) et non supprimée.
@@ -134,6 +135,24 @@ def build_media_url(rel: str | None, request=None) -> str | None:
     return None
 
 
+def build_moderation_url(rel: str, request) -> str:
+    """URL signée d'aperçu d'une image en file de modération (servie aux seuls administrateurs)."""
+    token = signing.dumps({'p': _safe_rel(rel), 'u': str(request.user.id), 'm': 1}, salt=MEDIA_SIGN_SALT)
+    return request.build_absolute_uri(f'/api/media/secure/{token}/')
+
+
+_EXTENSIONS_MODEREES = ('.jpg', '.jpeg', '.png', '.webp', '.gif')
+
+
+def _image_masquee(user, rel: str) -> bool:
+    """Image en attente de vérification : seuls les administrateurs voient l'original."""
+    if rel.startswith('qr/') or not rel.lower().endswith(_EXTENSIONS_MODEREES):
+        return False
+    if getattr(user, 'role', None) == Utilisateur.Role.ADMINISTRATEUR:
+        return False
+    return moderation_images.est_masquee(rel)
+
+
 def _absolute_file(rel: str) -> Path:
     root = Path(settings.MEDIA_ROOT).resolve()
     full = (root / rel).resolve()
@@ -171,8 +190,8 @@ def _user_can_access_rel(user, rel: str) -> bool:
     if _PHOTO_FICHE_RE.match(rel):
         return photo_fiche_publique(rel) or _peut_voir_photo_fiche(user, rel)
 
-    if rel.startswith('photos/utilisateurs/'):
-        m = re.match(r'^photos/utilisateurs/([0-9a-fA-F-]{36})', rel)
+    if rel.startswith(('photos/utilisateurs/', 'photos/acheteurs/')):
+        m = re.match(r'^photos/(?:utilisateurs|acheteurs)/([0-9a-fA-F-]{36})', rel)
         if not m:
             return False
         uid = m.group(1)
@@ -183,6 +202,11 @@ def _user_can_access_rel(user, rel: str) -> bool:
             Utilisateur.Role.AGENT_MINISTERE,
         ):
             return True
+        # Tout compte connecté peut écrire à tout compte actif : l'avatar apparaît dans les contacts.
+        if Utilisateur.objects.filter(
+            pk=uid, statut=Utilisateur.Statut.ACTIF, deleted_at__isnull=True,
+        ).exists():
+            return True
         from pnlf_platform.models import ConversationParticipant
         mes_conversations = ConversationParticipant.objects.filter(
             utilisateur_id=user.id,
@@ -192,25 +216,26 @@ def _user_can_access_rel(user, rel: str) -> bool:
         ).exists()
 
     if rel.startswith('documents/inscriptions/producteurs/'):
-        if role not in (
-            Utilisateur.Role.ADMINISTRATEUR,
-            Utilisateur.Role.AGENT_MINISTERE,
-            Utilisateur.Role.AGENT_FORESTIER,
-        ):
-            return False
         m = re.match(r'^documents/inscriptions/producteurs/([0-9a-fA-F-]{36})', rel)
         if not m:
             return False
         from traceability.models import Producteur
+        from traceability.serializers import peut_lire_prives_producteur
         prod = Producteur.objects.filter(pk=m.group(1), deleted_at__isnull=True).first()
-        return bool(prod and user_can_access_producteur(user, prod))
+        return bool(prod and peut_lire_prives_producteur(user, prod))
 
     if rel.startswith('documents/inscriptions/cooperatives/'):
-        return role in (
+        if role in (
             Utilisateur.Role.ADMINISTRATEUR,
             Utilisateur.Role.AGENT_MINISTERE,
             Utilisateur.Role.AGENT_FORESTIER,
-        )
+        ):
+            return True
+        m = re.match(r'^documents/inscriptions/cooperatives/([0-9a-fA-F-]{36})', rel)
+        if not m or role != Utilisateur.Role.COOPERATIVE:
+            return False
+        from traceability.models import Cooperative
+        return Cooperative.objects.filter(pk=m.group(1), utilisateur_id=user.id).exists()
 
     if rel.startswith('documents/certifications/'):
         m = re.match(r'^documents/certifications/([0-9a-fA-F-]{36})', rel)
@@ -219,19 +244,26 @@ def _user_can_access_rel(user, rel: str) -> bool:
                 Utilisateur.Role.ADMINISTRATEUR,
                 Utilisateur.Role.AGENT_MINISTERE,
             )
-        from traceability.models import Certification
-        cert = Certification.objects.filter(pk=m.group(1)).select_related('producteur').first()
+        from traceability.models import Certification, Cooperative
+        cert = Certification.objects.filter(pk=m.group(1)).select_related('producteur', 'lot').first()
         if not cert:
             return False
-        if role in (
+        if cert.producteur_id and cert.producteur.utilisateur_id == user.id:
+            return True
+        if role == Utilisateur.Role.COOPERATIVE:
+            coops = set(Cooperative.objects.filter(utilisateur_id=user.id).values_list('id', flat=True))
+            if (cert.producteur_id and cert.producteur.cooperative_id in coops) or (
+                cert.lot_id and cert.lot.cooperative_id in coops
+            ):
+                return True
+        # Pièces du dossier de demande (sous-dossier par certification) : administrateur et demandeur.
+        if rel[len(m.group(0)):].startswith('/'):
+            return role == Utilisateur.Role.ADMINISTRATEUR
+        return role in (
             Utilisateur.Role.ADMINISTRATEUR,
             Utilisateur.Role.AGENT_MINISTERE,
             Utilisateur.Role.AGENT_FORESTIER,
-        ):
-            return True
-        if cert.producteur_id and cert.producteur.utilisateur_id == user.id:
-            return True
-        return False
+        )
 
     if rel.startswith('documents/'):
         return role in (
@@ -267,6 +299,8 @@ class PublicMediaView(View):
         if not photo_fiche_publique(rel):
             raise Http404('Fichier introuvable.')
         full = _absolute_file(rel)
+        if _image_masquee(None, rel):
+            return moderation_images.reponse_image_en_verification()
         return _file_response(full, as_attachment=False)
 
 
@@ -285,9 +319,15 @@ class SecureMediaView(APIView):
         user = Utilisateur.objects.filter(pk=uid, deleted_at__isnull=True).first()
         if not user or not user.is_active:
             return HttpResponseForbidden('Accès refusé.')
+        if payload.get('m'):
+            if user.role != Utilisateur.Role.ADMINISTRATEUR:
+                return HttpResponseForbidden('Accès refusé.')
+            return _file_response(_absolute_file(rel), as_attachment=False, rel=rel)
         if not _user_can_access_rel(user, rel):
             return HttpResponseForbidden('Accès refusé.')
         full = _absolute_file(rel)
+        if _image_masquee(user, rel):
+            return moderation_images.reponse_image_en_verification()
         as_attachment = rel.startswith('documents/')
         return _file_response(full, as_attachment=as_attachment, rel=rel)
 
@@ -301,8 +341,12 @@ class AuthenticatedMediaView(APIView):
         rel = _safe_rel(relpath)
         if is_public_media(rel) and not _PHOTO_FICHE_RE.match(rel):
             full = _absolute_file(rel)
+            if _image_masquee(request.user, rel):
+                return moderation_images.reponse_image_en_verification()
             return _file_response(full, as_attachment=False)
         if not _user_can_access_rel(request.user, rel):
             return HttpResponseForbidden('Accès refusé.')
         full = _absolute_file(rel)
+        if _image_masquee(request.user, rel):
+            return moderation_images.reponse_image_en_verification()
         return _file_response(full, as_attachment=rel.startswith('documents/'), rel=rel)

@@ -14,6 +14,8 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .audit import request_meta, write_audit
+from .connexions import enregistrer_connexion, retirer_presence, signaler_presence
+from .models import Utilisateur
 from .serializers import (
     MonProfilSerializer,
     PnlfTokenObtainPairSerializer,
@@ -92,6 +94,9 @@ class PnlfTokenObtainPairView(OrigineAutoriseeMixin, TokenObtainPairView):
                 user_agent=ua,
                 nouvelles_valeurs={'email': user_data.get('email'), 'role': user_data.get('role')},
             )
+            utilisateur = Utilisateur.objects.filter(pk=user_data.get('id')).first()
+            if utilisateur is not None:
+                enregistrer_connexion(request, succes=True, utilisateur=utilisateur)
             refresh = response.data.pop('refresh', None)
             if refresh:
                 set_refresh_cookie(response, refresh)
@@ -129,9 +134,20 @@ class LogoutView(OrigineAutoriseeMixin, APIView):
 
     def post(self, request):
         # Pas de blacklist SimpleJWT (incompatible avec Utilisateur UUID).
+        retirer_presence(request, request.user)
         response = Response({'detail': 'Déconnexion effectuée.'})
         clear_refresh_cookie(response)
         return response
+
+
+class PresenceView(APIView):
+    """POST /api/accounts/presence/ : signal d'activité envoyé par le front toutes les 60 s
+    tant que l'onglet est visible (« en ligne » = signal reçu il y a moins de 2 minutes)."""
+    allow_password_change_required = True
+
+    def post(self, request):
+        signaler_presence(request, request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MeView(generics.RetrieveUpdateAPIView):

@@ -135,12 +135,9 @@ def scope_lots_qs(qs, user):
     ):
         return qs
     if role == Utilisateur.Role.ACHETEUR:
-        # Un acheteur ne doit voir que des lots réellement disponibles : on masque
-        # les brouillons (non publiés), les lots déjà commercialisés (vendus),
-        # les archives et les annulations, qui n'ont pas d'intérêt commercial.
-        return qs.filter(producteur__statut='ACTIF').exclude(
-            statut__in=['BROUILLON', 'COMMERCIALISE', 'ARCHIVE', 'ANNULE'],
-        )
+        # Un acheteur ne voit que des lots réellement disponibles : validés, ni brouillons
+        # (non contrôlés) ni déjà commercialisés (vendus).
+        return qs.filter(producteur__statut='ACTIF', statut='VALIDE')
     if role == Utilisateur.Role.PRODUCTEUR:
         return qs.filter(producteur__utilisateur_id=user.id)
     if role == Utilisateur.Role.COOPERATIVE:
@@ -220,30 +217,29 @@ class CanManageCooperatives(RolePermission):
     }
 
 
+MESSAGE_ZONES_ADMIN = (
+    'Seul un administrateur peut créer, modifier, activer, désactiver ou importer des zones de collecte. '
+    'Contactez l’administrateur de la plateforme pour faire ajouter une zone.'
+)
+
+
 class CanManageZones(RolePermission):
+    """Référentiel des zones : lecture pour les profils géographiques, écriture administrateur seul."""
+
+    message = MESSAGE_ZONES_ADMIN
     read_roles = CanReadGeo.read_roles
-    # Création unitaire possible pour producteur/coop (formulaire lot) ;
-    # l'import massif est réservé aux agents (voir ZoneViewSet.import_fichier).
-    write_roles = {
-        Utilisateur.Role.ADMINISTRATEUR,
-        Utilisateur.Role.AGENT_MINISTERE,
-        Utilisateur.Role.AGENT_FORESTIER,
-        Utilisateur.Role.PRODUCTEUR,
-        Utilisateur.Role.COOPERATIVE,
-    }
+    write_roles = {Utilisateur.Role.ADMINISTRATEUR}
 
 
 class CanImportZones(BasePermission):
-    """Import CSV/XLSX du référentiel national — agents uniquement."""
+    """Import CSV/XLSX du référentiel national : administrateur uniquement."""
+
+    message = MESSAGE_ZONES_ADMIN
 
     def has_permission(self, request, view):
         if not getattr(request.user, 'is_authenticated', False):
             return False
-        return request.user.role in (
-            Utilisateur.Role.ADMINISTRATEUR,
-            Utilisateur.Role.AGENT_MINISTERE,
-            Utilisateur.Role.AGENT_FORESTIER,
-        )
+        return request.user.role == Utilisateur.Role.ADMINISTRATEUR
 
 
 class CanManageCertifications(RolePermission):
@@ -277,15 +273,14 @@ class CanUseMarketplace(RolePermission):
 
 
 class CanValidateCertifications(BasePermission):
-    """Acceptation / refus des demandes — administrateur et agent du ministère."""
+    """Acceptation / refus des demandes de certification : administrateur uniquement."""
+
+    message = 'Seul un administrateur peut valider ou refuser une demande de certification.'
 
     def has_permission(self, request, view):
         if not getattr(request.user, 'is_authenticated', False):
             return False
-        return request.user.role in (
-            Utilisateur.Role.ADMINISTRATEUR,
-            Utilisateur.Role.AGENT_MINISTERE,
-        )
+        return request.user.role == Utilisateur.Role.ADMINISTRATEUR
 
 
 class CanViewDashboard(BasePermission):

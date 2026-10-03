@@ -12,10 +12,20 @@
         <button pnlfButton variant="primary" [disabled]="acting()" (click)="dialog.set({ kind: 'valider' })">Valider et publier</button>
         <button pnlfButton variant="ghost" [disabled]="acting()" (click)="dialog.set({ kind: 'rejeter' })">Rejeter</button>
       }
+      @if (!isAuteur() && o.statut === 'OUVERTE') {
+        <a pnlfButton variant="primary" routerLink="/app/messagerie" [queryParams]="{ offre: o.id }">
+          <pnlf-icon name="message" [size]="16" /> Contacter via la messagerie
+        </a>
+      }
+      @if ((isAuteur() || canValidate) && modifiable(o)) {
+        <a pnlfButton variant="outline" [routerLink]="['/app/marketplace/offres', o.id, 'modifier']">
+          <pnlf-icon name="edit" [size]="16" /> Modifier
+        </a>
+      }
       @if ((isAuteur() || canValidate) && o.statut === 'OUVERTE') {
         <button pnlfButton variant="ghost" [disabled]="acting()" (click)="dialog.set({ kind: 'cloturer' })">Clôturer</button>
       }
-      <a pnlfButton routerLink="/app/marketplace/offres" variant="ghost">← Retour à la liste</a>
+      <a pnlfButton routerLink="/app/marketplace/offres" variant="ghost"><pnlf-icon name="arrow-left" [size]="16" /> Retour à la liste</a>
     </div>
   </div>
 
@@ -53,20 +63,109 @@
     </section>
 
     <section class="offre-detail__info">
+      @if (o.moderation; as m) {
+        <pnlf-alert [tone]="m.decision === 'VALIDEE' ? 'success' : 'warning'" [title]="m.decision === 'VALIDEE' ? 'Annonce validée' : 'Annonce rejetée'">
+          {{ m.decision === 'VALIDEE' ? 'Validée' : 'Rejetée' }} par {{ m.moderateur_nom || 'un modérateur' }} le {{ m.decide_at | pnlfDate: 'datetime' }}.
+          @if (m.motif) {
+            Motif : {{ m.motif }}
+          }
+        </pnlf-alert>
+      }
+      @if (o.expiree && o.statut === 'OUVERTE') {
+        <pnlf-alert tone="warning" title="Annonce expirée">La date limite est dépassée : l’annonce n’est plus visible du public.</pnlf-alert>
+      }
+
       <pnlf-card title="Détails de l'annonce">
         <dl class="offre-detail__dl">
-          <div><dt>Publiée par</dt><dd>{{ o.auteur_nom || 'Non renseigné' }}</dd></div>
           <div><dt>Produit</dt><dd>{{ o.produit_nom || 'Non renseigné' }}</dd></div>
-          <div><dt>Province</dt><dd>{{ o.province_nom || 'Non précisée' }}</dd></div>
+          @if (o.categorie_nom) {
+            <div><dt>Catégorie</dt><dd>{{ o.categorie_nom }}</dd></div>
+          }
+          <div><dt>Lieu</dt><dd>{{ o.province_nom || 'Province non précisée' }}{{ o.localite ? ', ' + o.localite : '' }}</dd></div>
           @if (o.quantite) {
             <div><dt>Quantité</dt><dd>{{ o.quantite | pnlfQuantite: o.unite }}</dd></div>
           }
           @if (o.prix_unitaire) {
-            <div><dt>Prix unitaire indicatif</dt><dd>{{ o.prix_unitaire | pnlfMontant: o.devise }} / {{ o.unite | pnlfUnite }}</dd></div>
+            <div><dt>Prix unitaire</dt><dd>{{ o.prix_unitaire | pnlfMontant: o.devise }} / {{ o.unite | pnlfUnite }}</dd></div>
           }
-          <div><dt>Certification requise</dt><dd>{{ o.certification_requise ? 'Oui' : 'Non' }}</dd></div>
+          @if (o.prix_total) {
+            <div><dt>Prix total</dt><dd>{{ o.prix_total | pnlfMontant: o.devise }}</dd></div>
+          }
+          <div><dt>Prix négociable</dt><dd>{{ o.negociable ? 'Oui' : 'Non' }}</dd></div>
+          @if (o.conditionnement) {
+            <div><dt>Conditionnement</dt><dd>{{ o.conditionnement }}</dd></div>
+          }
+          @if (o.qualite) {
+            <div><dt>Qualité</dt><dd>{{ o.qualite }}</dd></div>
+          }
+          <div>
+            <dt>{{ o.type_annonce === 'DEMANDE' ? 'Certification exigée' : 'Produit certifié' }}</dt>
+            <dd>{{ o.certification_requise ? 'Oui' : 'Non' }}</dd>
+          </div>
+          @if (o.disponible_du) {
+            <div><dt>Disponible à partir du</dt><dd>{{ o.disponible_du | pnlfDate }}</dd></div>
+          }
+          @if (o.expire_at) {
+            <div><dt>Date limite</dt><dd>{{ o.expire_at | pnlfDate }}</dd></div>
+          }
           <div><dt>Publiée le</dt><dd>{{ o.created_at | pnlfDate }}</dd></div>
         </dl>
+      </pnlf-card>
+
+      @if (o.mode_remise || o.modalites_livraison || o.moyens_paiement?.length || o.conditions_paiement) {
+        <pnlf-card title="Livraison et paiement">
+          <dl class="offre-detail__dl">
+            @if (o.mode_remise) {
+              <div><dt>Remise du produit</dt><dd>{{ libelleModeRemise(o.mode_remise) }}</dd></div>
+            }
+            @if (o.modalites_livraison) {
+              <div><dt>Modalités de livraison</dt><dd>{{ o.modalites_livraison }}</dd></div>
+            }
+            @if (o.moyens_paiement?.length) {
+              <div><dt>Moyens de paiement</dt><dd>{{ moyensPaiement(o) }}</dd></div>
+            }
+            @if (o.conditions_paiement) {
+              <div><dt>Conditions de paiement</dt><dd>{{ o.conditions_paiement }}</dd></div>
+            }
+          </dl>
+        </pnlf-card>
+      }
+
+      <pnlf-card title="Auteur de l’annonce">
+        <div class="offre-auteur">
+          <div class="offre-auteur__avatar" aria-hidden="true">
+            @if (o.auteur?.photo_url) {
+              <img [src]="o.auteur!.photo_url" alt="" />
+            } @else {
+              {{ initiales(o.auteur?.nom || o.auteur_nom) }}
+            }
+          </div>
+          <div class="offre-auteur__infos">
+            <strong>
+              {{ o.auteur?.nom || o.auteur_nom || 'Auteur non renseigné' }}
+              @if (o.auteur?.certifie) {
+                <span class="offre-auteur__certifie" title="Acteur disposant d’une certification valide">
+                  <pnlf-icon name="shield-check" [size]="14" /> Certifié
+                </span>
+              }
+            </strong>
+            <span>
+              {{ o.auteur?.type_acteur || 'Acteur de la filière' }}{{ o.auteur?.province ? ' · ' + o.auteur!.province : '' }}
+            </span>
+            @if (o.auteur?.membre_depuis) {
+              <span>Membre depuis {{ o.auteur!.membre_depuis | pnlfDate }}</span>
+            }
+            @if (o.contact?.telephone) {
+              <a [href]="'tel:' + o.contact!.telephone">{{ o.contact!.telephone | pnlfTelephone }}</a>
+            }
+            @if (o.contact?.email) {
+              <a [href]="'mailto:' + o.contact!.email">{{ o.contact!.email }}</a>
+            }
+            @if (o.auteur?.fiche_publique_id) {
+              <a [routerLink]="['/annuaire', o.auteur!.fiche_publique_id]">Voir la fiche publique</a>
+            }
+          </div>
+        </div>
       </pnlf-card>
 
       @if (o.description) {

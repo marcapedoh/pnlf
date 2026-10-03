@@ -25,18 +25,24 @@ from .serializers import (
     PublicProducteurDetailSerializer,
     PublicProducteurSerializer,
 )
+from .services import (
+    STATUTS_LOT_PUBLICS,
+    TYPES_MOUVEMENT_LIBELLES,
+    certifications_publiques,
+    construire_frise_lot,
+    libelle_statut_lot,
+    libelle_type_acteur,
+    type_acteur_producteur,
+    validation_lot,
+)
 from .services import photo_url as _photo_url_of
 from .services import photos_urls_lot
 
-# Statuts de lot jugés « présentables » au public dans les statistiques globales
-# (on masque brouillons et lots annulés, mais on garde les lots commercialisés
-# car ils représentent une traçabilité complète et réussie).
-STATUTS_LOTS_PUBLICS = ('DECLARE', 'VALIDE', 'EN_TRANSIT', 'TRANSFORME', 'COMMERCIALISE')
-
-# Statuts affichés dans la liste des lots d'un producteur consultée par un acheteur :
-# un lot déjà commercialisé (vendu) n'a plus d'intérêt commercial et ne doit plus
-# apparaître comme disponible à l'achat.
-STATUTS_LOTS_DISPONIBLES = ('DECLARE', 'VALIDE', 'EN_TRANSIT', 'TRANSFORME')
+# Listes, fiches producteurs et compteurs publics : lots validés uniquement. Un brouillon
+# n'est pas encore contrôlé ; un lot commercialisé (vendu) sort des listes mais son QR code
+# reste vérifiable (voir LotVerifyView).
+STATUTS_LOTS_PUBLICS = STATUTS_LOT_PUBLICS
+STATUTS_LOTS_DISPONIBLES = STATUTS_LOT_PUBLICS
 
 
 def _producteurs_publics_qs():
@@ -88,28 +94,10 @@ def _nb_lots_par_producteur(producteur_ids: list) -> dict:
 
 
 def _lot_public_payload(lot, request=None) -> dict:
-    labels = {
-        'BROUILLON': 'Brouillon',
-        'DECLARE': 'Déclaré',
-        'VALIDE': 'Validé',
-        'EN_TRANSIT': 'En transit',
-        'TRANSFORME': 'Transformé',
-        'COMMERCIALISE': 'Commercialisé',
-        'ARCHIVE': 'Archivé',
-        'ANNULE': 'Annulé',
-    }
+    """Résumé public d'un lot (listes et fiches producteurs) : aucune donnée privée."""
     mouvements = [
         {
-            'type_libelle': {
-                'COLLECTE': 'Collecte',
-                'RECEPTION_COOPERATIVE': 'Réception coopérative',
-                'TRANSFERT': 'Transfert',
-                'TRANSFORMATION': 'Transformation',
-                'CONTROLE': 'Contrôle',
-                'VENTE': 'Vente',
-                'EXPORT': 'Export',
-                'AUTRE': 'Autre',
-            }.get(m.type_mouvement, m.type_mouvement),
+            'type_libelle': TYPES_MOUVEMENT_LIBELLES.get(m.type_mouvement, m.type_mouvement),
             'date_mouvement': m.date_mouvement,
             'lieu_libelle': m.lieu_libelle,
         }
@@ -127,12 +115,86 @@ def _lot_public_payload(lot, request=None) -> dict:
         'devise': lot.devise,
         'date_collecte': lot.date_collecte,
         'statut': lot.statut,
-        'statut_libelle': labels.get(lot.statut, lot.statut),
+        'statut_libelle': libelle_statut_lot(lot.statut),
         'latitude': _gps_public(lot.latitude),
         'longitude': _gps_public(lot.longitude),
         'photos_urls': photos_urls_lot(lot.id, request),
         'mouvements': mouvements,
     }
+
+
+def _producteur_fiche_publique(prod) -> bool:
+    return bool(
+        prod is not None and prod.deleted_at is None and prod.statut == 'ACTIF'
+        and get_optional_column('producteurs', 'visible_public', prod.id, default=True)
+    )
+
+
+def lot_public_complet(lot, request=None) -> dict:
+    """Fiche publique complète d'un lot (page lot et vérification QR).
+
+    Contient produit, lieu de collecte (GPS arrondi), producteur, certifications valides,
+    validation (type d'autorité, sans identité d'agent), photos et frise chronologique.
+    Aucune donnée privée : ni contact, ni destinataire, ni commentaire interne.
+    """
+    prod = lot.producteur
+    fiche_publique = _producteur_fiche_publique(prod)
+    type_acteur = type_acteur_producteur(prod)
+    zone = lot.zone_collecte if lot.zone_collecte_id else None
+    province = zone.province if zone is not None else (prod.province if prod.province_id else None)
+    transitions = list(lot.transitions.all())
+    validation = validation_lot(lot, transitions)
+    commercialisation = None
+    if lot.statut == 'COMMERCIALISE':
+        t = next((t for t in transitions if t.nouveau_statut == 'COMMERCIALISE'), None)
+        commercialisation = {'date': t.created_at if t else lot.updated_at}
+    frise = construire_frise_lot(lot, public=True)
+    payload = _lot_public_payload(lot, request)
+    payload.update({
+        'produit': {
+            'nom': lot.produit.nom,
+            'nom_scientifique': lot.produit.nom_scientifique,
+            'categorie': lot.produit.categorie.libelle if lot.produit.categorie_id else None,
+        },
+        'lieu': {
+            'zone': zone.libelle if zone is not None else None,
+            'province': province.nom if province is not None else None,
+            'latitude': _gps_public(lot.latitude),
+            'longitude': _gps_public(lot.longitude),
+        },
+        'province_nom': province.nom if province is not None else None,
+        'producteur_nom': f'{prod.prenoms} {prod.nom}'.strip(),
+        'producteur': {
+            'id': str(prod.id) if fiche_publique else None,
+            'nom': prod.nom,
+            'prenoms': prod.prenoms,
+            'type_acteur': type_acteur,
+            'type_acteur_libelle': libelle_type_acteur(type_acteur),
+            'communaute': prod.communaute if fiche_publique else None,
+            'province_nom': prod.province.nom if prod.province_id else None,
+            'cooperative_nom': prod.cooperative.nom if prod.cooperative_id else None,
+            'photo_url': _photo_url_of('producteurs', prod.id, request) if fiche_publique else None,
+            'fiche_publique': fiche_publique,
+        },
+        'certifications': certifications_publiques(lot),
+        'validation': (
+            {'date': validation['date'], 'mode': validation['mode'], 'libelle': validation['libelle']}
+            if validation else None
+        ),
+        'commercialisation': commercialisation,
+        'qr_payload': lot.qr_payload,
+        'authenticite': 'VERIFIE',
+        'frise': frise,
+    })
+    payload['mouvements_count'] = sum(1 for e in frise if e['type'] == 'MOUVEMENT')
+    return payload
+
+
+def lots_complets_qs():
+    return Lot.objects.filter(deleted_at__isnull=True).select_related(
+        'produit', 'produit__categorie', 'producteur', 'producteur__province', 'producteur__cooperative',
+        'zone_collecte', 'zone_collecte__province',
+    ).prefetch_related('mouvements', 'transitions')
 
 
 def _lots_par_producteur(producteur_ids: list, request=None) -> dict:
@@ -265,36 +327,23 @@ class PublicLotDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, pk=None):
+        introuvable = Response({'detail': 'Lot introuvable ou non disponible publiquement.'}, status=404)
         try:
-            lot = (
-                Lot.objects.filter(
-                    pk=pk, deleted_at__isnull=True, statut__in=STATUTS_LOTS_PUBLICS,
-                )
-                .select_related('produit', 'producteur', 'producteur__province', 'producteur__cooperative')
-                .prefetch_related('mouvements')
-                .get()
-            )
+            lot = lots_complets_qs().get(pk=pk)
         except (Lot.DoesNotExist, ValueError, TypeError, DjangoValidationError):
-            return Response({'detail': 'Lot introuvable ou non disponible publiquement.'}, status=404)
-
-        prod = lot.producteur
-        if prod is None or prod.deleted_at is not None or prod.statut != 'ACTIF':
-            return Response({'detail': 'Lot introuvable ou non disponible publiquement.'}, status=404)
-        if not get_optional_column('producteurs', 'visible_public', prod.id, default=True):
-            return Response({'detail': 'Lot introuvable ou non disponible publiquement.'}, status=404)
-
-        payload = _lot_public_payload(lot, request)
-        payload['producteur'] = {
-            'id': str(prod.id),
-            'nom': prod.nom,
-            'prenoms': prod.prenoms,
-            'type_acteur': get_optional_column('producteurs', 'type_acteur', prod.id, default='PRODUCTEUR'),
-            'communaute': prod.communaute,
-            'province_nom': prod.province.nom if prod.province_id else None,
-            'cooperative_nom': prod.cooperative.nom if prod.cooperative_id else None,
-            'photo_url': _photo_url_of('producteurs', prod.id, request),
-        }
-        return Response(payload)
+            return introuvable
+        if not _producteur_fiche_publique(lot.producteur):
+            return introuvable
+        if lot.statut == 'COMMERCIALISE':
+            # Le lot a été vendu : il quitte la vitrine, mais sa traçabilité reste vérifiable par QR.
+            return Response({
+                'detail': 'Ce lot a été commercialisé : il n’est plus proposé, mais sa traçabilité reste vérifiable.',
+                'code': 'LOT_COMMERCIALISE',
+                'uuid_public': str(lot.uuid_public) if lot.uuid_public else None,
+            }, status=404)
+        if lot.statut not in STATUTS_LOTS_PUBLICS:
+            return introuvable
+        return Response(lot_public_complet(lot, request))
 
 
 class PublicProduitsListView(generics.ListAPIView):
@@ -355,8 +404,8 @@ class PublicStatsView(APIView):
         return Response({
             'nb_producteurs_actifs': producteurs_qs.count(),
             'nb_collecteurs': nb_collecteurs,
-            'nb_lots_traces': Lot.objects.filter(
-                deleted_at__isnull=True, statut__in=STATUTS_LOTS_PUBLICS,
+            'nb_lots_traces': _lots_publics_qs().filter(
+                producteur__in=producteurs_qs.values('id'),
             ).count(),
             'nb_produits': Produit.objects.filter(actif=True).count(),
             'nb_provinces': Province.objects.filter(actif=True).count(),

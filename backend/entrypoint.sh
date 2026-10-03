@@ -4,6 +4,9 @@ set -e
 echo "==> migrate"
 python manage.py migrate --noinput
 
+echo "==> evolutions de schema (backend/database/evolutions)"
+python scripts/appliquer_evolutions.py || echo "WARN: evolutions de schema incompletes"
+
 echo "==> restauration des medias depuis le stockage objet (non bloquant)"
 python scripts/media_sync.py restaurer || echo "WARN: restauration medias incomplete"
 

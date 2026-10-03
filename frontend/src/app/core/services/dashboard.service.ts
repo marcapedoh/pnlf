@@ -157,13 +157,29 @@ export interface InboxItem {
   type_libelle?: string;
   producteur_nom?: string;
   statut?: string;
+  email?: string;
+  code_lot?: string;
+  produit_nom?: string;
+  quantite?: number | string | null;
+  unite?: string | null;
+  nb_pieces?: number;
   created_at: string;
 }
 
+export interface InboxSection {
+  autorise: boolean;
+  count: number;
+  results: InboxItem[];
+}
+
+/** File « À traiter » : une section non autorisée pour le profil a `autorise: false` et reste vide. */
 export interface InboxValidation {
-  producteurs: { count: number; results: InboxItem[] };
-  cooperatives: { count: number; results: InboxItem[] };
-  certifications: { count: number; results: InboxItem[] };
-  offres: { count: number; results: InboxItem[] };
-  acheteurs?: { count: number; results: InboxItem[] };
+  producteurs: InboxSection;
+  cooperatives: InboxSection;
+  certifications: InboxSection;
+  lots: InboxSection;
+  offres: InboxSection;
+  acheteurs: InboxSection;
+  images?: InboxSection;
+  total: number;
 }

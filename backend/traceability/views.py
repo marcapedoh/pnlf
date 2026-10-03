@@ -3,9 +3,10 @@ import logging
 import uuid
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from django.conf import settings
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import FileResponse, Http404
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
@@ -54,6 +55,8 @@ from .models import (
     Cooperative,
     CooperativeMembre,
     Departement,
+    DocumentInscription,
+    InvitationCooperative,
     Lot,
     Mouvement,
     Producteur,
@@ -68,9 +71,9 @@ from .serializers import (
     CertificationSerializer,
     CooperativeMembreSerializer,
     CooperativeSerializer,
+    InvitationCooperativeSerializer,
     DepartementSerializer,
     LotSerializer,
-    LotVerifySerializer,
     MouvementSerializer,
     ProducteurSerializer,
     ProduitSerializer,
@@ -80,23 +83,36 @@ from .serializers import (
     ZoneCollecteSerializer,
 )
 from .services import (
+    PIECES_CERTIFICATION_MAX,
+    PIECES_TYPES_MIME,
     ROLES_AGENTS,
-    STATUTS_LOT_MODIFIABLES,
+    STATUTS_LOT_VERIFIABLES,
     appliquer_mouvement_sur_lot,
     chemin_photo,
+    commercialiser_lot,
+    controler_piece_justificative,
+    droits_lot,
+    enregistrer_document,
     enregistrer_photo,
     generer_qr_image,
     libelle_statut_lot,
     qr_image_bytes,
-    transition_lot_statut,
+    valider_lot,
     valider_type_mouvement,
     valider_type_mouvement_pour_role,
-    verifier_lot_accepte_mouvement,
+    verifier_mouvement_compatible,
 )
 
 logger = logging.getLogger(__name__)
 
 ROLES_GESTION_ADHESIONS = ('ADMINISTRATEUR', 'AGENT_MINISTERE')
+
+DOCUMENTS_FICHE_PRODUCTEUR = ('CNI', 'FICHE_CIRCUIT', 'AGREMENT_NAGOYA')
+MESSAGE_TYPE_DOCUMENT = (
+    'Type de document inconnu. Valeurs acceptées : pièce d’identité (CNI), fiche circuit, '
+    'agrément CITES / Nagoya.'
+)
+TYPES_MIME_DOCUMENT = {'application/pdf', 'image/jpeg', 'image/jpg', 'image/png'}
 
 
 def _user_id(user):
@@ -153,19 +169,40 @@ def _notifier_validateurs(roles, titre: str, corps: str, **metadata) -> None:
         _notifier(uid, titre, corps, **metadata)
 
 
-def _notifier_statut_lot(lot, ancien: str, *, auteur_id) -> None:
-    """Prévient le producteur titulaire quand un tiers fait évoluer le statut de son lot."""
+def _notifier_statut_lot(lot, ancien: str, *, auteur_id, mode: str | None = None) -> None:
+    """Prévient les titulaires du lot (producteur et coopérative gestionnaire) de chaque transition.
+
+    L'auteur reçoit aussi la notification en auto-validation : elle lui sert d'accusé de réception.
+    """
     if lot.statut == ancien:
         return
-    destinataire = lot.producteur.utilisateur_id if lot.producteur_id else None
-    if not destinataire or destinataire == auteur_id:
-        return
-    _notifier(
-        destinataire, f'Lot {lot.code_lot} : {libelle_statut_lot(lot.statut)}',
-        f'Votre lot {lot.code_lot} est passé du statut « {libelle_statut_lot(ancien)} » '
-        f'au statut « {libelle_statut_lot(lot.statut)} ».',
-        lot_id=str(lot.id), statut=lot.statut,
-    )
+    destinataires = []
+    if lot.producteur_id and lot.producteur.utilisateur_id:
+        destinataires.append(lot.producteur.utilisateur_id)
+    if lot.cooperative_id and lot.cooperative.utilisateur_id:
+        destinataires.append(lot.cooperative.utilisateur_id)
+    nouveau = libelle_statut_lot(lot.statut)
+    if lot.statut == 'VALIDE':
+        precision = (
+            ' Validation effectuée au titre de votre certification active.' if mode == 'AUTO'
+            else ' Validation effectuée par une autorité habilitée.'
+        )
+        precision += ' Le lot est désormais vérifiable publiquement par son QR code.'
+    elif lot.statut == 'COMMERCIALISE':
+        precision = (
+            ' Il n’apparaît plus dans les listes publiques ; son QR code reste vérifiable.'
+        )
+    else:
+        precision = ''
+    for destinataire in dict.fromkeys(destinataires):
+        if destinataire == auteur_id and mode != 'AUTO':
+            continue
+        _notifier(
+            destinataire, f'Lot {lot.code_lot} : {nouveau}',
+            f'Votre lot {lot.code_lot} est passé du statut « {libelle_statut_lot(ancien)} » '
+            f'au statut « {nouveau} ».{precision}',
+            lot_id=str(lot.id), statut=lot.statut,
+        )
 
 
 def _valeurs_modifiees(instance, validated_data) -> tuple[dict, dict]:
@@ -276,6 +313,28 @@ def _rejeter_compte_lie(utilisateur_id, *, type_libelle: str, motif: str) -> Non
     user.delete()
 
 
+def _clore_invitations_en_attente(producteur, *, motif: str, sauf=None) -> None:
+    """Rend sans objet les invitations en attente d'un producteur devenu membre d'une coopérative."""
+    invitations = InvitationCooperative.objects.filter(
+        producteur=producteur, statut=InvitationCooperative.Statut.EN_ATTENTE,
+    ).select_related('cooperative')
+    if sauf is not None:
+        invitations = invitations.exclude(pk=sauf.pk)
+    invitations = list(invitations)
+    if not invitations:
+        return
+    InvitationCooperative.objects.filter(pk__in=[i.pk for i in invitations]).update(
+        statut=InvitationCooperative.Statut.CADUQUE, motif_reponse=motif, repondu_at=timezone.now(),
+    )
+    nom = f'{producteur.prenoms} {producteur.nom}'.strip()
+    for inv in invitations:
+        _notifier(
+            inv.cooperative.utilisateur_id, 'Invitation sans objet',
+            f'Votre invitation adressée à {nom} est devenue sans objet : {motif[:1].lower()}{motif[1:]}',
+            table_cible='cooperatives', enregistrement_id=str(inv.cooperative_id),
+        )
+
+
 class ProvinceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [CanReadGeo]
     queryset = Province.objects.filter(actif=True)
@@ -347,6 +406,16 @@ class ProduitViewSet(viewsets.ModelViewSet):
             enregistrement_id=produit.id, ip_adresse=ip, user_agent=ua,
         )
         return Response(ProduitSerializer(produit, context={'request': request}).data)
+
+
+class CanPrintCooperatives(CanManageCooperatives):
+    """L'impression (POST) est une lecture : ouverte à tous les profils autorisés à consulter les coopératives."""
+
+    def has_permission(self, request, view):
+        role = getattr(request.user, 'role', None)
+        return bool(getattr(request.user, 'is_authenticated', False)) and (
+            role in self.read_roles or role in self.write_roles
+        )
 
 
 class CooperativeViewSet(viewsets.ModelViewSet):
@@ -447,18 +516,23 @@ class CooperativeViewSet(viewsets.ModelViewSet):
         write_audit(
             utilisateur_id=request.user.id, action='REJECT', table_cible='cooperatives',
             enregistrement_id=coop.id, ip_adresse=ip, user_agent=ua,
+            nouvelles_valeurs={'statut': 'REJETE', 'motif': motif or None},
         )
         return Response(CooperativeSerializer(coop, context={'request': request}).data)
 
-    @action(detail=True, methods=['post'], url_path='pdf')
+    @action(detail=True, methods=['post'], url_path='pdf', permission_classes=[CanPrintCooperatives])
     def pdf(self, request, pk=None):
         """Génère et renvoie directement la fiche PDF de cette coopérative (octets bruts)."""
         from pnlf_platform.pdf_export import cooperative_fiche_pdf_bytes
 
         coop = self.get_object()
+        titulaire = bool(coop.utilisateur_id and coop.utilisateur_id == request.user.id)
         try:
-            pdf, filename = cooperative_fiche_pdf_bytes(coop, masquer_contacts=not _est_agent(request.user))
+            pdf, filename = cooperative_fiche_pdf_bytes(
+                coop, masquer_contacts=not (_est_agent(request.user) or titulaire), utilisateur=request.user,
+            )
         except Exception:
+            logger.exception('Génération de la fiche PDF de la coopérative %s impossible', coop.id)
             return Response({'detail': 'Impossible de générer la fiche PDF.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
@@ -470,14 +544,14 @@ class CooperativeViewSet(viewsets.ModelViewSet):
 
         return pdf_file_response(pdf, filename)
 
-    @action(detail=False, methods=['post'], url_path='pdf-liste')
+    @action(detail=False, methods=['post'], url_path='pdf-liste', permission_classes=[CanPrintCooperatives])
     def pdf_liste(self, request):
         """Génère et renvoie directement la liste PDF des coopératives visibles."""
         from pnlf_platform.pdf_export import cooperatives_liste_pdf_bytes
 
         qs = self.filter_queryset(self.get_queryset())
         try:
-            pdf, filename = cooperatives_liste_pdf_bytes(qs)
+            pdf, filename = cooperatives_liste_pdf_bytes(qs, utilisateur=request.user)
         except Exception:
             return Response({'detail': 'Impossible de générer la liste PDF.'}, status=500)
         ip, ua = request_meta(request)
@@ -620,6 +694,16 @@ class CooperativeViewSet(viewsets.ModelViewSet):
                 )
                 existante.date_adhesion, existante.actif = date_adhesion, True
             Producteur.objects.filter(pk=prod.pk).update(cooperative=coop, updated_at=now)
+            if not deja_membre:
+                InvitationCooperative.objects.filter(
+                    cooperative=coop, producteur=prod, statut=InvitationCooperative.Statut.EN_ATTENTE,
+                ).update(
+                    statut=InvitationCooperative.Statut.ACCEPTEE, repondu_at=now,
+                    motif_reponse='Adhésion enregistrée par la coopérative ou l’administration.',
+                )
+                _clore_invitations_en_attente(
+                    prod, motif=f'Le producteur a rejoint la coopérative « {coop.nom} ».',
+                )
 
         _journaliser(
             request, 'ADD_MEMBER', 'cooperative_membres', coop.id,
@@ -705,6 +789,15 @@ class CooperativeViewSet(viewsets.ModelViewSet):
                     'demandez d’abord votre retrait à celle-ci.'
                 ),
             })
+        if InvitationCooperative.objects.filter(
+            cooperative=coop, producteur=prod, statut=InvitationCooperative.Statut.EN_ATTENTE,
+        ).exists():
+            raise ValidationError({
+                'detail': (
+                    'Cette coopérative vous a déjà invité : acceptez son invitation '
+                    '(page Coopératives ou votre fiche) pour devenir membre.'
+                ),
+            })
         en_attente = CooperativeMembre.objects.filter(producteur=prod, actif=False).select_related('cooperative').first()
         if en_attente is not None:
             if en_attente.cooperative_id == coop.id:
@@ -728,6 +821,237 @@ class CooperativeViewSet(viewsets.ModelViewSet):
             cooperative_id=str(coop.id), producteur_id=str(prod.id),
         )
         return Response({'detail': 'Demande transmise à la coopérative.'}, status=status.HTTP_201_CREATED)
+
+    # ------------------------------------------------------------------
+    # Invitations : la coopérative invite un producteur actif sans coopérative
+    # ------------------------------------------------------------------
+
+    @action(detail=True, methods=['get'], url_path='candidats-invitation')
+    def candidats_invitation(self, request, pk=None):
+        """Recherche dynamique des producteurs actifs sans coopérative (10 résultats au plus)."""
+        from django.db.models import Q
+
+        from .db_utils import get_optional_column
+        from .services import photo_url
+
+        # get_object() appliquerait le filtre « search » (nom de coopérative) au paramètre de recherche.
+        from rest_framework.generics import get_object_or_404
+
+        coop = get_object_or_404(self.get_queryset(), pk=pk)
+        self.check_object_permissions(request, coop)
+        self._verifier_gestion_membres(request, coop)
+        terme = (request.query_params.get('search') or '').strip()[:80]
+        if len(terme) < 2:
+            return Response([])
+        qs = Producteur.objects.filter(
+            statut='ACTIF', deleted_at__isnull=True, cooperative__isnull=True,
+        ).select_related('province')
+        for mot in terme.split()[:4]:
+            qs = qs.filter(
+                Q(nom__icontains=mot) | Q(prenoms__icontains=mot)
+                | Q(code_producteur__icontains=mot) | Q(communaute__icontains=mot)
+            )
+        candidats = list(qs.order_by('nom', 'prenoms')[:10])
+        ids = [p.id for p in candidats]
+        invites = set(InvitationCooperative.objects.filter(
+            cooperative=coop, producteur_id__in=ids, statut=InvitationCooperative.Statut.EN_ATTENTE,
+        ).values_list('producteur_id', flat=True))
+        demandes = set(CooperativeMembre.objects.filter(
+            cooperative=coop, producteur_id__in=ids, actif=False,
+        ).values_list('producteur_id', flat=True))
+        return Response([
+            {
+                'id': str(p.id),
+                'nom': p.nom,
+                'prenoms': p.prenoms,
+                'code_producteur': p.code_producteur,
+                'type_acteur': get_optional_column('producteurs', 'type_acteur', p.id, default='PRODUCTEUR'),
+                'province_nom': getattr(p.province, 'nom', None),
+                'communaute': p.communaute,
+                'photo_url': photo_url('producteurs', p.id, request),
+                'a_un_compte': bool(p.utilisateur_id),
+                'invitation_en_attente': p.id in invites,
+                'demande_en_attente': p.id in demandes,
+            }
+            for p in candidats
+        ])
+
+    @action(detail=True, methods=['get', 'post'], url_path='invitations')
+    def invitations(self, request, pk=None):
+        """GET : invitations envoyées par la coopérative. POST : inviter un producteur actif sans coopérative."""
+        coop = self.get_object()
+        self._verifier_gestion_membres(request, coop)
+        if request.method == 'GET':
+            qs = InvitationCooperative.objects.filter(cooperative=coop).select_related(
+                'cooperative', 'cooperative__province', 'producteur',
+            )[:50]
+            return Response(InvitationCooperativeSerializer(qs, many=True, context={'request': request}).data)
+
+        prod = self._producteur_depuis_requete(request)
+        message = (request.data.get('message') or '').strip()
+        if len(message) > 500:
+            raise ValidationError({'message': 'Le message ne doit pas dépasser 500 caractères.'})
+        if coop.statut != 'ACTIF':
+            raise ValidationError({'detail': 'La coopérative doit être active pour inviter des producteurs.'})
+        if prod.statut != 'ACTIF':
+            raise ValidationError({'producteur': 'Seul un producteur dont la fiche est validée (active) peut être invité.'})
+        if prod.cooperative_id == coop.id:
+            raise ValidationError({'producteur': 'Ce producteur est déjà membre de votre coopérative.'})
+        if prod.cooperative_id:
+            raise ValidationError({'producteur': 'Ce producteur est déjà membre d’une autre coopérative.'})
+        if CooperativeMembre.objects.filter(cooperative=coop, producteur=prod, actif=False).exists():
+            raise ValidationError({
+                'producteur': (
+                    'Ce producteur a déjà demandé à rejoindre votre coopérative : '
+                    'acceptez sa demande dans la liste des demandes reçues.'
+                ),
+            })
+        if InvitationCooperative.objects.filter(
+            cooperative=coop, producteur=prod, statut=InvitationCooperative.Statut.EN_ATTENTE,
+        ).exists():
+            raise ValidationError({'producteur': 'Une invitation est déjà en attente pour ce producteur.'})
+        try:
+            with transaction.atomic():
+                inv = InvitationCooperative.objects.create(
+                    cooperative=coop, producteur=prod, message=message or None,
+                    invite_par_id=request.user.id, created_at=timezone.now(),
+                )
+        except IntegrityError:
+            raise ValidationError({'producteur': 'Une invitation est déjà en attente pour ce producteur.'})
+        _journaliser(request, 'INVITE_MEMBER', 'invitations_cooperative', inv.id,
+                     nouvelles={'cooperative_id': str(coop.id), 'producteur_id': str(prod.id)})
+        corps = f'La coopérative « {coop.nom} » vous invite à devenir membre.'
+        if message:
+            corps += f' Message : {message}'
+        corps += ' Acceptez ou refusez depuis la page Coopératives.'
+        _notifier(
+            prod.utilisateur_id, 'Invitation à rejoindre une coopérative', corps,
+            table_cible='cooperatives', enregistrement_id=str(coop.id), invitation_id=str(inv.id),
+        )
+        inv = InvitationCooperative.objects.select_related('cooperative', 'cooperative__province', 'producteur').get(pk=inv.pk)
+        return Response(
+            InvitationCooperativeSerializer(inv, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path=r'invitations/(?P<invitation_id>[0-9a-fA-F-]{36})/annuler')
+    def annuler_invitation(self, request, pk=None, invitation_id=None):
+        coop = self.get_object()
+        self._verifier_gestion_membres(request, coop)
+        inv = InvitationCooperative.objects.select_related('producteur').filter(
+            pk=invitation_id, cooperative=coop,
+        ).first()
+        if inv is None:
+            raise NotFound('Invitation introuvable.')
+        if inv.statut != InvitationCooperative.Statut.EN_ATTENTE:
+            raise ValidationError({'detail': 'Seule une invitation en attente peut être annulée.'})
+        inv.statut = InvitationCooperative.Statut.ANNULEE
+        inv.repondu_at = timezone.now()
+        inv.repondu_par_id = request.user.id
+        inv.save(update_fields=['statut', 'repondu_at', 'repondu_par_id'])
+        _journaliser(request, 'CANCEL_INVITATION', 'invitations_cooperative', inv.id,
+                     nouvelles={'cooperative_id': str(coop.id), 'producteur_id': str(inv.producteur_id)})
+        _notifier(
+            inv.producteur.utilisateur_id, 'Invitation annulée',
+            f'La coopérative « {coop.nom} » a annulé son invitation.',
+            table_cible='cooperatives', enregistrement_id=str(coop.id),
+        )
+        return Response({'detail': 'Invitation annulée.'})
+
+    def _producteur_du_compte(self, request):
+        if request.user.role != Utilisateur.Role.PRODUCTEUR:
+            raise PermissionDenied('Seuls les producteurs et collecteurs reçoivent des invitations de coopérative.')
+        prod = Producteur.objects.filter(utilisateur_id=request.user.id, deleted_at__isnull=True).first()
+        if prod is None:
+            raise ValidationError({'detail': 'Aucune fiche producteur n’est liée à votre compte.'})
+        return prod
+
+    @action(detail=False, methods=['get'], url_path='invitations-recues', permission_classes=[IsAuthenticated])
+    def invitations_recues(self, request):
+        """Invitations en attente adressées au producteur connecté."""
+        prod = self._producteur_du_compte(request)
+        qs = InvitationCooperative.objects.filter(
+            producteur=prod, statut=InvitationCooperative.Statut.EN_ATTENTE,
+        ).select_related('cooperative', 'cooperative__province', 'producteur')
+        return Response(InvitationCooperativeSerializer(qs, many=True, context={'request': request}).data)
+
+    def _invitation_recue(self, request, invitation_id):
+        prod = self._producteur_du_compte(request)
+        inv = InvitationCooperative.objects.select_related('cooperative').filter(
+            pk=invitation_id, producteur=prod,
+        ).first()
+        if inv is None:
+            raise NotFound('Invitation introuvable.')
+        if inv.statut != InvitationCooperative.Statut.EN_ATTENTE:
+            raise ValidationError({'detail': 'Cette invitation n’est plus en attente.'})
+        return prod, inv
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated],
+            url_path=r'invitations-recues/(?P<invitation_id>[0-9a-fA-F-]{36})/refuser')
+    def refuser_invitation(self, request, invitation_id=None):
+        prod, inv = self._invitation_recue(request, invitation_id)
+        motif = (request.data.get('motif') or '').strip()
+        if len(motif) > 500:
+            raise ValidationError({'motif': 'Le motif ne doit pas dépasser 500 caractères.'})
+        inv.statut = InvitationCooperative.Statut.REFUSEE
+        inv.repondu_at = timezone.now()
+        inv.repondu_par_id = request.user.id
+        inv.motif_reponse = motif or None
+        inv.save(update_fields=['statut', 'repondu_at', 'repondu_par_id', 'motif_reponse'])
+        _journaliser(request, 'REFUSE_INVITATION', 'invitations_cooperative', inv.id,
+                     nouvelles={'cooperative_id': str(inv.cooperative_id), 'motif': motif or None})
+        corps = f'{prod.prenoms} {prod.nom} ({prod.code_producteur}) a décliné votre invitation.'
+        if motif:
+            corps += f' Motif : {motif}'
+        _notifier(
+            inv.cooperative.utilisateur_id, 'Invitation déclinée', corps,
+            table_cible='cooperatives', enregistrement_id=str(inv.cooperative_id),
+        )
+        return Response({'detail': 'Invitation refusée.'})
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated],
+            url_path=r'invitations-recues/(?P<invitation_id>[0-9a-fA-F-]{36})/accepter')
+    def accepter_invitation(self, request, invitation_id=None):
+        prod, inv = self._invitation_recue(request, invitation_id)
+        coop = inv.cooperative
+        now = timezone.now()
+        with transaction.atomic():
+            prod = Producteur.objects.select_for_update().get(pk=prod.pk)
+            if prod.statut != 'ACTIF':
+                raise ValidationError({'detail': 'Votre fiche doit être validée (active) pour rejoindre une coopérative.'})
+            if coop.statut != 'ACTIF':
+                raise ValidationError({'detail': 'Cette coopérative n’accepte pas de nouveaux membres pour le moment.'})
+            if prod.cooperative_id:
+                raise ValidationError({
+                    'detail': 'Vous êtes déjà membre d’une coopérative : demandez d’abord votre retrait à celle-ci.',
+                })
+            CooperativeMembre.objects.filter(producteur=prod).exclude(cooperative=coop).delete()
+            aujourd_hui = timezone.localdate()
+            if CooperativeMembre.objects.filter(cooperative=coop, producteur=prod).exists():
+                CooperativeMembre.objects.filter(cooperative=coop, producteur=prod).update(
+                    actif=True, date_adhesion=aujourd_hui,
+                )
+            else:
+                CooperativeMembre.objects.create(
+                    cooperative=coop, producteur=prod, date_adhesion=aujourd_hui, actif=True, created_at=now,
+                )
+            Producteur.objects.filter(pk=prod.pk).update(cooperative=coop, updated_at=now)
+            InvitationCooperative.objects.filter(pk=inv.pk).update(
+                statut=InvitationCooperative.Statut.ACCEPTEE, repondu_at=now, repondu_par_id=request.user.id,
+            )
+            _clore_invitations_en_attente(prod, motif=f'Le producteur a rejoint la coopérative « {coop.nom} ».')
+        _journaliser(request, 'ACCEPT_INVITATION', 'invitations_cooperative', inv.id,
+                     nouvelles={'cooperative_id': str(coop.id), 'producteur_id': str(prod.id)})
+        _notifier(
+            coop.utilisateur_id, 'Invitation acceptée',
+            f'{prod.prenoms} {prod.nom} ({prod.code_producteur}) a accepté votre invitation '
+            'et devient membre de la coopérative.',
+            table_cible='cooperatives', enregistrement_id=str(coop.id),
+        )
+        return Response({
+            'detail': f'Vous êtes désormais membre de la coopérative « {coop.nom} ».',
+            'cooperative': str(coop.id),
+        })
 
 
 def _normaliser_entetes(entetes: list) -> list:
@@ -798,29 +1122,22 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
         extra = {}
         if not serializer.validated_data.get('code'):
             extra['code'] = _code_unique('ZC', ZoneCollecte, 'code')
-        if not _est_agent(self.request.user):
-            extra['actif'] = True
         zone = serializer.save(created_at=now, updated_at=now, **extra)
         ip, ua = request_meta(self.request)
         write_audit(
             utilisateur_id=self.request.user.id, action='CREATE', table_cible='zones_collecte',
             enregistrement_id=zone.id, ip_adresse=ip, user_agent=ua,
+            nouvelles_valeurs={'code': zone.code, 'libelle': zone.libelle, 'actif': zone.actif},
         )
 
     def perform_update(self, serializer):
-        if self.request.user.role in (
-            Utilisateur.Role.PRODUCTEUR,
-            Utilisateur.Role.COOPERATIVE,
-        ):
-            raise PermissionDenied(
-                'Vous pouvez déclarer une nouvelle zone depuis le formulaire de lot, '
-                'pas modifier le référentiel existant.'
-            )
+        anciennes, nouvelles = _valeurs_modifiees(serializer.instance, serializer.validated_data)
         zone = serializer.save(updated_at=timezone.now())
         ip, ua = request_meta(self.request)
         write_audit(
             utilisateur_id=self.request.user.id, action='UPDATE', table_cible='zones_collecte',
             enregistrement_id=zone.id, ip_adresse=ip, user_agent=ua,
+            anciennes_valeurs=anciennes or None, nouvelles_valeurs=nouvelles or None,
         )
 
     @action(detail=False, methods=['post'], url_path='import', permission_classes=[CanImportZones])
@@ -831,7 +1148,7 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
         ``code``, ``libelle``, ``province`` ou ``province_code`` (code ou nom de la province),
         ``description`` (optionnel), ``latitude`` (optionnel), ``longitude`` (optionnel).
         Une ligne existante (même ``code``) est mise à jour plutôt que dupliquée.
-        Réservé aux administrateurs et agents (SEC-06).
+        Réservé à l'administrateur, seul gestionnaire du référentiel des zones.
         """
         fichier = request.FILES.get('fichier')
         if not fichier:
@@ -948,7 +1265,9 @@ class ProducteurViewSet(viewsets.ModelViewSet):
     filterset_class = ProducteurFilter
 
     def get_queryset(self):
-        qs = Producteur.objects.filter(deleted_at__isnull=True).select_related('province', 'cooperative')
+        qs = Producteur.objects.filter(deleted_at__isnull=True).select_related(
+            'province', 'departement', 'village', 'cooperative',
+        )
         user = self.request.user
         if self.request.query_params.get('candidats_adhesion') == '1' and user.role in ROLES_GESTION_ADHESIONS:
             qs = qs.filter(statut='ACTIF', cooperative__isnull=True)
@@ -1013,7 +1332,11 @@ class ProducteurViewSet(viewsets.ModelViewSet):
             serializer.validated_data.pop('cooperative')
         nouvelle_coop = serializer.validated_data.get('cooperative', instance.cooperative)
         changement_coop = getattr(nouvelle_coop, 'pk', None) != instance.cooperative_id
-        anciennes, nouvelles = _valeurs_modifiees(instance, serializer.validated_data)
+        anciennes, nouvelles = _valeurs_modifiees(
+            instance, {k: v for k, v in serializer.validated_data.items() if k != 'produits'},
+        )
+        if 'produits' in serializer.validated_data:
+            nouvelles['produits'] = ', '.join(p.nom for p in serializer.validated_data['produits']) or None
         now = timezone.now()
         with transaction.atomic():
             obj = serializer.save(updated_at=now)
@@ -1024,6 +1347,7 @@ class ProducteurViewSet(viewsets.ModelViewSet):
                         cooperative_id=obj.cooperative_id, producteur=obj,
                         date_adhesion=timezone.localdate(), actif=True, created_at=now,
                     )
+                    _clore_invitations_en_attente(obj, motif='Rattachement effectué par l’administration.')
         _journaliser(self.request, 'UPDATE', 'producteurs', obj.id, anciennes=anciennes, nouvelles=nouvelles)
 
     def perform_destroy(self, instance):
@@ -1051,13 +1375,18 @@ class ProducteurViewSet(viewsets.ModelViewSet):
         """
         from pnlf_platform.pdf_export import producteur_fiche_pdf_bytes
 
+        from .serializers import peut_lire_prives_producteur
+
         prod = self.get_object()
-        titulaire = bool(prod.utilisateur_id and prod.utilisateur_id == request.user.id)
         try:
             pdf, filename = producteur_fiche_pdf_bytes(
-                prod, masquer_contacts=not (_est_agent(request.user) or titulaire),
+                prod,
+                masquer_contacts=not peut_lire_prives_producteur(request.user, prod),
+                masquer_piece=not _est_agent(request.user),
+                utilisateur=request.user,
             )
         except Exception:
+            logger.exception('Génération de la fiche PDF du producteur %s impossible', prod.id)
             return Response({'detail': 'Impossible de générer la fiche PDF.'}, status=500)
         ip, ua = request_meta(request)
         write_audit(
@@ -1076,7 +1405,12 @@ class ProducteurViewSet(viewsets.ModelViewSet):
 
         qs = self.filter_queryset(self.get_queryset())
         try:
-            pdf, filename = producteurs_liste_pdf_bytes(qs, masquer_contacts=not _est_agent(request.user))
+            # Le périmètre d'une coopérative (ses membres) ou d'un producteur (sa fiche) est déjà autorisé.
+            pdf, filename = producteurs_liste_pdf_bytes(
+                qs,
+                masquer_contacts=request.user.role not in (*ROLES_AGENTS, 'COOPERATIVE', 'PRODUCTEUR'),
+                utilisateur=request.user,
+            )
         except Exception:
             return Response({'detail': 'Impossible de générer la liste PDF.'}, status=500)
         ip, ua = request_meta(request)
@@ -1192,6 +1526,7 @@ class ProducteurViewSet(viewsets.ModelViewSet):
         write_audit(
             utilisateur_id=request.user.id, action='REJECT', table_cible='producteurs',
             enregistrement_id=prod.id, ip_adresse=ip, user_agent=ua,
+            nouvelles_valeurs={'statut': 'REJETE', 'motif': motif or None},
         )
         return Response(ProducteurSerializer(prod, context={'request': request}).data)
 
@@ -1202,7 +1537,7 @@ class ProducteurViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.role == Utilisateur.Role.PRODUCTEUR and prod.utilisateur_id != user.id:
             raise PermissionDenied('Vous ne pouvez modifier que votre propre photo.')
-        if user.role in (Utilisateur.Role.ACHETEUR, Utilisateur.Role.COOPERATIVE):
+        if user.role == Utilisateur.Role.ACHETEUR:
             raise PermissionDenied('Action non autorisée.')
         fichier = request.FILES.get('photo')
         if not fichier:
@@ -1215,6 +1550,90 @@ class ProducteurViewSet(viewsets.ModelViewSet):
         )
         return Response(ProducteurSerializer(prod, context={'request': request}).data)
 
+    @action(detail=True, methods=['get', 'post'], url_path='documents',
+            parser_classes=[MultiPartParser, FormParser, JSONParser])
+    def documents(self, request, pk=None):
+        """Pièces justificatives de la fiche : lecture, dépôt ou remplacement (un document par type)."""
+        from .serializers import _documents_administratifs, peut_lire_prives_producteur
+
+        prod = self.get_object()
+        if not peut_lire_prives_producteur(request.user, prod):
+            raise PermissionDenied('Les pièces justificatives de cette fiche ne vous sont pas accessibles.')
+        if request.method == 'GET':
+            return Response(_documents_administratifs('PRODUCTEUR', prod.id, request))
+
+        type_document = str(request.data.get('type_document') or '').strip().upper()
+        if type_document not in DOCUMENTS_FICHE_PRODUCTEUR:
+            raise ValidationError({'type_document': MESSAGE_TYPE_DOCUMENT})
+        fichier = request.FILES.get('document')
+        if not fichier:
+            raise ValidationError({'document': 'Sélectionnez le fichier à joindre (PDF, JPG ou PNG, 8 Mo maximum).'})
+        if (fichier.content_type or '').lower() not in TYPES_MIME_DOCUMENT:
+            raise ValidationError({'document': 'Formats acceptés : PDF, JPG, PNG.'})
+        chemin = enregistrer_document(
+            fichier, 'inscriptions/producteurs', f'{prod.id}_{type_document.lower()}',
+        )
+        now = timezone.now()
+        with transaction.atomic():
+            remplace = DocumentInscription.objects.filter(
+                entite_type=DocumentInscription.EntiteType.PRODUCTEUR, entite_id=prod.id,
+                type_document=type_document,
+            ).delete()[0] > 0
+            DocumentInscription.objects.create(
+                id=uuid.uuid4(), entite_type=DocumentInscription.EntiteType.PRODUCTEUR, entite_id=prod.id,
+                type_document=type_document, chemin=chemin,
+                nom_original=Path(fichier.name or '').name[:255] or None,
+                depose_par_id=_user_id(request.user), created_at=now,
+            )
+        _journaliser(
+            request, 'UPDATE_DOCUMENT' if remplace else 'ADD_DOCUMENT', 'producteurs', prod.id,
+            nouvelles={'type_document': type_document, 'nom_original': fichier.name[:255] if fichier.name else None},
+        )
+        if prod.utilisateur_id and prod.utilisateur_id != _user_id(request.user):
+            _notifier(
+                prod.utilisateur_id, 'Pièce justificative mise à jour',
+                f'Le document « {DocumentInscription.TypeDocument(type_document).label} » de votre fiche '
+                'a été ajouté ou remplacé.',
+                table_cible='producteurs', enregistrement_id=str(prod.id),
+            )
+        return Response(
+            _documents_administratifs('PRODUCTEUR', prod.id, request),
+            status=status.HTTP_200_OK if remplace else status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['delete'], url_path=r'documents/(?P<type_document>[A-Za-z_]+)')
+    def supprimer_document(self, request, pk=None, type_document=None):
+        from .serializers import _documents_administratifs, peut_lire_prives_producteur
+
+        prod = self.get_object()
+        if not peut_lire_prives_producteur(request.user, prod):
+            raise PermissionDenied('Les pièces justificatives de cette fiche ne vous sont pas accessibles.')
+        type_document = (type_document or '').upper()
+        if type_document not in DOCUMENTS_FICHE_PRODUCTEUR:
+            raise ValidationError({'type_document': MESSAGE_TYPE_DOCUMENT})
+        if type_document == 'CNI' and not _est_agent(request.user):
+            raise ValidationError({
+                'type_document': (
+                    'La pièce d’identité est obligatoire : remplacez-la par un nouveau fichier '
+                    'au lieu de la supprimer.'
+                ),
+            })
+        docs = list(DocumentInscription.objects.filter(
+            entite_type=DocumentInscription.EntiteType.PRODUCTEUR, entite_id=prod.id,
+            type_document=type_document,
+        ))
+        if not docs:
+            raise NotFound('Aucun document de ce type n’est joint à la fiche.')
+        with transaction.atomic():
+            DocumentInscription.objects.filter(pk__in=[d.pk for d in docs]).delete()
+        for doc in docs:
+            chemin_local = Path(settings.MEDIA_ROOT) / doc.chemin
+            chemin_local.unlink(missing_ok=True)
+            media_store.supprimer(doc.chemin)
+        _journaliser(request, 'DELETE_DOCUMENT', 'producteurs', prod.id,
+                     anciennes={'type_document': type_document})
+        return Response(_documents_administratifs('PRODUCTEUR', prod.id, request))
+
 
 class LotViewSet(viewsets.ModelViewSet):
     permission_classes = [CanManageLots]
@@ -1225,15 +1644,25 @@ class LotViewSet(viewsets.ModelViewSet):
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         ctx['request'] = self.request
+        ctx['avec_detail'] = self.action != 'list'
         return ctx
 
     def get_queryset(self):
         qs = (
             Lot.objects.filter(deleted_at__isnull=True)
-            .select_related('produit', 'producteur', 'producteur__province', 'zone_collecte')
+            .select_related(
+                'produit', 'producteur', 'producteur__province', 'producteur__cooperative',
+                'cooperative', 'zone_collecte', 'zone_collecte__province',
+            )
             .prefetch_related('mouvements')
         )
         return scope_lots_qs(qs, self.request.user)
+
+    def _reponse_lot(self, lot, request, **kwargs):
+        lot = self.get_queryset().get(pk=lot.pk)
+        return Response(
+            LotSerializer(lot, context={'request': request, 'avec_detail': True}).data, **kwargs,
+        )
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
@@ -1260,7 +1689,8 @@ class LotViewSet(viewsets.ModelViewSet):
         if zone and serializer.validated_data.get('latitude') is None and zone.latitude is not None:
             extra['latitude'] = zone.latitude
             extra['longitude'] = zone.longitude
-        extra['statut'] = 'BROUILLON' if _parse_booleen(self.request.data.get('brouillon')) else 'DECLARE'
+        # Tout lot naît en brouillon : il devient vérifiable publiquement après validation.
+        extra['statut'] = 'BROUILLON'
         # Code unique côté appli : évite l'INSERT avec code_lot='' (contrainte UNIQUE
         # + lots orphelins vides en prod si le trigger SQL ne s'applique pas).
         code_lot = (
@@ -1277,8 +1707,7 @@ class LotViewSet(viewsets.ModelViewSet):
             lot.refresh_from_db()
             lot.qr_payload = generer_qr_payload(lot)
             lot.save(update_fields=['qr_payload'])
-            if lot.statut != 'BROUILLON':
-                self._creer_mouvement_collecte(lot, user, now)
+            self._creer_mouvement_collecte(lot, user, now)
         generer_qr_image(lot)
         _journaliser(self.request, 'CREATE', 'lots', lot.id,
                      nouvelles={'code_lot': lot.code_lot, 'statut': lot.statut})
@@ -1302,17 +1731,22 @@ class LotViewSet(viewsets.ModelViewSet):
         )
 
     def _verifier_lot_modifiable(self, lot, action: str) -> None:
-        if lot.statut in ('ANNULE', 'ARCHIVE'):
-            raise ValidationError({
-                'detail': f'Un lot « {libelle_statut_lot(lot.statut)} » ne peut plus être {action}.',
-            })
-        if not _est_agent(self.request.user) and lot.statut not in STATUTS_LOT_MODIFIABLES:
-            raise ValidationError({
-                'detail': (
-                    f'Ce lot est « {libelle_statut_lot(lot.statut)} » : il ne peut plus être {action}. '
-                    'Seuls les lots en brouillon ou déclarés (pas encore validés) le peuvent.'
-                ),
-            })
+        droits = droits_lot(self.request.user, lot)
+        if droits['peut_modifier' if action == 'modifié' else 'peut_supprimer']:
+            return
+        if lot.statut == 'COMMERCIALISE':
+            detail = (
+                f'Ce lot est commercialisé : il ne peut plus être {action}, '
+                'afin que son QR code reste fidèle à la marchandise vendue.'
+            )
+        elif lot.statut == 'VALIDE' and not _est_agent(self.request.user):
+            detail = (
+                f'Ce lot a été validé : il ne peut plus être {action} par son titulaire. '
+                'Pour une correction, contactez un agent ou l’administration.'
+            )
+        else:
+            detail = f'Vous n’êtes pas autorisé à intervenir sur ce lot ({action}).'
+        raise ValidationError({'detail': detail})
 
     def perform_update(self, serializer):
         if self.request.user.role == Utilisateur.Role.ACHETEUR:
@@ -1340,33 +1774,44 @@ class LotViewSet(viewsets.ModelViewSet):
         _journaliser(self.request, 'SOFT_DELETE', 'lots', instance.id,
                      anciennes={'code_lot': instance.code_lot, 'statut': instance.statut})
 
-    def _publier(self, lot, user) -> None:
-        self._verifier_producteur_actif(lot.producteur)
-        now = timezone.now()
-        with transaction.atomic():
-            lot.statut = 'DECLARE'
-            lot.updated_at = now
-            lot.save(update_fields=['statut', 'updated_at'])
-            self._creer_mouvement_collecte(lot, user, now)
-
-    @action(detail=True, methods=['post'], url_path='publier')
-    def publier(self, request, pk=None):
-        """Publie un brouillon : passage BROUILLON vers DECLARE avec l'étape de collecte initiale."""
-        lot = self.get_object()
+    def _transition(self, request, lot, cible: str, *, motif: str | None = None):
+        """Validation ou commercialisation, journalisées (audit + historique) et notifiées."""
         if request.user.role == Utilisateur.Role.ACHETEUR:
             raise PermissionDenied('Action non autorisée.')
-        if lot.statut != 'BROUILLON':
-            raise ValidationError({'detail': 'Seul un lot en brouillon peut être publié.'})
-        self._publier(lot, request.user)
-        _journaliser(request, 'PUBLISH', 'lots', lot.id,
-                     anciennes={'statut': 'BROUILLON'}, nouvelles={'statut': lot.statut})
-        lot = Lot.objects.select_related('produit', 'producteur', 'zone_collecte').get(pk=lot.pk)
-        return Response(LotSerializer(lot, context={'request': request}).data)
+        with transaction.atomic():
+            lot = Lot.objects.select_for_update(of=('self',)).select_related(
+                'producteur', 'cooperative',
+            ).get(pk=lot.pk)
+            ancien = lot.statut
+            if cible == 'VALIDE':
+                mode = valider_lot(lot, request.user)
+            elif cible == 'COMMERCIALISE':
+                commercialiser_lot(lot, request.user, motif=motif)
+                mode = 'AGENT' if _est_agent(request.user) else 'PROPRIETAIRE'
+            else:
+                raise ValidationError({
+                    'statut': 'Statut cible inconnu. Valeurs possibles : VALIDE ou COMMERCIALISE.',
+                })
+        _journaliser(request, 'VALIDATE' if cible == 'VALIDE' else 'CHANGE_STATUT', 'lots', lot.id,
+                     anciennes={'statut': ancien}, nouvelles={'statut': lot.statut, 'mode': mode})
+        _notifier_statut_lot(lot, ancien, auteur_id=request.user.id, mode=mode)
+        return self._reponse_lot(lot, request)
+
+    @action(detail=True, methods=['post'], url_path='valider')
+    def valider(self, request, pk=None):
+        """BROUILLON vers VALIDE : autorité, ou titulaire disposant d'une certification active."""
+        return self._transition(request, self.get_object(), 'VALIDE')
+
+    @action(detail=True, methods=['post'], url_path='commercialiser')
+    def commercialiser(self, request, pk=None):
+        """VALIDE vers COMMERCIALISE : titulaire du lot ou autorité."""
+        motif = str(request.data.get('motif') or '').strip()[:300] or None
+        return self._transition(request, self.get_object(), 'COMMERCIALISE', motif=motif)
 
     @action(detail=True, methods=['get'], url_path='tracabilite')
     def tracabilite(self, request, pk=None):
         lot = self.get_object()
-        return Response(LotSerializer(lot, context={'request': request}).data)
+        return Response(LotSerializer(lot, context={'request': request, 'avec_detail': True}).data)
 
     @action(detail=True, methods=['get'], url_path='qr')
     def qr(self, request, pk=None):
@@ -1380,23 +1825,18 @@ class LotViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='changer-statut')
     def changer_statut(self, request, pk=None):
+        """Compatibilité : ``{"statut": "VALIDE" | "COMMERCIALISE"}`` équivaut aux actions dédiées."""
         lot = self.get_object()
-        if not _est_agent(request.user):
-            raise PermissionDenied('Seuls les agents habilités peuvent changer le statut d’un lot.')
         nouveau = str(request.data.get('statut') or '').strip().upper()
-        force = _parse_booleen(request.data.get('force', False))
-        if force and request.user.role != Utilisateur.Role.ADMINISTRATEUR:
-            raise PermissionDenied('Seul un administrateur peut forcer un changement de statut.')
-        ancien = lot.statut
-        if ancien == 'BROUILLON' and nouveau == 'DECLARE':
-            self._publier(lot, request.user)
-        else:
-            transition_lot_statut(lot, nouveau, force=force)
-        _journaliser(request, 'CHANGE_STATUT', 'lots', lot.id,
-                     anciennes={'statut': ancien}, nouvelles={'statut': lot.statut, 'force': force})
-        _notifier_statut_lot(lot, ancien, auteur_id=request.user.id)
-        lot = Lot.objects.select_related('produit', 'producteur', 'zone_collecte').get(pk=lot.pk)
-        return Response(LotSerializer(lot, context={'request': request}).data)
+        if nouveau not in ('VALIDE', 'COMMERCIALISE'):
+            raise ValidationError({
+                'statut': (
+                    'Transition impossible : un lot passe de « Brouillon » à « Validé », '
+                    'puis de « Validé » à « Commercialisé ».'
+                ),
+            })
+        motif = str(request.data.get('motif') or '').strip()[:300] or None
+        return self._transition(request, lot, nouveau, motif=motif)
 
     @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
     def photos(self, request, pk=None):
@@ -1419,7 +1859,7 @@ class LotViewSet(viewsets.ModelViewSet):
             utilisateur_id=_user_id(request.user), action='UPDATE_PHOTO', table_cible='lots',
             enregistrement_id=lot.id, ip_adresse=ip, user_agent=ua,
         )
-        return Response(LotSerializer(lot, context={'request': request}).data)
+        return self._reponse_lot(lot, request)
 
     @photos.mapping.delete
     def supprimer_photo(self, request, pk=None):
@@ -1442,7 +1882,7 @@ class LotViewSet(viewsets.ModelViewSet):
             utilisateur_id=_user_id(request.user), action='DELETE_PHOTO', table_cible='lots',
             enregistrement_id=lot.id, ip_adresse=ip, user_agent=ua,
         )
-        return Response(LotSerializer(lot, context={'request': request}).data)
+        return self._reponse_lot(lot, request)
 
 
 class MouvementViewSet(viewsets.ModelViewSet):
@@ -1484,22 +1924,25 @@ class MouvementViewSet(viewsets.ModelViewSet):
             })
 
         with transaction.atomic():
-            lot = Lot.objects.select_for_update().select_related('producteur').get(pk=lot.pk)
-            verifier_lot_accepte_mouvement(lot)
+            lot = Lot.objects.select_for_update(of=('self',)).select_related(
+                'producteur', 'cooperative',
+            ).get(pk=lot.pk)
+            verifier_mouvement_compatible(lot, type_mvt)
             ancien_statut = lot.statut
             obj = serializer.save(
                 lot=lot, created_at=now, sync_statut='SYNCED', acteur_utilisateur_id=user.id,
                 type_mouvement=type_mvt, date_mouvement=date_mouvement, unite=unite,
             )
-            appliquer_mouvement_sur_lot(lot, type_mvt)
+            appliquer_mouvement_sur_lot(lot, type_mvt, user)
         _journaliser(
             self.request, 'CREATE', 'mouvements', obj.id,
             nouvelles={'type_mouvement': type_mvt, 'lot_id': str(lot.id), 'statut_lot': lot.statut},
         )
         if lot.statut != ancien_statut:
+            mode = 'AGENT' if _est_agent(user) else 'PROPRIETAIRE'
             _journaliser(self.request, 'CHANGE_STATUT', 'lots', lot.id,
-                         anciennes={'statut': ancien_statut}, nouvelles={'statut': lot.statut})
-            _notifier_statut_lot(lot, ancien_statut, auteur_id=user.id)
+                         anciennes={'statut': ancien_statut}, nouvelles={'statut': lot.statut, 'mode': mode})
+            _notifier_statut_lot(lot, ancien_statut, auteur_id=user.id, mode=mode)
 
 
 class TypeCertificationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1513,7 +1956,112 @@ class CertificationViewSet(viewsets.ModelViewSet):
     permission_classes = [CanManageCertifications]
     serializer_class = CertificationSerializer
     filterset_class = CertificationFilter
-    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def destroy(self, request, *args, **kwargs):
+        # DELETE n'est ouvert que pour retirer une pièce (route pieces/<id>/) : une demande ne se supprime pas.
+        raise PermissionDenied('Une demande de certification ne peut pas être supprimée.')
+
+    @staticmethod
+    def _pieces_recues(request) -> list[tuple]:
+        """Associe chaque fichier ``pieces`` à son intitulé ``intitules`` (même ordre) et les contrôle tous."""
+        fichiers = request.FILES.getlist('pieces')
+        if not fichiers:
+            return []
+        if hasattr(request.data, 'getlist'):
+            intitules = request.data.getlist('intitules')
+        else:
+            intitules = list(request.data.get('intitules') or [])
+        return [
+            (fichier, controler_piece_justificative(fichier, intitules[i] if i < len(intitules) else '', i + 1))
+            for i, fichier in enumerate(fichiers)
+        ]
+
+    @staticmethod
+    def _enregistrer_pieces(cert, pieces, user) -> list:
+        """Écrit les pièces dans le stockage sécurisé ; en cas d'échec, aucun fichier orphelin ne subsiste."""
+        from .models import PieceCertification
+
+        ecrits, crees = [], []
+        try:
+            with transaction.atomic():
+                for fichier, intitule in pieces:
+                    piece_id = uuid.uuid4()
+                    chemin = enregistrer_document(fichier, f'certifications/{cert.id}', piece_id)
+                    ecrits.append(chemin)
+                    ext = Path(chemin).suffix.lower()
+                    crees.append(PieceCertification.objects.create(
+                        id=piece_id, certification=cert, intitule=intitule, chemin=chemin,
+                        nom_original=Path(fichier.name or '').name[:255] or None,
+                        type_mime=PIECES_TYPES_MIME.get(ext), taille_octets=fichier.size,
+                        depose_par_id=_user_id(user), created_at=timezone.now(),
+                    ))
+        except Exception:
+            for chemin in ecrits:
+                (Path(settings.MEDIA_ROOT) / chemin).unlink(missing_ok=True)
+                media_store.supprimer(chemin)
+            raise
+        return crees
+
+    def _verifier_demandeur(self, cert) -> None:
+        """Le dossier est complété par le demandeur (ou l'administrateur) tant qu'il n'est pas traité."""
+        user = self.request.user
+        if user.role != Utilisateur.Role.ADMINISTRATEUR:
+            est_producteur = bool(cert.producteur_id and cert.producteur.utilisateur_id == user.id)
+            est_coop = (
+                user.role == Utilisateur.Role.COOPERATIVE and cert.producteur_id
+                and cert.producteur.cooperative_id in set(_cooperatives_du_compte(user).values_list('id', flat=True))
+            )
+            if not (est_producteur or est_coop):
+                raise PermissionDenied('Seul le demandeur ou un administrateur peut gérer les pièces de ce dossier.')
+        if cert.statut not in ('DEMANDEE', 'EN_COURS'):
+            raise ValidationError({'pieces': 'Cette demande a déjà été traitée : ses pièces ne sont plus modifiables.'})
+
+    def create(self, request, *args, **kwargs):
+        pieces = self._pieces_recues(request)
+        if len(pieces) > PIECES_CERTIFICATION_MAX:
+            raise ValidationError({'pieces': f'{PIECES_CERTIFICATION_MAX} documents au maximum par demande.'})
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            self.perform_create(serializer)
+            if pieces:
+                self._enregistrer_pieces(serializer.instance, pieces, request.user)
+        cert = self.get_queryset().get(pk=serializer.instance.pk)
+        return Response(self.get_serializer(cert).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='pieces')
+    def ajouter_pieces(self, request, pk=None):
+        """Ajoute une ou plusieurs pièces (``pieces`` + ``intitules``) à une demande non traitée."""
+        cert = self.get_object()
+        self._verifier_demandeur(cert)
+        pieces = self._pieces_recues(request)
+        if not pieces:
+            raise ValidationError({'pieces': 'Sélectionnez au moins un document (PDF, JPG ou PNG, 8 Mo maximum).'})
+        if cert.pieces.count() + len(pieces) > PIECES_CERTIFICATION_MAX:
+            raise ValidationError({'pieces': f'{PIECES_CERTIFICATION_MAX} documents au maximum par demande.'})
+        crees = self._enregistrer_pieces(cert, pieces, request.user)
+        _journaliser(request, 'ADD_DOCUMENT', 'certifications', cert.id,
+                     nouvelles={'pieces': [p.intitule for p in crees]})
+        cert = self.get_queryset().get(pk=cert.pk)
+        return Response(self.get_serializer(cert).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path=r'pieces/(?P<piece_id>[0-9a-fA-F-]{36})')
+    def retirer_piece(self, request, pk=None, piece_id=None):
+        cert = self.get_object()
+        self._verifier_demandeur(cert)
+        piece = cert.pieces.filter(pk=piece_id).first()
+        if piece is None:
+            raise NotFound('Ce document ne fait pas partie du dossier.')
+        chemin = piece.chemin
+        piece.delete()
+        (Path(settings.MEDIA_ROOT) / chemin).unlink(missing_ok=True)
+        media_store.supprimer(chemin)
+        _journaliser(request, 'DELETE_DOCUMENT', 'certifications', cert.id,
+                     anciennes={'piece': piece.intitule})
+        cert = self.get_queryset().get(pk=cert.pk)
+        return Response(self.get_serializer(cert).data)
 
     def list(self, request, *args, **kwargs):
         _expirer_certifications_echues()
@@ -1524,7 +2072,7 @@ class CertificationViewSet(viewsets.ModelViewSet):
         return super().retrieve(request, *args, **kwargs)
 
     def get_queryset(self):
-        qs = Certification.objects.select_related('type_certification', 'lot', 'producteur')
+        qs = Certification.objects.select_related('type_certification', 'lot', 'producteur').prefetch_related('pieces')
         user = self.request.user
         if user.role in (Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE, Utilisateur.Role.AGENT_FORESTIER):
             return qs
@@ -1597,7 +2145,7 @@ class CertificationViewSet(viewsets.ModelViewSet):
         _journaliser(self.request, 'CREATE', 'certifications', cert.id,
                      nouvelles={'type': cert.type_certification.code, 'producteur_id': str(prod.id)})
         _notifier_validateurs(
-            ROLES_GESTION_ADHESIONS, 'Nouvelle demande de certification',
+            (Utilisateur.Role.ADMINISTRATEUR,), 'Nouvelle demande de certification',
             f'{prod.prenoms} {prod.nom} demande la certification « {cert.type_certification.libelle} ».',
             certification_id=str(cert.id),
         )
@@ -1605,7 +2153,7 @@ class CertificationViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         user = self.request.user
         instance = serializer.instance
-        if user.role not in ROLES_GESTION_ADHESIONS and instance.statut != 'DEMANDEE':
+        if user.role != Utilisateur.Role.ADMINISTRATEUR and instance.statut != 'DEMANDEE':
             raise ValidationError({
                 'detail': 'Cette demande est déjà en cours de traitement : elle n’est plus modifiable.',
             })
@@ -1717,27 +2265,30 @@ class CertificationViewSet(viewsets.ModelViewSet):
         return Response(CertificationSerializer(cert, context={'request': request}).data)
 
 
-class LotVerifyView(generics.RetrieveAPIView):
-    """Vérification publique QR — sans authentification."""
+class LotVerifyView(APIView):
+    """Vérification publique QR, sans authentification : lots validés ou commercialisés.
+
+    Un brouillon n'a pas encore été contrôlé : il n'est pas vérifiable (404 ``LOT_NON_VALIDE``).
+    """
     permission_classes = [AllowAny]
-    serializer_class = LotVerifySerializer
-    lookup_field = 'uuid_public'
 
-    def get_queryset(self):
-        from traceability.public_views import STATUTS_LOTS_PUBLICS
-        return Lot.objects.filter(
-            deleted_at__isnull=True, statut__in=STATUTS_LOTS_PUBLICS,
-            producteur__statut='ACTIF', producteur__deleted_at__isnull=True,
-        ).select_related(
-            'produit', 'producteur', 'producteur__province'
-        ).prefetch_related('mouvements')
+    def get(self, request, uuid_public=None):
+        from traceability.public_views import lot_public_complet, lots_complets_qs
 
-    def retrieve(self, request, *args, **kwargs):
         try:
-            lot = self.get_object()
-        except Http404:
-            return Response({'detail': 'Lot introuvable ou invalide.'}, status=404)
-        data = self.get_serializer(lot).data
-        data['authenticite'] = 'VERIFIE'
-        data['mouvements_count'] = lot.mouvements.count()
-        return Response(data)
+            lot = lots_complets_qs().get(uuid_public=uuid_public)
+        except (Lot.DoesNotExist, ValueError, TypeError):
+            return Response({
+                'detail': 'Aucun lot ne correspond à ce QR code. Vérifiez le lien ou scannez à nouveau l’étiquette.',
+                'code': 'LOT_INTROUVABLE',
+            }, status=404)
+        if lot.statut not in STATUTS_LOT_VERIFIABLES:
+            return Response({
+                'detail': (
+                    'Ce lot est encore en brouillon : il n’a pas été validé par une autorité ou un '
+                    'producteur certifié. Il ne peut pas encore être vérifié publiquement.'
+                ),
+                'code': 'LOT_NON_VALIDE',
+                'code_lot': lot.code_lot,
+            }, status=404)
+        return Response(lot_public_complet(lot, request))

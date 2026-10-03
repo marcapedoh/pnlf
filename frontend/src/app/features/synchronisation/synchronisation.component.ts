@@ -74,16 +74,16 @@ export class SynchronisationComponent {
     this.appareilsError.set('');
     this.syncService.appareils().subscribe({
       next: (res) => this.appareils.set(unwrapList(res)),
-      error: () => this.appareilsError.set('Impossible de charger la liste des appareils.'),
+      error: (err) => this.appareilsError.set(`Impossible de charger la liste des appareils. ${toApiError(err).message}`),
     });
     this.syncService.conflits().subscribe({
       next: (res) => {
         this.conflits.set(unwrapList(res));
         this.loading.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.loadError.set('Impossible de charger les conflits de synchronisation.');
+        this.loadError.set(`Impossible de charger les conflits de synchronisation. ${toApiError(err).message}`);
       },
     });
   }
@@ -119,9 +119,9 @@ export class SynchronisationComponent {
           this.toast.success('Appareil enregistré');
           this.reload();
         },
-        error: () => {
+        error: (err) => {
           this.registering.set(false);
-          this.toast.error('Impossible d’enregistrer cet appareil.');
+          this.toast.error('Impossible d’enregistrer cet appareil', toApiError(err).message);
         },
       });
   }

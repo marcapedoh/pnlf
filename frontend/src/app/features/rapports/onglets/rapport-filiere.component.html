@@ -1,0 +1,136 @@
+@if (erreur()) {
+  <pnlf-alert tone="error" title="Impossible de charger les statistiques de la filière" class="onglet__alerte">
+    {{ erreur() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="charger()">Réessayer</button>
+  </pnlf-alert>
+}
+
+<div class="onglet__entete">
+  <div class="onglet__filtres">
+    <label>
+      Province
+      <select class="pnlf-select" [value]="province()" (change)="filtrer('province', $event)">
+        <option value="">Toutes les provinces</option>
+        @for (p of provinces(); track p.id) {
+          <option [value]="p.id" [selected]="p.id === province()">{{ p.nom }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      Produit
+      <select class="pnlf-select" [value]="produit()" (change)="filtrer('produit', $event)">
+        <option value="">Tous les produits</option>
+        @for (p of produits(); track p.id) {
+          <option [value]="p.id" [selected]="p.id === produit()">{{ p.nom }}</option>
+        }
+      </select>
+    </label>
+  </div>
+  @if (peutExporter()) {
+    <app-export-rapport rapport="filiere" titre="Statistiques de la filière" nomFichier="pfnl-filiere" [filtres]="filtresFiliere()" />
+  }
+</div>
+<p class="onglet__note">
+  @if (donnees(); as d) {
+    Lots collectés {{ d.periode.libelle }} (date de collecte), selon le cycle Brouillon, Validé, Commercialisé.
+  }
+</p>
+
+<div class="onglet__kpis">
+  <pnlf-kpi-card label="Lots collectés" icon="package" tone="green" [loading]="chargement()" [value]="donnees()?.totaux?.lots ?? 0" hint="Sur la période et les filtres choisis" />
+  <pnlf-kpi-card label="Brouillons" icon="edit" tone="gold" [loading]="chargement()" [value]="donnees()?.totaux?.lots_brouillon ?? 0" [hint]="part(donnees()?.totaux?.lots_brouillon ?? 0, donnees()?.totaux?.lots ?? 0)" />
+  <pnlf-kpi-card label="Validés" icon="shield-check" tone="green" [loading]="chargement()" [value]="donnees()?.totaux?.lots_valide ?? 0" [hint]="part(donnees()?.totaux?.lots_valide ?? 0, donnees()?.totaux?.lots ?? 0)" />
+  <pnlf-kpi-card label="Commercialisés" icon="shopping-bag" tone="gold" [loading]="chargement()" [value]="donnees()?.totaux?.lots_commercialise ?? 0" [hint]="part(donnees()?.totaux?.lots_commercialise ?? 0, donnees()?.totaux?.lots ?? 0)" />
+  <pnlf-kpi-card label="Producteurs actifs" icon="users" tone="blue" [loading]="chargement()" [value]="donnees()?.totaux?.producteurs_actifs ?? 0" hint="Fiches validées à ce jour" />
+  <pnlf-kpi-card label="Coopératives actives" icon="building" tone="neutral" [loading]="chargement()" [value]="donnees()?.totaux?.cooperatives_actives ?? 0" />
+  <pnlf-kpi-card label="Certifications valides" icon="award" tone="green" [loading]="chargement()" [value]="donnees()?.totaux?.certifications_valides ?? 0" hint="Obtenues et non expirées" />
+  <pnlf-kpi-card label="Annonces publiées" icon="shopping-bag" tone="blue" [loading]="chargement()" [value]="donnees()?.totaux?.annonces_publiees ?? 0" hint="Créées sur la période" />
+</div>
+
+<div class="onglet__grille onglet__grille--large">
+  <pnlf-card title="Lots collectés par période" subtitle="Empilés selon le statut actuel du lot">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="300px" radius="12px" />
+    } @else if (graphEvolution(); as g) {
+      <app-graphique [options]="g" description="Histogramme empilé des lots collectés par période et par statut" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Répartition par statut">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="280px" radius="12px" />
+    } @else if (graphStatuts(); as g) {
+      <app-graphique [options]="g" description="Répartition des lots entre brouillon, validé et commercialisé" />
+    }
+  </pnlf-card>
+</div>
+
+<div class="onglet__grille">
+  <pnlf-card title="Produits les plus collectés" subtitle="10 premiers produits en nombre de lots">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="260px" radius="12px" />
+    } @else if (graphProduits(); as g) {
+      <app-graphique [options]="g" description="Classement des produits par nombre de lots collectés" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Lots par province">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="260px" radius="12px" />
+    } @else if (graphProvinces(); as g) {
+      <app-graphique [options]="g" description="Nombre de lots collectés par province" />
+    }
+  </pnlf-card>
+</div>
+
+<pnlf-card title="Détail par produit" subtitle="Quantités cumulées et répartition par statut">
+  @if (chargement() && !donnees()) {
+    <pnlf-skeleton height="200px" radius="12px" />
+  } @else if (!donnees()?.par_produit?.length) {
+    <p class="onglet__vide">Aucun lot collecté sur la période et les filtres choisis.</p>
+  } @else {
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+      <table class="pnlf-table">
+        <caption class="pnlf-visually-hidden">Lots par produit et par statut</caption>
+        <thead>
+          <tr>
+            <th scope="col">Produit</th>
+            <th scope="col" class="onglet__nombre">Lots</th>
+            <th scope="col" class="onglet__nombre">Quantité</th>
+            <th scope="col" class="onglet__nombre">Brouillon</th>
+            <th scope="col" class="onglet__nombre">Validé</th>
+            <th scope="col" class="onglet__nombre">Commercialisé</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of donnees()!.par_produit; track p.produit + p.unite) {
+            <tr>
+              <td data-label="Produit">{{ p.produit }}</td>
+              <td data-label="Lots" class="onglet__nombre">{{ p.lots }}</td>
+              <td data-label="Quantité" class="onglet__nombre">{{ p.quantite | pnlfQuantite: p.unite }}</td>
+              <td data-label="Brouillon" class="onglet__nombre">{{ p.brouillon }}</td>
+              <td data-label="Validé" class="onglet__nombre">{{ p.valide }}</td>
+              <td data-label="Commercialisé" class="onglet__nombre">{{ p.commercialise }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+  <a pnlfButton variant="ghost" routerLink="/app/lots">Ouvrir la liste des lots</a>
+</pnlf-card>
+
+@if (peutExporter()) {
+  <pnlf-card title="Export détaillé des lots" subtitle="Liste complète des lots de la période, avec la province, le produit et la recherche ci-dessus">
+    <div class="onglet__entete">
+      <label class="onglet__filtres">
+        <span>Statut des lots exportés</span>
+        <select class="pnlf-select" [value]="statut()" (change)="choisirStatut($event)">
+          <option value="">Tous les statuts</option>
+          @for (s of statutsLot; track s) {
+            <option [value]="s" [selected]="s === statut()">{{ libelleStatut(s) }}</option>
+          }
+        </select>
+      </label>
+      <app-export-rapport rapport="lots" titre="Export des lots" nomFichier="pfnl-lots" [filtres]="filtresLots()" />
+    </div>
+  </pnlf-card>
+}

@@ -16,8 +16,15 @@
       </div>
     </div>
     <div class="pnlf-page-header__actions">
-      @if (peutPublier()) {
-        <button pnlfButton type="button" variant="primary" (click)="confirmPublier.set(true)">Publier le lot</button>
+      @if (peutValider()) {
+        <button pnlfButton type="button" variant="primary" (click)="confirmValider.set(true)">
+          <pnlf-icon name="shield-check" [size]="16" /> Valider le lot
+        </button>
+      }
+      @if (peutCommercialiser()) {
+        <button pnlfButton type="button" variant="primary" (click)="confirmCommercialiser.set(true)">
+          <pnlf-icon name="shopping-bag" [size]="16" /> Déclarer commercialisé
+        </button>
       }
       @if (peutSupprimer()) {
         <button pnlfButton type="button" variant="outline" (click)="confirmSuppression.set(true)">Supprimer le lot</button>
@@ -25,9 +32,48 @@
       <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
     </div>
   </div>
+
+  <ol class="lot-cycle" aria-label="Cycle de vie du lot">
+    @for (etape of etapesCycle; track etape; let i = $index) {
+      <li class="lot-cycle__etape" [class]="'lot-cycle__etape lot-cycle__etape--' + etatEtape(etape)" [attr.aria-current]="etatEtape(etape) === 'courant' ? 'step' : null">
+        <span class="lot-cycle__num" aria-hidden="true">
+          @if (etatEtape(etape) === 'fait') { <pnlf-icon name="check" [size]="14" /> } @else { {{ i + 1 }} }
+        </span>
+        <span class="lot-cycle__texte">
+          <strong>{{ statutLabels[etape] }}</strong>
+          <small>{{ statutAides[etape] }}</small>
+        </span>
+      </li>
+    }
+  </ol>
+
   @if (l.statut === 'BROUILLON') {
-    <pnlf-alert tone="info" title="Brouillon non publié">
-      Ce lot n’est pas encore déclaré officiellement. Publiez-le pour permettre l’ajout d’étapes de traçabilité.
+    @if (peutValider()) {
+      <pnlf-alert tone="info" [title]="autoValidation() ? 'Vous pouvez valider ce lot vous-même' : 'Lot en attente de validation'">
+        @if (autoValidation()) {
+          Votre certification active vous autorise à valider ce lot. Vérifiez les informations, puis cliquez sur « Valider le lot ».
+        } @else {
+          Contrôlez les informations du lot, puis cliquez sur « Valider le lot » pour le rendre vérifiable publiquement.
+        }
+      </pnlf-alert>
+    } @else if (droits()?.motif_validation) {
+      <pnlf-alert tone="info" title="Comment faire valider ce lot ?">
+        {{ droits()?.motif_validation }}
+        <a class="pnlf-table__link" routerLink="/app/certifications">Demander une certification</a>
+      </pnlf-alert>
+    } @else {
+      <pnlf-alert tone="info" title="Lot en attente de validation">
+        Ce lot n’est pas encore vérifiable publiquement : il doit être validé par une autorité habilitée.
+      </pnlf-alert>
+    }
+  } @else if (l.validation; as v) {
+    <pnlf-alert tone="success" [title]="v.libelle">
+      @if (v.date) { Validé le {{ v.date | pnlfDate: 'datetime' }}. }
+      @if (l.statut === 'COMMERCIALISE') {
+        Ce lot est commercialisé : il n’apparaît plus dans les listes publiques mais son QR code reste vérifiable.
+      } @else {
+        Le lot est visible dans l’annuaire et vérifiable par son QR code.
+      }
     </pnlf-alert>
   }
 
@@ -87,7 +133,7 @@
         }
       </pnlf-card>
 
-      <pnlf-card title="Frise de traçabilité" subtitle="Historique chronologique des mouvements du lot">
+      <pnlf-card title="Frise de traçabilité" subtitle="Collecte, déclaration, étapes, validation et commercialisation">
         @if (peutAjouterEtape()) {
           <div class="lot-mvt-actions">
             <button pnlfButton type="button" variant="outline" size="sm" (click)="ouvrirMouvementForm()" [attr.aria-expanded]="showMouvementForm()" aria-controls="lot-mvt-form">
@@ -103,10 +149,15 @@
             <label>
               Type d’étape
               <select class="pnlf-select" [ngModel]="mouvementType()" (ngModelChange)="mouvementType.set($event)" name="type">
-                @for (t of mouvementTypes; track t.value) {
+                @for (t of mouvementTypes(); track t.value) {
                   <option [value]="t.value">{{ t.label }}</option>
                 }
               </select>
+              @if (l.statut === 'BROUILLON') {
+                <small class="lot-mvt-form__aide">Vente et exportation seront proposées une fois le lot validé.</small>
+              } @else if (l.statut === 'VALIDE') {
+                <small class="lot-mvt-form__aide">Une vente ou une exportation fera passer le lot au statut « Commercialisé ».</small>
+              }
             </label>
             <label>
               Date et heure (heure locale)
@@ -127,30 +178,14 @@
             <button pnlfButton type="submit" variant="primary" size="sm" [loading]="savingMouvement()">Enregistrer l’étape</button>
           </form>
         }
-        @if (l.mouvements.length === 0) {
-          <pnlf-empty-state icon="clock" title="Aucun mouvement enregistré" description="Les étapes de collecte, transfert et transformation apparaîtront ici.">
+        @if (l.frise?.length) {
+          <app-frise-lot [evenements]="l.frise ?? []" mode="interne" />
+        } @else {
+          <pnlf-empty-state icon="clock" title="Aucun événement enregistré" description="Les étapes de collecte, transport et transformation apparaîtront ici.">
             @if (peutAjouterEtape() && !showMouvementForm()) {
               <button pnlfButton type="button" variant="primary" (click)="ouvrirMouvementForm()">Enregistrer une étape</button>
             }
           </pnlf-empty-state>
-        } @else {
-          <ol class="lot-timeline">
-            @for (m of l.mouvements; track m.id) {
-              <li class="lot-timeline__item">
-                <span class="lot-timeline__dot" aria-hidden="true"></span>
-                <div class="lot-timeline__content">
-                  <p class="lot-timeline__type">{{ typeMouvementLabels[m.type_mouvement] }}</p>
-                  <p class="lot-timeline__meta">
-                    <time [attr.datetime]="m.date_mouvement">{{ m.date_mouvement | pnlfDate: 'datetime' }}</time>
-                    @if (m.lieu_libelle) { · {{ m.lieu_libelle }} }
-                  </p>
-                  @if (m.commentaire) {
-                    <p class="lot-timeline__comment">{{ m.commentaire }}</p>
-                  }
-                </div>
-              </li>
-            }
-          </ol>
         }
       </pnlf-card>
     </div>
@@ -167,29 +202,15 @@
           <button pnlfButton variant="ghost" size="sm" [fullWidth]="true" (click)="copyVerifyLink(l.uuid_public)">Copier le lien public</button>
         </div>
         <p class="lot-detail__qr-hint">
-          Toute personne scannant ce code accède à la fiche d'authenticité publique du lot, sans
-          connexion requise.
+          @if (l.statut === 'BROUILLON') {
+            Ce QR code deviendra vérifiable dès la validation du lot. D’ici là, la page publique indique
+            que le lot est en attente de validation.
+          } @else {
+            Toute personne scannant ce code accède à la fiche d'authenticité publique du lot, sans
+            connexion requise.
+          }
         </p>
       </pnlf-card>
-
-      @if (canChangeStatus) {
-        <pnlf-card title="Faire évoluer le statut">
-          @if (nextStatusOptions().length === 0) {
-            <p class="text-sm text-muted">Ce lot a atteint son statut final : aucun changement n'est possible.</p>
-          } @else {
-            <label class="pnlf-visually-hidden" for="lot-next-statut">Nouveau statut</label>
-            <select id="lot-next-statut" class="pnlf-select" style="width:100%; margin-bottom: 0.75rem;" [ngModel]="nextStatut()" (ngModelChange)="nextStatut.set($event)">
-              <option value="" disabled>Choisir le nouveau statut…</option>
-              @for (s of nextStatusOptions(); track s) {
-                <option [value]="s">{{ statutLabels[s] }}</option>
-              }
-            </select>
-            <button pnlfButton variant="primary" size="sm" [fullWidth]="true" [disabled]="!nextStatut()" (click)="demanderChangementStatut()">
-              Appliquer le changement
-            </button>
-          }
-        </pnlf-card>
-      }
     </div>
   </div>
 } @else if (loadError()) {
@@ -202,23 +223,25 @@
 }
 
 <pnlf-confirm-dialog
-  [open]="confirmStatut()"
-  title="Changer le statut du lot ?"
-  [message]="confirmStatutMessage()"
-  [confirmLabel]="nextStatut() === 'ANNULE' ? 'Annuler le lot' : 'Confirmer le changement'"
-  [danger]="nextStatut() === 'ANNULE' || nextStatut() === 'ARCHIVE'"
-  [loading]="changingStatus()"
-  (confirmed)="changerStatut()"
-  (cancelled)="confirmStatut.set(false)"
+  [open]="confirmValider()"
+  title="Valider ce lot ?"
+  [message]="confirmValiderMessage()"
+  confirmLabel="Valider le lot"
+  [loading]="validating()"
+  (confirmed)="valider()"
+  (cancelled)="confirmValider.set(false)"
 />
 <pnlf-confirm-dialog
-  [open]="confirmPublier()"
-  title="Publier ce lot ?"
-  message="Le brouillon passera au statut « Déclaré » : il sera visible des agents et l’étape de collecte sera enregistrée."
-  confirmLabel="Publier le lot"
-  [loading]="publishing()"
-  (confirmed)="publier()"
-  (cancelled)="confirmPublier.set(false)"
+  [open]="confirmCommercialiser()"
+  title="Déclarer ce lot commercialisé ?"
+  [message]="confirmCommercialiserMessage()"
+  confirmLabel="Déclarer commercialisé"
+  inputLabel="Précision (facultatif)"
+  inputPlaceholder="Ex. vendu au marché de Mont-Bouët, facture n° 0012"
+  inputHint="Visible uniquement dans l’historique interne du lot."
+  [loading]="commercialising()"
+  (confirmed)="commercialiser($event)"
+  (cancelled)="confirmCommercialiser.set(false)"
 />
 <pnlf-confirm-dialog
   [open]="confirmSuppression()"

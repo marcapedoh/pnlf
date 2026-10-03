@@ -177,43 +177,48 @@
   color: var(--text-secondary);
 }
 
-.trace {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.panel__vide {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
 }
 
-.trace li {
-  position: relative;
+.infos {
   display: grid;
-  grid-template-columns: 16px 1fr;
-  gap: var(--space-3);
-  padding-bottom: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
 
-  &:not(.is-last)::before {
-    content: '';
-    position: absolute;
-    left: 7px;
-    top: 16px;
-    bottom: 0;
-    width: 2px;
-    background: var(--pnlf-green-200);
+  dt {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  dd {
+    margin: 2px 0 0;
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
   }
 }
 
-.trace__dot {
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  border-radius: 50%;
-  background: var(--pnlf-gold-500);
-  border: 3px solid var(--pnlf-green-100);
-  box-shadow: 0 0 0 2px var(--pnlf-green-600);
-}
-
-.trace__body {
+.certifs {
   display: grid;
-  gap: 2px;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  li {
+    display: grid;
+    gap: 2px;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--pnlf-green-50);
+    border-left: 3px solid var(--pnlf-gold-500);
+  }
 
   strong {
     font-size: var(--fs-sm);
@@ -222,8 +227,15 @@
 
   span {
     font-size: var(--fs-xs);
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
+}
+
+.lot-fiche__error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
 }
 
 .offer {
@@ -439,11 +451,25 @@
 
 @media print {
   .lot-fiche__back,
-  .offer__actions {
-    display: none;
+  .offer__actions,
+  .no-print,
+  .gallery__thumbs {
+    display: none !important;
+  }
+
+  .lot-fiche__layout {
+    grid-template-columns: 1fr;
   }
 
   .lot-fiche__aside {
     position: static;
+  }
+
+  .gallery,
+  .panel,
+  .offer,
+  .seller {
+    box-shadow: none;
+    break-inside: avoid;
   }
 }

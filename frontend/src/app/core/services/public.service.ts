@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { AnnoncesFiltres } from '../models/annonce.model';
 import {
   ContactPublicPayload,
   InscriptionPubliquePayload,
@@ -63,14 +64,7 @@ export class PublicService {
     return this.http.get<PublicLotDetail>(`${this.base}/lots/${id}/`);
   }
 
-  offres(params: {
-    q?: string;
-    type_annonce?: string;
-    province?: string;
-    produit?: string;
-    page?: number;
-    page_size?: number;
-  } = {}): Observable<PublicOffresResponse> {
+  offres(params: AnnoncesFiltres = {}): Observable<PublicOffresResponse> {
     const httpParams: Record<string, string> = {};
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') httpParams[key] = String(value);

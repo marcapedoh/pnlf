@@ -3,6 +3,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { filter } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { VisitesService } from '../../core/services/visites.service';
 import { IconComponent } from '../../design-system/icon/icon.component';
 
 @Component({
@@ -19,8 +20,10 @@ export class PublicShellComponent {
   readonly menuOpen = signal(false);
 
   constructor() {
-    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
+    const visites = inject(VisitesService);
+    this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd)).subscribe((e) => {
       this.menuOpen.set(false);
+      visites.enregistrer(e.urlAfterRedirects);
     });
   }
 

@@ -34,6 +34,7 @@
     <form [formGroup]="form" (ngSubmit)="submit()" class="producteur-form" novalidate>
       <p class="text-sm text-muted">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
       <div class="producteur-form__grid">
+        <h2 class="producteur-form__section">Identité et contact</h2>
         <pnlf-text-field label="Nom" formControlName="nom" [required]="true" autocomplete="family-name" [errorMessage]="err('nom', 'Le nom est requis.')" />
         <pnlf-text-field label="Prénoms" formControlName="prenoms" [required]="true" autocomplete="given-name" [errorMessage]="err('prenoms', 'Les prénoms sont requis.')" />
 
@@ -58,6 +59,25 @@
           <pnlf-text-field label="Adresse e-mail" type="email" formControlName="email" autocomplete="email" [errorMessage]="err('email')" />
         }
 
+        @if (isLisible('type_piece_identite')) {
+          <h2 class="producteur-form__section">Pièce d'identité</h2>
+          <pnlf-select-field
+            label="Type de pièce"
+            formControlName="type_piece_identite"
+            [options]="typePieceOptions"
+            placeholder="Non renseigné"
+            [errorMessage]="err('type_piece_identite')"
+          />
+          <pnlf-text-field
+            label="Numéro de la pièce"
+            formControlName="numero_piece"
+            autocomplete="off"
+            hint="Le type et le numéro se renseignent ensemble."
+            [errorMessage]="err('numero_piece')"
+          />
+        }
+
+        <h2 class="producteur-form__section">Rattachement</h2>
         <pnlf-text-field label="Communauté / Village d'usage" formControlName="communaute" />
         @if (canEditCooperative) {
           <pnlf-select-field
@@ -76,6 +96,7 @@
           </div>
         }
 
+        <h2 class="producteur-form__section">Localisation</h2>
         <pnlf-select-field
           label="Province"
           formControlName="province"
@@ -97,12 +118,28 @@
           [placeholder]="villages().length ? 'Sélectionner…' : 'Sélectionner un département d’abord'"
         />
 
-        <div class="lot-form__field" style="grid-column: 1 / -1;">
-          <button pnlfButton type="button" variant="ghost" size="sm" (click)="useCurrentPosition()" [disabled]="locatingGps()">
-            {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position actuelle' }}
+        <div class="producteur-form__gps">
+          <p class="text-sm text-muted">
+            Les coordonnées GPS situent le lieu de production ou de collecte sur la carte de traçabilité.
+            Le bouton ci-dessous demande au navigateur l'autorisation d'utiliser la position de cet appareil :
+            utilisez-le uniquement si vous vous trouvez sur place. Sinon, saisissez les coordonnées.
+          </p>
+          <button pnlfButton type="button" variant="outline" size="sm" (click)="useCurrentPosition()" [loading]="locatingGps()" [disabled]="locatingGps()">
+            {{ locatingGps() ? 'Localisation en cours…' : 'Utiliser ma position' }}
           </button>
+          @if (locatingGps()) {
+            <p class="text-sm text-muted" role="status">Recherche de votre position, cela peut prendre quelques secondes…</p>
+          }
+          @if (gpsPrecision() !== null && !gpsError()) {
+            <p class="text-sm producteur-form__gps-ok" role="status">
+              Position enregistrée dans le formulaire, précision d'environ {{ gpsPrecision() }} m.
+              @if (gpsPrecision()! > 100) {
+                Précision faible : vérifiez les coordonnées ou réessayez à l'extérieur.
+              }
+            </p>
+          }
           @if (gpsError()) {
-            <p class="text-sm text-muted" role="alert">{{ gpsError() }}</p>
+            <p class="text-sm producteur-form__gps-erreur" role="alert">{{ gpsError() }}</p>
           }
         </div>
         <pnlf-text-field
@@ -123,6 +160,129 @@
         />
       </div>
 
+      <section class="producteur-form__bloc" aria-labelledby="titre-produits">
+        <h2 class="producteur-form__section" id="titre-produits">Produits exploités</h2>
+        <p class="text-sm text-muted">
+          Cochez les produits forestiers non ligneux exploités par cet acteur (20 au plus). Le premier produit de la liste est le produit principal.
+        </p>
+        @if (nomsProduits().length) {
+          <ul class="producteur-form__chips" aria-label="Produits sélectionnés">
+            @for (p of nomsProduits(); track p.id; let first = $first) {
+              <li class="producteur-form__chip" [class.producteur-form__chip--principal]="first">
+                <span>{{ p.nom }}</span>
+                @if (first) {
+                  <small>principal</small>
+                } @else {
+                  <button type="button" class="producteur-form__chip-action" (click)="definirPrincipal(p.id)" [attr.aria-label]="'Définir ' + p.nom + ' comme produit principal'">Principal</button>
+                }
+                <button type="button" class="producteur-form__chip-action" (click)="basculerProduit(p.id)" [attr.aria-label]="'Retirer ' + p.nom">Retirer</button>
+              </li>
+            }
+          </ul>
+        }
+        <input
+          type="search"
+          class="producteur-form__filtre"
+          placeholder="Filtrer les produits…"
+          aria-label="Filtrer les produits"
+          [value]="filtreProduits()"
+          (input)="filtreProduits.set($any($event.target).value)"
+        />
+        <div class="producteur-form__produits" role="group" aria-label="Référentiel des produits">
+          @for (p of produitsFiltres(); track p.id) {
+            <label class="producteur-form__produit">
+              <input type="checkbox" [checked]="estProduitSelectionne(p.id)" (change)="basculerProduit(p.id)" />
+              <span>{{ p.nom }}</span>
+            </label>
+          } @empty {
+            <p class="text-sm text-muted">Aucun produit ne correspond à ce filtre.</p>
+          }
+        </div>
+        @if (err('produits')) {
+          <p class="text-sm producteur-form__gps-erreur" role="alert">{{ err('produits') }}</p>
+        }
+      </section>
+
+      <section class="producteur-form__bloc" aria-labelledby="titre-photo">
+        <h2 class="producteur-form__section" id="titre-photo">Photo d'identité</h2>
+        <div class="producteur-form__photo">
+          <div class="producteur-form__photo-cadre">
+            @if (photoApercu() || photoActuelle()) {
+              <img [src]="photoApercu() || photoActuelle()" alt="Photo d'identité de l'acteur" />
+            } @else {
+              <span aria-hidden="true">{{ (form.controls.prenoms.value.charAt(0) + form.controls.nom.value.charAt(0)).toUpperCase() || 'PF' }}</span>
+            }
+          </div>
+          <div class="producteur-form__photo-actions">
+            <p class="text-sm text-muted">Photo de face, bien éclairée. JPG, PNG ou WebP, 5 Mo maximum. Elle apparaît sur la fiche et la fiche PDF.</p>
+            <div class="producteur-form__ligne-actions">
+              <label class="producteur-form__fichier">
+                <input type="file" accept="image/jpeg,image/png,image/webp" (change)="choisirPhoto($event)" />
+                {{ photoActuelle() || photoFichier() ? 'Changer la photo' : 'Choisir une photo' }}
+              </label>
+              @if (photoFichier()) {
+                <button pnlfButton type="button" variant="ghost" size="sm" (click)="retirerPhotoChoisie()">Annuler ce choix</button>
+              }
+            </div>
+            @if (photoFichier()) {
+              <small class="text-muted">Nouvelle photo : {{ photoFichier()!.name }}, envoyée à l'enregistrement.</small>
+            }
+            @if (photoErreur()) {
+              <p class="text-sm producteur-form__gps-erreur" role="alert">{{ photoErreur() }}</p>
+            }
+          </div>
+        </div>
+      </section>
+
+      @if (peutGererDocuments()) {
+        <section class="producteur-form__bloc" aria-labelledby="titre-documents">
+          <h2 class="producteur-form__section" id="titre-documents">Pièces justificatives</h2>
+          <p class="text-sm text-muted">
+            PDF, JPG ou PNG, 8 Mo maximum par document. Les documents sont visibles uniquement par les agents habilités,
+            la coopérative de rattachement et le titulaire de la fiche.
+          </p>
+          <ul class="producteur-form__documents">
+            @for (doc of documentsTypes; track doc.type) {
+              <li class="producteur-form__document">
+                <div class="producteur-form__document-info">
+                  <strong>{{ doc.libelle }}</strong>
+                  <small class="text-muted">{{ doc.aide }}</small>
+                  @if (documentExistant(doc.type); as existant) {
+                    <span class="producteur-form__statut producteur-form__statut--ok">
+                      Fourni{{ existant.format ? ' (' + existant.format + ')' : '' }}{{ existant.nom_original ? ' : ' + existant.nom_original : '' }}
+                    </span>
+                  } @else {
+                    <span class="producteur-form__statut">Non fourni</span>
+                  }
+                  @if (fichierChoisi(doc.type); as f) {
+                    <small class="producteur-form__statut producteur-form__statut--attente">
+                      {{ documentExistant(doc.type) ? 'Remplacement prévu' : 'À envoyer' }} : {{ f.name }} ({{ tailleLisible(f.size) }})
+                    </small>
+                  }
+                  @if (documentErreurs()[doc.type]) {
+                    <small class="producteur-form__gps-erreur" role="alert">{{ documentErreurs()[doc.type] }}</small>
+                  }
+                </div>
+                <div class="producteur-form__ligne-actions">
+                  @if (documentExistant(doc.type)?.url; as url) {
+                    <a pnlfButton variant="ghost" size="sm" [href]="url" target="_blank" rel="noopener">Consulter</a>
+                  }
+                  <label class="producteur-form__fichier">
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" (change)="choisirDocument(doc.type, $event)" />
+                    {{ documentExistant(doc.type) ? 'Remplacer' : 'Choisir un fichier' }}
+                  </label>
+                  @if (fichierChoisi(doc.type)) {
+                    <button pnlfButton type="button" variant="ghost" size="sm" (click)="annulerDocument(doc.type)">Annuler</button>
+                  } @else if (isEdit && documentExistant(doc.type) && peutSupprimerDocument(doc.type)) {
+                    <button pnlfButton type="button" variant="ghost" size="sm" (click)="documentASupprimer.set(doc.type)">Supprimer</button>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
       @if (showNotes) {
         <pnlf-text-field label="Notes" formControlName="notes" placeholder="Observations complémentaires" />
       }
@@ -133,6 +293,9 @@
         } @else {
           <a pnlfButton routerLink="/app/producteurs" variant="ghost">Annuler</a>
         }
+        @if (etapeEnvoi()) {
+          <span class="text-sm text-muted" role="status">{{ etapeEnvoi() }}</span>
+        }
         <button pnlfButton type="submit" variant="primary" [loading]="loading()">
           {{ isEdit ? 'Enregistrer les modifications' : 'Créer la fiche' }}
         </button>
@@ -140,3 +303,14 @@
     </form>
   }
 </pnlf-card>
+
+<pnlf-confirm-dialog
+  [open]="documentASupprimer() !== null"
+  title="Supprimer ce document ?"
+  [message]="'Le document « ' + libelleDocument(documentASupprimer()) + ' » sera définitivement retiré de la fiche.'"
+  confirmLabel="Supprimer"
+  [danger]="true"
+  [loading]="suppressionEnCours()"
+  (confirmed)="confirmerSuppressionDocument()"
+  (cancelled)="documentASupprimer.set(null)"
+/>

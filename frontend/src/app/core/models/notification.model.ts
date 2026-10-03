@@ -1,3 +1,5 @@
+import { AnnonceDetails } from './annonce.model';
+
 export interface PnlfNotification {
   id: string;
   type_notif: string;
@@ -18,7 +20,7 @@ export const STATUT_OFFRE_DEMANDE_LABELS: Record<StatutOffreDemande, string> = {
   CLOTUREE: 'Clôturée',
 };
 
-export interface OffreDemande {
+export interface OffreDemande extends AnnonceDetails {
   id: string;
   type_annonce: 'OFFRE' | 'DEMANDE';
   auteur_id: string;

@@ -4,9 +4,10 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
 import { toApiError } from '../../../core/http/api-error.util';
-import { unwrapList } from '../../../core/models/common.model';
+import { unwrapCount, unwrapList } from '../../../core/models/common.model';
 import { Lot, STATUT_LOT_LABELS } from '../../../core/models/lot.model';
 import {
+  DOCUMENTS_FICHE_PRODUCTEUR,
   DocumentInscription,
   Producteur,
   STATUT_PRODUCTEUR_LABELS,
@@ -27,6 +28,7 @@ import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.
 import { ToastService } from '../../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
 import { PnlfDatePipe, PnlfQuantitePipe, PnlfTelephonePipe } from '../../../shared/pipes/format.pipes';
+import { InvitationsRecuesComponent } from '../../cooperatives/invitations-recues/invitations-recues.component';
 
 type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer';
 
@@ -51,6 +53,7 @@ const DIALOG_MESSAGES: Record<DialogKind, { ok: string; ko: string }> = {
     EmptyStateComponent,
     ConfirmDialogComponent,
     AlertBannerComponent,
+    InvitationsRecuesComponent,
   ],
   templateUrl: './producteur-detail.component.html',
   styleUrl: './producteur-detail.component.scss',
@@ -67,6 +70,7 @@ export class ProducteurDetailComponent {
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly producteur = signal<Producteur | null>(null);
   readonly lots = signal<Lot[]>([]);
+  readonly lotsTotal = signal(0);
   readonly lotsError = signal('');
   readonly messages = signal<MessagePublic[]>([]);
   readonly loading = signal(true);
@@ -84,12 +88,13 @@ export class ProducteurDetailComponent {
     RoleUtilisateur.PRODUCTEUR,
     RoleUtilisateur.COOPERATIVE,
   );
-  /** L'API refuse le changement de photo aux coopératives et acheteurs. */
+  /** Photo modifiable par l'administration, le titulaire et la coopérative de rattachement (refusée aux acheteurs). */
   readonly canEditPhoto = this.auth.hasRole(
     RoleUtilisateur.ADMINISTRATEUR,
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.AGENT_FORESTIER,
     RoleUtilisateur.PRODUCTEUR,
+    RoleUtilisateur.COOPERATIVE,
   );
   readonly canValidate = this.auth.hasRole(
     RoleUtilisateur.ADMINISTRATEUR,
@@ -102,16 +107,17 @@ export class ProducteurDetailComponent {
   readonly dialogLoading = signal(false);
   private readonly pdfPreview = inject(PdfPreviewService);
 
-  /** Documents administratifs attendus lors de l'instruction d'un dossier d'inscription. */
-  readonly typesDocumentsAttendus: {
-    type: DocumentInscription['type_document'];
-    label: string;
-    requis: boolean;
-  }[] = [
-    { type: 'CNI', label: "Pièce d'identité (CNI)", requis: true },
-    { type: 'FICHE_CIRCUIT', label: 'Fiche circuit', requis: false },
-    { type: 'AGREMENT_NAGOYA', label: 'Agrément CITES / Nagoya', requis: false },
-  ];
+  /** Documents administratifs attendus (même liste que le formulaire de fiche). */
+  readonly typesDocumentsAttendus = DOCUMENTS_FICHE_PRODUCTEUR.map((d) => ({
+    type: d.type,
+    label: d.libelle,
+    requis: d.type === 'CNI',
+  }));
+
+  /** Fiche du producteur connecté : il peut y répondre aux invitations des coopératives. */
+  estMaFiche(p: Producteur): boolean {
+    return this.isProducteurRole && !!p.utilisateur_id && p.utilisateur_id === this.auth.currentUser()?.id;
+  }
 
   constructor() {
     this.load();
@@ -134,7 +140,10 @@ export class ProducteurDetailComponent {
     });
     this.lotsError.set('');
     this.lotsService.list({ producteur: this.id, page_size: 10 }).subscribe({
-      next: (res) => this.lots.set(unwrapList(res)),
+      next: (res) => {
+        this.lots.set(unwrapList(res));
+        this.lotsTotal.set(unwrapCount(res));
+      },
       error: (err) => this.lotsError.set(toApiError(err).message),
     });
     this.service.messagesPublics(this.id).subscribe({

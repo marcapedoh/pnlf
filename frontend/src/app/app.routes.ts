@@ -344,6 +344,21 @@ export const routes: Routes = [
             title: 'Offres & demandes | PFNL',
           },
           {
+            path: 'nouvelle',
+            canActivate: [
+              roleGuard(R.PRODUCTEUR, R.COOPERATIVE, R.ACHETEUR, R.ADMINISTRATEUR, R.AGENT_MINISTERE),
+            ],
+            loadComponent: () =>
+              import('./features/marketplace/offres/offre-form/offre-form.component').then((m) => m.OffreFormComponent),
+            title: 'Publier une annonce | PFNL',
+          },
+          {
+            path: ':id/modifier',
+            loadComponent: () =>
+              import('./features/marketplace/offres/offre-form/offre-form.component').then((m) => m.OffreFormComponent),
+            title: "Modifier l'annonce | PFNL",
+          },
+          {
             path: ':id',
             loadComponent: () =>
               import('./features/marketplace/offres/offre-detail/offre-detail.component').then(
@@ -378,6 +393,13 @@ export const routes: Routes = [
         canActivate: [roleGuard(R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER)],
         loadComponent: () => import('./features/rapports/rapports.component').then((m) => m.RapportsComponent),
         title: 'Rapports & exports | PFNL',
+      },
+      {
+        path: 'moderation-images',
+        canActivate: [roleGuard(R.ADMINISTRATEUR)],
+        loadComponent: () =>
+          import('./features/moderation-images/moderation-images.component').then((m) => m.ModerationImagesComponent),
+        title: 'Modération des images | PFNL',
       },
       {
         path: 'synchronisation',

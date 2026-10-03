@@ -1,8 +1,11 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { PublicLotDetail } from '../../../core/models/public.model';
+import { LotPublicIndisponible } from '../../../core/models/lot.model';
+import { FriseLotComponent } from '../../lots/frise-lot/frise-lot.component';
 import { PublicService } from '../../../core/services/public.service';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
@@ -15,7 +18,18 @@ import { PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe } from '
 
 @Component({
   selector: 'app-lot-public-detail',
-  imports: [RouterLink, PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe, ButtonComponent, SkeletonComponent, IconComponent, StatusBadgeComponent],
+  imports: [
+    RouterLink,
+    PnlfDatePipe,
+    PnlfMontantPipe,
+    PnlfQuantitePipe,
+    PnlfUnitePipe,
+    ButtonComponent,
+    SkeletonComponent,
+    IconComponent,
+    StatusBadgeComponent,
+    FriseLotComponent,
+  ],
   templateUrl: './lot-public-detail.component.html',
   styleUrl: './lot-public-detail.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,6 +44,8 @@ export class LotPublicDetailComponent {
   readonly lot = signal<PublicLotDetail | null>(null);
   readonly loading = signal(true);
   readonly notFound = signal(false);
+  /** Lot vendu : retiré de l'annuaire mais toujours vérifiable par QR (uuid ou chaîne vide). */
+  readonly commercialiseUuid = signal<string | null>(null);
   readonly activePhoto = signal(0);
 
   constructor() {
@@ -39,8 +55,13 @@ export class LotPublicDetailComponent {
         this.title.setTitle(`Lot ${l.code_lot} | PFNL`);
         this.loading.set(false);
       },
-      error: () => {
-        this.notFound.set(true);
+      error: (err: unknown) => {
+        const corps = err instanceof HttpErrorResponse ? (err.error as LotPublicIndisponible | null) : null;
+        if (corps?.code === 'LOT_COMMERCIALISE') {
+          this.commercialiseUuid.set(corps.uuid_public ?? '');
+        } else {
+          this.notFound.set(true);
+        }
         this.loading.set(false);
       },
     });
@@ -54,7 +75,7 @@ export class LotPublicDetailComponent {
     this.activePhoto.set(index);
   }
 
-  mapsUrl(lat: number, lon: number): string {
+  mapsUrl(lat: number | string, lon: number | string): string {
     return `https://www.google.com/maps?q=${lat},${lon}`;
   }
 

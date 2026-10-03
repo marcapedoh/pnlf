@@ -1,3 +1,5 @@
+import { AnnonceDetails } from './annonce.model';
+import { LotPublicComplet } from './lot.model';
 import { TypeActeur } from './producteur.model';
 
 export interface PublicStats {
@@ -45,12 +47,14 @@ export interface PublicLotProducteurSummary {
   photo_url: string | null;
 }
 
-export interface PublicLotDetail extends PublicLotInfo {
-  producteur: PublicLotProducteurSummary;
-}
+/** Fiche publique d'un lot validé : même contenu que la vérification par QR code. */
+export type PublicLotDetail = LotPublicComplet;
 
-export interface PublicOffreDemande {
+export interface PublicOffreDemande extends AnnonceDetails {
   id: string;
+  produit_id?: string;
+  province_id?: string | null;
+  expire_at?: string | null;
   type_annonce: 'OFFRE' | 'DEMANDE';
   auteur_nom?: string | null;
   produit_nom?: string | null;

@@ -50,11 +50,12 @@
         @if (isProducteur && c.mon_adhesion === 'EN_ATTENTE') {
           <pnlf-status-badge label="Demande d’adhésion en attente" tone="warning" />
         }
-        @if (!isProducteur) {
-          <button pnlfButton variant="outline" type="button" (click)="exporterPdf()">
-            Imprimer la fiche (PDF)
-          </button>
+        @if (isProducteur && c.mon_adhesion === 'INVITE') {
+          <pnlf-status-badge label="Vous êtes invité" tone="info" />
         }
+        <button pnlfButton variant="outline" type="button" (click)="exporterPdf()">
+          Imprimer la fiche (PDF)
+        </button>
         @if (!isCoopRole) {
           <a pnlfButton routerLink="/app/cooperatives" variant="ghost">← Retour à la liste</a>
         }
@@ -93,6 +94,20 @@
       Vous avez déjà une demande d’adhésion en attente auprès d’une autre coopérative : attendez sa réponse avant d’en envoyer une nouvelle.
     </pnlf-alert>
   }
+  @if (isProducteur && c.mon_adhesion === 'INVITE') {
+  @if (c.mon_invitation; as inv) {
+    <pnlf-card title="Invitation reçue" [subtitle]="'Envoyée le ' + (inv.created_at | pnlfDate)">
+      <p class="text-sm">{{ c.nom }} vous invite à devenir membre de la coopérative.</p>
+      @if (inv.message) {
+        <p class="coop-invitation__message">« {{ inv.message }} »</p>
+      }
+      <div class="coop-detail__actions">
+        <button pnlfButton type="button" variant="primary" (click)="dialog.set({ kind: 'accepterInvitation', invitation: inv.id })">Accepter l'invitation</button>
+        <button pnlfButton type="button" variant="ghost" (click)="dialog.set({ kind: 'refuserInvitation', invitation: inv.id })">Refuser</button>
+      </div>
+    </pnlf-card>
+  }
+  }
 
   @if (canManageMembres) {
     <pnlf-card title="Demandes d’adhésion" subtitle="Producteurs et collecteurs ayant demandé à rejoindre la coopérative">
@@ -130,6 +145,106 @@
         @if (c.statut !== StatutCooperative.ACTIF) {
           <p class="text-sm text-muted">La coopérative doit être active pour accepter de nouveaux membres.</p>
         }
+      }
+    </pnlf-card>
+
+    <pnlf-card title="Inviter un producteur" subtitle="Proposez l’adhésion à un producteur ou collecteur actif qui n’a pas encore de coopérative">
+      @if (c.statut !== StatutCooperative.ACTIF) {
+        <p class="text-sm text-muted">La coopérative doit être active pour inviter des producteurs.</p>
+      } @else {
+        <div class="coop-membres__combo coop-invitation__recherche">
+          <label class="pnlf-field__label" for="coop-invite-search">Rechercher par nom, prénoms, code ou communauté</label>
+          <input
+            id="coop-invite-search"
+            type="search"
+            class="pnlf-select"
+            autocomplete="off"
+            aria-describedby="coop-invite-aide"
+            placeholder="Saisissez au moins 2 caractères"
+            [value]="inviteQuery()"
+            (input)="onInviteQueryChange($any($event.target).value)"
+          />
+          <small id="coop-invite-aide" class="text-muted">Seules les fiches validées sans coopérative apparaissent. Le producteur reçoit une notification et répond depuis son espace.</small>
+        </div>
+        @if (inviteQuery().trim().length >= 2) {
+          <div class="coop-invitation__resultats" aria-live="polite">
+            @if (inviteSearching()) {
+              <p class="coop-membres__state" role="status">Recherche en cours…</p>
+            } @else if (inviteSearchError()) {
+              <p class="coop-membres__error" role="alert">{{ inviteSearchError() }}</p>
+            } @else if (inviteSearchDone() && inviteResults().length === 0) {
+              <p class="coop-membres__state" role="status">Aucun producteur actif sans coopérative ne correspond à « {{ inviteQuery().trim() }} ».</p>
+            } @else {
+              <ul class="coop-invitation__liste">
+                @for (cand of inviteResults(); track cand.id) {
+                  <li>
+                    <div class="coop-invitation__avatar" aria-hidden="true">
+                      @if (cand.photo_url) {
+                        <img [src]="cand.photo_url" alt="" />
+                      } @else {
+                        <span>{{ (cand.prenoms.charAt(0) + cand.nom.charAt(0)).toUpperCase() }}</span>
+                      }
+                    </div>
+                    <div class="coop-invitation__texte">
+                      <strong>{{ cand.prenoms }} {{ cand.nom }}</strong>
+                      <small class="text-muted">
+                        {{ libelleType(cand.type_acteur) }} · {{ cand.code_producteur }} · {{ cand.communaute || cand.province_nom || 'Localisation non renseignée' }}
+                      </small>
+                      @if (!cand.a_un_compte) {
+                        <small class="text-muted">Sans compte en ligne : il ne pourra répondre qu’après création de son accès.</small>
+                      }
+                    </div>
+                    @if (cand.invitation_en_attente) {
+                      <pnlf-status-badge label="Invitation envoyée" tone="warning" />
+                    } @else if (cand.demande_en_attente) {
+                      <pnlf-status-badge label="Demande reçue" tone="info" />
+                    } @else {
+                      <button pnlfButton type="button" variant="outline" size="sm" (click)="dialog.set({ kind: 'inviter', producteur: cand.id, nom: cand.prenoms + ' ' + cand.nom })" [attr.aria-label]="'Inviter ' + cand.prenoms + ' ' + cand.nom">Inviter</button>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        }
+      }
+
+      <h3 class="coop-invitation__titre">Invitations envoyées en attente</h3>
+      @if (invitationsEnAttente().length === 0) {
+        <p class="text-sm text-muted">Aucune invitation en attente de réponse.</p>
+      } @else {
+        <ul class="coop-invitation__liste">
+          @for (inv of invitationsEnAttente(); track inv.id) {
+            <li>
+              <div class="coop-invitation__texte">
+                <a class="pnlf-table__link" [routerLink]="['/app/producteurs', inv.producteur]"><strong>{{ inv.producteur_nom }}</strong></a>
+                <small class="text-muted">{{ libelleType(inv.producteur_type_acteur) }} · {{ inv.producteur_code }} · envoyée le {{ inv.created_at | pnlfDate }}</small>
+                @if (inv.message) {
+                  <small class="coop-invitation__message">« {{ inv.message }} »</small>
+                }
+              </div>
+              <pnlf-status-badge [label]="inv.statut_libelle" [tone]="tonInvitation(inv.statut)" />
+              <button pnlfButton type="button" variant="ghost" size="sm" (click)="dialog.set({ kind: 'annulerInvitation', invitation: inv.id, nom: inv.producteur_nom })" [attr.aria-label]="'Annuler l’invitation de ' + inv.producteur_nom">Annuler</button>
+            </li>
+          }
+        </ul>
+      }
+      @if (invitationsTraitees().length) {
+        <h3 class="coop-invitation__titre">Réponses récentes</h3>
+        <ul class="coop-invitation__liste">
+          @for (inv of invitationsTraitees(); track inv.id) {
+            <li>
+              <div class="coop-invitation__texte">
+                <strong>{{ inv.producteur_nom }}</strong>
+                <small class="text-muted">
+                  {{ inv.producteur_code }} · {{ inv.repondu_at ? 'le ' + (inv.repondu_at | pnlfDate) : 'envoyée le ' + (inv.created_at | pnlfDate) }}
+                  @if (inv.motif_reponse) { · {{ inv.motif_reponse }} }
+                </small>
+              </div>
+              <pnlf-status-badge [label]="inv.statut_libelle" [tone]="tonInvitation(inv.statut)" />
+            </li>
+          }
+        </ul>
       }
     </pnlf-card>
   }
@@ -303,6 +418,48 @@
   title="Accepter cette demande d’adhésion ?"
   [message]="(dialog()?.nom || 'Ce producteur') + ' deviendra membre de ' + coopNom() + ' et en sera informé.'"
   confirmLabel="Accepter"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'inviter'"
+  title="Inviter ce producteur ?"
+  [message]="(dialog()?.nom || 'Ce producteur') + ' recevra une notification et pourra accepter ou refuser depuis son espace.'"
+  confirmLabel="Envoyer l’invitation"
+  inputLabel="Message (facultatif, 500 caractères au plus)"
+  inputPlaceholder="Ex. : nous collectons le miel de votre zone et serions ravis de vous accueillir."
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'annulerInvitation'"
+  title="Annuler cette invitation ?"
+  [message]="(dialog()?.nom || 'Le producteur') + ' sera informé que l’invitation est retirée.'"
+  confirmLabel="Annuler l’invitation"
+  cancelLabel="Conserver"
+  [danger]="true"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'accepterInvitation'"
+  title="Rejoindre cette coopérative ?"
+  [message]="'Vous deviendrez membre actif de ' + coopNom() + '. Vos autres invitations et demandes en attente seront closes.'"
+  confirmLabel="Accepter l’invitation"
+  [loading]="dialogLoading()"
+  (confirmed)="onDialogConfirm($event)"
+  (cancelled)="dialog.set(null)"
+/>
+<pnlf-confirm-dialog
+  [open]="dialog()?.kind === 'refuserInvitation'"
+  title="Refuser cette invitation ?"
+  [message]="coopNom() + ' sera prévenue de votre refus.'"
+  confirmLabel="Refuser"
+  [danger]="true"
+  inputLabel="Motif (facultatif)"
   [loading]="dialogLoading()"
   (confirmed)="onDialogConfirm($event)"
   (cancelled)="dialog.set(null)"

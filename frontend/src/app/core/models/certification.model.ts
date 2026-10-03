@@ -47,6 +47,25 @@ export interface Certification {
   document_url?: string | null;
   valide_par_id: string | null;
   observations: string | null;
+  /** Pièces justificatives du dossier (url nulle pour les profils qui ne peuvent pas les consulter). */
+  pieces?: PieceCertification[];
   created_at: string;
   updated_at: string;
 }
+
+export interface PieceCertification {
+  id: string;
+  intitule: string;
+  nom_original: string | null;
+  type_mime: string | null;
+  taille_octets: number | null;
+  url: string | null;
+  created_at: string;
+}
+
+/** Contraintes des pièces justificatives, identiques à celles contrôlées par l'API. */
+export const PIECES_CERTIFICATION_MAX = 10;
+export const PIECE_TAILLE_MAX_OCTETS = 8 * 1024 * 1024;
+export const PIECE_INTITULE_MAX = 150;
+export const PIECES_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'];
+export const PIECES_ACCEPT = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';

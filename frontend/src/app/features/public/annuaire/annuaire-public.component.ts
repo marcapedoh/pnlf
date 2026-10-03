@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { initialesStructure } from '../../../core/auth/display-name.util';
@@ -37,6 +37,8 @@ import { PaginationComponent } from '../../../design-system/pagination/paginatio
 export class AnnuairePublicComponent {
   private readonly publicService = inject(PublicService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private requete = 0;
 
   readonly producteurs = signal<PublicProducteur[]>([]);
   readonly provinces = signal<PublicProvince[]>([]);
@@ -61,6 +63,8 @@ export class AnnuairePublicComponent {
     this.produit = params.get('produit') ?? '';
     this.province = params.get('province') ?? '';
     this.typeActeur = params.get('type_acteur') ?? '';
+    const page = Number(params.get('page'));
+    this.page.set(Number.isInteger(page) && page > 1 ? page : 1);
 
     this.publicService.provinces().subscribe((p) => this.provinces.set(p));
     this.filter$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe(() => {
@@ -73,22 +77,31 @@ export class AnnuairePublicComponent {
   load(): void {
     this.loading.set(true);
     this.loadError.set('');
+    this.syncUrl();
+    const req = ++this.requete;
     this.publicService
       .producteurs({
         province: this.province || undefined,
         type_acteur: this.typeActeur || undefined,
-        produit: this.produit || undefined,
-        q: this.recherche || undefined,
+        produit: this.produit.trim() || undefined,
+        q: this.recherche.trim() || undefined,
         page: this.page(),
         page_size: this.pageSize,
       })
       .subscribe({
         next: (res) => {
+          if (req !== this.requete) return;
           this.producteurs.set(res.results);
           this.total.set(res.count ?? res.results.length);
           this.loading.set(false);
         },
         error: (err) => {
+          if (req !== this.requete) return;
+          if (this.page() > 1 && (err as { status?: number })?.status === 404) {
+            this.page.set(1);
+            this.load();
+            return;
+          }
           this.loadError.set(toApiError(err).message);
           this.loading.set(false);
         },
@@ -102,6 +115,21 @@ export class AnnuairePublicComponent {
   goToPage(page: number): void {
     this.page.set(page);
     this.load();
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  private syncUrl(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        q: this.recherche.trim() || null,
+        produit: this.produit.trim() || null,
+        province: this.province || null,
+        type_acteur: this.typeActeur || null,
+        page: this.page() > 1 ? this.page() : null,
+      },
+      replaceUrl: true,
+    });
   }
 
   resetFilters(): void {

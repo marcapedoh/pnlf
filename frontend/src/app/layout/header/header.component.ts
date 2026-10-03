@@ -119,7 +119,10 @@ export class HeaderComponent {
     }
     this.notifMenuOpen.set(false);
     const route = notificationTargetRoute(n);
-    this.router.navigate(route ?? ['/app/notifications']);
+    const conversation = n.metadata?.['table_cible'] === 'conversations' ? n.metadata?.['enregistrement_id'] : null;
+    this.router.navigate(route ?? ['/app/notifications'], {
+      queryParams: typeof conversation === 'string' ? { conversation } : undefined,
+    });
   }
 
   logout(): void {

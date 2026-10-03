@@ -17,7 +17,14 @@ import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.comp
 import { TextFieldComponent } from '../../../design-system/text-field/text-field.component';
 import { ToastService } from '../../../design-system/toast/toast.service';
 import { toApiError } from '../../../core/http/api-error.util';
-import { PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe } from '../../../shared/pipes/format.pipes';
+import { libelleModeRemise, libelleMoyenPaiement } from '../../../core/models/annonce.model';
+import {
+  PnlfDatePipe,
+  PnlfMontantPipe,
+  PnlfQuantitePipe,
+  PnlfTelephonePipe,
+  PnlfUnitePipe,
+} from '../../../shared/pipes/format.pipes';
 
 @Component({
   selector: 'app-offre-publique-detail',
@@ -28,6 +35,7 @@ import { PnlfDatePipe, PnlfMontantPipe, PnlfQuantitePipe, PnlfUnitePipe } from '
     PnlfMontantPipe,
     PnlfQuantitePipe,
     PnlfUnitePipe,
+    PnlfTelephonePipe,
     CardComponent,
     ButtonComponent,
     SkeletonComponent,
@@ -52,10 +60,13 @@ export class OffrePubliqueDetailComponent {
   readonly offre = signal<PublicOffreDemande | null>(null);
   readonly loading = signal(true);
   readonly notFound = signal(false);
+  readonly erreurChargement = signal('');
   readonly activePhoto = signal(0);
   readonly sending = signal(false);
   readonly sent = signal(false);
   readonly formError = signal('');
+  readonly connecte = this.auth.isAuthenticated();
+  readonly libelleModeRemise = libelleModeRemise;
 
   readonly form = this.fb.nonNullable.group({
     nom: ['', [Validators.required, Validators.maxLength(150)]],
@@ -74,17 +85,35 @@ export class OffrePubliqueDetailComponent {
         telephone: user.telephone ?? '',
       });
     }
+    this.charger();
+  }
+
+  charger(): void {
+    this.loading.set(true);
+    this.notFound.set(false);
+    this.erreurChargement.set('');
     this.publicService.offre(this.id).subscribe({
       next: (o) => {
         this.offre.set(o);
         this.title.setTitle(`${o.titre} | PFNL`);
         this.loading.set(false);
       },
-      error: () => {
-        this.notFound.set(true);
+      error: (err) => {
+        const apiError = toApiError(err);
+        if (apiError.status === 404) this.notFound.set(true);
+        else this.erreurChargement.set(apiError.message);
         this.loading.set(false);
       },
     });
+  }
+
+  moyensPaiement(o: PublicOffreDemande): string {
+    return (o.moyens_paiement ?? []).map(libelleMoyenPaiement).join(', ');
+  }
+
+  initiales(nom: string | null | undefined): string {
+    const mots = (nom ?? '').trim().split(/\s+/).filter(Boolean);
+    return (mots.slice(0, 2).map((m) => m[0]).join('') || '?').toUpperCase();
   }
 
   contactTitre(o: PublicOffreDemande): string {

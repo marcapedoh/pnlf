@@ -7,6 +7,7 @@ import { todayIso } from '../../../core/format/format.util';
 import { toApiError } from '../../../core/http/api-error.util';
 import { datePastValidator, normaliserTelephone, telephoneValidator } from '../../../core/validators/pnlf.validators';
 import { TypeDemandeInscription } from '../../../core/models/public.model';
+import { ErreurGeolocalisation, GeolocalisationService } from '../../../core/services/geolocalisation.service';
 import { PublicService } from '../../../core/services/public.service';
 import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
@@ -107,6 +108,8 @@ export class InscriptionPubliqueComponent {
   readonly gpsLoading = signal(false);
   readonly gpsError = signal('');
   readonly gpsCaptured = signal(false);
+  readonly gpsPrecision = signal<number | null>(null);
+  private readonly geolocalisation = inject(GeolocalisationService);
   readonly today = todayIso();
   readonly stepTitles = ['Identité', 'Localisation', 'Confirmation'];
 
@@ -278,33 +281,27 @@ export class InscriptionPubliqueComponent {
     this.allerAEtape(Math.max(1, this.step() - 1));
   }
 
-  obtenirPosition(): void {
+  async obtenirPosition(): Promise<void> {
     this.gpsError.set('');
-    if (!('geolocation' in navigator)) {
-      this.gpsError.set("La géolocalisation n'est pas disponible sur cet appareil.");
-      return;
-    }
+    this.gpsCaptured.set(false);
+    this.gpsPrecision.set(null);
     this.gpsLoading.set(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        this.form.patchValue({
-          latitude: position.coords.latitude.toFixed(7),
-          longitude: position.coords.longitude.toFixed(7),
-        });
-        this.gpsCaptured.set(true);
-        this.gpsLoading.set(false);
-      },
-      (error) => {
-        this.gpsLoading.set(false);
-        this.gpsCaptured.set(false);
-        this.gpsError.set(
-          error.code === error.PERMISSION_DENIED
-            ? 'Localisation refusée. Vous pouvez continuer sans cette information.'
-            : 'Impossible de récupérer votre position pour le moment.',
-        );
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    try {
+      const position = await this.geolocalisation.positionActuelle();
+      this.form.patchValue({
+        latitude: position.latitude.toFixed(7),
+        longitude: position.longitude.toFixed(7),
+      });
+      this.gpsPrecision.set(position.precisionMetres);
+      this.gpsCaptured.set(true);
+    } catch (err) {
+      const message = err instanceof ErreurGeolocalisation
+        ? err.message
+        : 'Votre position est indisponible pour le moment.';
+      this.gpsError.set(`${message} Vous pouvez continuer sans cette information.`);
+    } finally {
+      this.gpsLoading.set(false);
+    }
   }
 
   onPhotoSelected(event: Event): void {

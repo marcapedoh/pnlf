@@ -213,20 +213,25 @@
             <h3 class="inscription-form__section">Position GPS (optionnelle)</h3>
             <p class="text-sm text-muted">
               Facultatif : partagez votre position exacte pour faciliter la localisation de votre zone
-              de collecte sur la carte. Vous pouvez continuer sans cette information.
+              de collecte sur la carte. Votre navigateur vous demandera l'autorisation d'utiliser la position
+              de cet appareil : faites-le uniquement si vous êtes sur votre lieu de production ou de collecte.
+              Vous pouvez continuer sans cette information.
             </p>
             <div class="gps-picker">
-              <button pnlfButton variant="outline" type="button" (click)="obtenirPosition()" [loading]="gpsLoading()">
+              <button pnlfButton variant="outline" type="button" (click)="obtenirPosition()" [loading]="gpsLoading()" [disabled]="gpsLoading()">
                 <pnlf-icon name="map-pin" [size]="16" />
-                Utiliser ma position actuelle
+                {{ gpsLoading() ? 'Localisation en cours…' : 'Utiliser ma position' }}
               </button>
+              @if (gpsLoading()) {
+                <span class="text-sm text-muted" role="status">Recherche de votre position, cela peut prendre quelques secondes…</span>
+              }
               @if (gpsCaptured()) {
-                <span class="gps-picker__ok">
-                  Position enregistrée ({{ form.controls.latitude.value }}, {{ form.controls.longitude.value }})
+                <span class="gps-picker__ok" role="status">
+                  Position enregistrée ({{ form.controls.latitude.value }}, {{ form.controls.longitude.value }})@if (gpsPrecision() !== null) {, précision d'environ {{ gpsPrecision() }} m}.
                 </span>
               }
               @if (gpsError()) {
-                <span class="photo-picker__error">{{ gpsError() }}</span>
+                <span class="photo-picker__error" role="alert">{{ gpsError() }}</span>
               }
             </div>
           }

@@ -208,7 +208,7 @@ def run():
     lot_own = Lot.objects.create(
         code_lot=f'PNLF-PAR-O-{uuid.uuid4().hex[:6]}',
         produit=produit, producteur=prod_own, cooperative=coop,
-        date_collecte=date.today(), quantite=4, unite='KG', statut='DECLARE',
+        date_collecte=date.today(), quantite=4, unite='KG', statut='BROUILLON',
         declare_par_id=cmap['producteur'].user.id,
         created_at=timezone.now(), updated_at=timezone.now(),
     )
@@ -217,7 +217,7 @@ def run():
     lot_other = Lot.objects.create(
         code_lot=f'PNLF-PAR-X-{uuid.uuid4().hex[:6]}',
         produit=produit, producteur=prod_other,
-        date_collecte=date.today(), quantite=9, unite='KG', statut='DECLARE',
+        date_collecte=date.today(), quantite=9, unite='KG', statut='BROUILLON',
         created_at=timezone.now(), updated_at=timezone.now(),
     )
     _cleanup['lots'].append(lot_other.id)
@@ -425,7 +425,7 @@ def run():
         ), 403)
 
     auth(client, cmap['producteur'])
-    r = client.get('/api/annuaire/')
+    r = client.get('/api/annuaire/', {'page_size': 50})
     if r.status_code == 200:
         prods = r.data.get('producteurs', [])
         codes = [p.get('code_producteur') for p in prods]

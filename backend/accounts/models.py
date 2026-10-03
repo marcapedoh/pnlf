@@ -128,6 +128,46 @@ class Session(models.Model):
         db_table = 'sessions'
 
 
+class Connexion(models.Model):
+    """Tentative de connexion (public.connexions, évolution 16)."""
+
+    id = models.BigAutoField(primary_key=True)
+    utilisateur_id = models.UUIDField(null=True, blank=True)
+    email_saisi = models.CharField(max_length=254, null=True, blank=True)
+    role = models.CharField(max_length=30, null=True, blank=True)
+    succes = models.BooleanField()
+    motif_echec = models.CharField(max_length=30, null=True, blank=True)
+    ip_adresse = models.GenericIPAddressField(null=True, blank=True, protocol='both')
+    appareil = models.CharField(max_length=20, default='INCONNU')
+    systeme = models.CharField(max_length=40, null=True, blank=True)
+    navigateur = models.CharField(max_length=40, null=True, blank=True)
+    empreinte_appareil = models.CharField(max_length=64, null=True, blank=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'connexions'
+        ordering = ['-created_at']
+
+
+class Presence(models.Model):
+    """Activité récente d'un utilisateur sur un appareil (public.presences, évolution 16)."""
+
+    utilisateur_id = models.UUIDField()
+    empreinte_appareil = models.CharField(max_length=64)
+    appareil = models.CharField(max_length=20, default='INCONNU')
+    systeme = models.CharField(max_length=40, null=True, blank=True)
+    navigateur = models.CharField(max_length=40, null=True, blank=True)
+    ip_adresse = models.GenericIPAddressField(null=True, blank=True, protocol='both')
+    debut_at = models.DateTimeField()
+    derniere_activite = models.DateTimeField()
+    pk = models.CompositePrimaryKey('utilisateur_id', 'empreinte_appareil')
+
+    class Meta:
+        managed = False
+        db_table = 'presences'
+
+
 class ReinitialisationMdp(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     utilisateur = models.ForeignKey(

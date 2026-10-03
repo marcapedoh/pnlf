@@ -1,0 +1,215 @@
+@if (erreur()) {
+  <pnlf-alert tone="error" title="Impossible de charger les statistiques de connexion" class="onglet__alerte">
+    {{ erreur() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="charger()">Réessayer</button>
+  </pnlf-alert>
+}
+
+<div class="onglet__entete">
+  <p class="onglet__periode">
+    @if (stats(); as s) {
+      Période {{ s.periode.libelle }}
+    }
+  </p>
+  <app-export-rapport rapport="connexions" titre="Statistiques de connexion" nomFichier="pfnl-connexions" [filtres]="filtresListe()" />
+</div>
+
+<div class="onglet__kpis">
+  <pnlf-kpi-card label="Connexions réussies" icon="user-check" tone="green" [loading]="chargement()" [value]="stats()?.totaux?.connexions ?? 0" hint="Sur la période choisie" />
+  <pnlf-kpi-card label="Utilisateurs uniques" icon="users" tone="blue" [loading]="chargement()" [value]="stats()?.totaux?.utilisateurs_uniques ?? 0" hint="Comptes distincts connectés" />
+  <pnlf-kpi-card label="Appareils distincts" icon="layers" tone="neutral" [loading]="chargement()" [value]="stats()?.totaux?.appareils_distincts ?? 0" hint="Ordinateurs, mobiles et tablettes" />
+  <pnlf-kpi-card label="Échecs de connexion" icon="alert-triangle" tone="gold" [loading]="chargement()" [value]="stats()?.totaux?.echecs ?? 0" [hint]="stats() ? tauxEchec(stats()!) : ''" />
+  <pnlf-kpi-card label="En ligne maintenant" icon="globe" tone="green" [value]="enLigne()?.utilisateurs ?? 0" [hint]="'Actifs ces ' + (enLigne()?.fenetre_minutes ?? 2) + ' dernières minutes'" />
+  <pnlf-kpi-card label="Visites publiques" icon="home" tone="blue" [loading]="chargement()" [value]="stats()?.visites?.total ?? 0" hint="Pages publiques, comptage anonyme" />
+</div>
+
+<div class="onglet__grille onglet__grille--large">
+  <pnlf-card title="Évolution des connexions" subtitle="Connexions réussies, utilisateurs uniques et tentatives échouées">
+    @if (chargement()) {
+      <pnlf-skeleton height="300px" radius="12px" />
+    } @else if (graphEvolution(); as g) {
+      <app-graphique [options]="g" description="Courbes de l’évolution des connexions sur la période" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Types d’appareils" subtitle="Répartition des connexions réussies">
+    @if (chargement()) {
+      <pnlf-skeleton height="280px" radius="12px" />
+    } @else if (graphAppareils(); as g) {
+      <app-graphique [options]="g" description="Répartition des connexions par type d’appareil" />
+    }
+  </pnlf-card>
+</div>
+
+<div class="onglet__grille">
+  <pnlf-card title="Connexions par rôle">
+    @if (chargement()) {
+      <pnlf-skeleton height="240px" radius="12px" />
+    } @else if (graphRoles(); as g) {
+      <app-graphique [options]="g" description="Nombre de connexions par rôle d’utilisateur" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Systèmes d’exploitation">
+    @if (chargement()) {
+      <pnlf-skeleton height="240px" radius="12px" />
+    } @else if (graphSystemes(); as g) {
+      <app-graphique [options]="g" description="Nombre de connexions par système d’exploitation" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Navigateurs">
+    @if (chargement()) {
+      <pnlf-skeleton height="240px" radius="12px" />
+    } @else if (graphNavigateurs(); as g) {
+      <app-graphique [options]="g" description="Nombre de connexions par navigateur" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Motifs des échecs">
+    @if (chargement()) {
+      <pnlf-skeleton height="160px" radius="12px" />
+    } @else if (!stats()?.echecs_par_motif?.length) {
+      <p class="onglet__vide">Aucune tentative échouée sur la période.</p>
+    } @else {
+      <ul class="onglet__liste-chiffres">
+        @for (m of stats()!.echecs_par_motif; track m.cle) {
+          <li><span>{{ m.libelle }}</span><strong>{{ m.nombre }}</strong></li>
+        }
+      </ul>
+    }
+  </pnlf-card>
+</div>
+
+<pnlf-card title="Utilisateurs en ligne" [subtitle]="'Mis à jour automatiquement toutes les 30 secondes' + (enLigne() ? ' · dernier relevé à ' + (enLigne()!.genere_at | pnlfDate: 'time') : '')">
+  <div card-actions>
+    <app-export-rapport rapport="en-ligne" titre="Utilisateurs en ligne" nomFichier="pfnl-en-ligne" />
+  </div>
+  @if (erreurEnLigne()) {
+    <pnlf-alert tone="error">
+      {{ erreurEnLigne() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="chargerEnLigne(false)">Réessayer</button>
+    </pnlf-alert>
+  } @else if (!enLigne()) {
+    <pnlf-skeleton height="120px" radius="12px" />
+  } @else if (enLigne()!.liste.length === 0) {
+    <pnlf-empty-state icon="users" title="Personne en ligne pour le moment" description="Un utilisateur est compté en ligne lorsque son onglet est actif depuis moins de 2 minutes." />
+  } @else {
+    <div class="onglet__puces">
+      @for (r of enLigne()!.par_role; track r.cle) {
+        <span class="onglet__puce">{{ r.libelle }} : <strong>{{ r.nombre }}</strong></span>
+      }
+      @for (a of enLigne()!.par_appareil; track a.cle) {
+        <span class="onglet__puce onglet__puce--neutre">{{ a.libelle }} : <strong>{{ a.nombre }}</strong></span>
+      }
+    </div>
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+      <table class="pnlf-table">
+        <caption class="pnlf-visually-hidden">Utilisateurs actuellement en ligne</caption>
+        <thead>
+          <tr>
+            <th scope="col">Utilisateur</th>
+            <th scope="col">Rôle</th>
+            <th scope="col">Appareil</th>
+            <th scope="col">Connecté depuis</th>
+            <th scope="col">Dernière activité</th>
+            <th scope="col">Adresse IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (u of enLigne()!.liste; track u.utilisateur_id + u.connecte_depuis) {
+            <tr>
+              <td data-label="Utilisateur"><span class="onglet__pastille" aria-hidden="true"></span>{{ u.utilisateur || 'Utilisateur' }}</td>
+              <td data-label="Rôle">{{ u.role_libelle }}</td>
+              <td data-label="Appareil">{{ u.appareil_libelle }}{{ u.systeme ? ' · ' + u.systeme : '' }}{{ u.navigateur ? ' · ' + u.navigateur : '' }}</td>
+              <td data-label="Connecté depuis">{{ u.connecte_depuis | pnlfDate: 'datetime' }}</td>
+              <td data-label="Dernière activité">{{ u.derniere_activite | pnlfDate: 'time' }}</td>
+              <td class="pnlf-table__muted" data-label="Adresse IP">{{ u.ip_masquee || 'Non disponible' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</pnlf-card>
+
+<pnlf-card title="Dernières connexions" subtitle="Adresses IP partiellement masquées">
+  <div card-actions>
+    <div class="onglet__segments" role="group" aria-label="Filtrer les connexions">
+      <button type="button" [class.is-active]="succes() === ''" [attr.aria-pressed]="succes() === ''" (click)="filtrerSucces('')">Toutes</button>
+      <button type="button" [class.is-active]="succes() === '1'" [attr.aria-pressed]="succes() === '1'" (click)="filtrerSucces('1')">Réussies</button>
+      <button type="button" [class.is-active]="succes() === '0'" [attr.aria-pressed]="succes() === '0'" (click)="filtrerSucces('0')">Échouées</button>
+    </div>
+  </div>
+  @if (chargementListe()) {
+    <pnlf-skeleton height="240px" radius="12px" />
+  } @else if (erreurListe()) {
+    <pnlf-alert tone="error">
+      {{ erreurListe() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="chargerListe()">Réessayer</button>
+    </pnlf-alert>
+  } @else if (lignes().length === 0) {
+    <pnlf-empty-state icon="clock" title="Aucune connexion" description="Aucune connexion ne correspond à la période et à la recherche choisies." />
+  } @else {
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+      <table class="pnlf-table">
+        <caption class="pnlf-visually-hidden">Dernières connexions à la plateforme</caption>
+        <thead>
+          <tr>
+            <th scope="col">Date et heure</th>
+            <th scope="col">Utilisateur</th>
+            <th scope="col">Rôle</th>
+            <th scope="col">Résultat</th>
+            <th scope="col">Appareil</th>
+            <th scope="col">Adresse IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of lignes(); track c.id) {
+            <tr>
+              <td data-label="Date et heure">{{ c.date | pnlfDate: 'datetime' }}</td>
+              <td data-label="Utilisateur">
+                {{ c.utilisateur }}
+                @if (c.email && c.email !== c.utilisateur) {
+                  <span class="onglet__secondaire">{{ c.email }}</span>
+                }
+              </td>
+              <td data-label="Rôle">{{ c.role_libelle }}</td>
+              <td data-label="Résultat">
+                @if (c.succes) {
+                  <pnlf-status-badge label="Réussie" tone="success" />
+                } @else {
+                  <pnlf-status-badge label="Échouée" tone="danger" />
+                  @if (c.motif_echec) {
+                    <span class="onglet__secondaire">{{ c.motif_echec }}</span>
+                  }
+                }
+              </td>
+              <td data-label="Appareil">{{ c.appareil_libelle }}{{ c.systeme ? ' · ' + c.systeme : '' }}{{ c.navigateur ? ' · ' + c.navigateur : '' }}</td>
+              <td class="pnlf-table__muted" data-label="Adresse IP">{{ c.ip_masquee || 'Non disponible' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <pnlf-pagination label="Pagination des connexions" [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="allerPage($event)" />
+  }
+</pnlf-card>
+
+<div class="onglet__entete onglet__entete--section">
+  <h2 class="onglet__titre-section">Fréquentation des pages publiques</h2>
+  <app-export-rapport rapport="visites" titre="Visites des pages publiques" nomFichier="pfnl-visites" [filtres]="filtres()" />
+</div>
+<p class="onglet__note">Comptage anonyme et agrégé par page et par jour : aucune adresse IP ni aucun cookie n’est enregistré.</p>
+<div class="onglet__grille">
+  <pnlf-card title="Visites par période">
+    @if (chargement()) {
+      <pnlf-skeleton height="260px" radius="12px" />
+    } @else if (graphVisites(); as g) {
+      <app-graphique [options]="g" description="Nombre de visites des pages publiques par période" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Pages les plus consultées">
+    @if (chargement()) {
+      <pnlf-skeleton height="260px" radius="12px" />
+    } @else if (graphPages(); as g) {
+      <app-graphique [options]="g" description="Classement des pages publiques les plus consultées" />
+    }
+  </pnlf-card>
+</div>

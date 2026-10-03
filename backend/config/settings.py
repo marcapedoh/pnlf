@@ -85,6 +85,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'config.moderation_images.ModerationImagesMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -128,7 +129,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-LANGUAGE_CODE = 'fr-fr'
+LANGUAGE_CODE = 'fr'
 TIME_ZONE = 'Africa/Libreville'
 USE_I18N = True
 USE_TZ = True
@@ -147,6 +148,13 @@ MEDIA_S3_SECRET_ACCESS_KEY = os.getenv('MEDIA_S3_SECRET_ACCESS_KEY', '').strip()
 MEDIA_S3_REGION = os.getenv('MEDIA_S3_REGION', 'auto').strip()
 MEDIA_S3_PREFIX = os.getenv('MEDIA_S3_PREFIX', 'media/').strip()
 
+# Modération des images par IA (config/moderation_images.py) : modèle ONNX installé au build.
+NSFW_ACTIF = os.getenv('NSFW_ACTIF', 'True').lower() in ('1', 'true', 'yes')
+NSFW_SEUIL_DOUTEUX = float(os.getenv('NSFW_SEUIL_DOUTEUX', '0.60'))
+NSFW_SEUIL_EXPLICITE = float(os.getenv('NSFW_SEUIL_EXPLICITE', '0.92'))
+NSFW_MODELE = os.getenv('NSFW_MODELE', str(BASE_DIR / 'modeles' / 'nsfw-marqo-vit-tiny-384.onnx'))
+NSFW_THREADS = int(os.getenv('NSFW_THREADS', '1'))
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 PNLF_FRONTEND_ORIGIN = 'https://plateformedetracabilite-pnlf.netlify.app'
@@ -163,7 +171,7 @@ _ENV_CORS = [
 # Union env Render + origines Netlify/local (sinon inscription front bloquée).
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_ENV_CORS + _DEFAULT_CORS_ORIGINS))
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ['Content-Disposition']
+CORS_EXPOSE_HEADERS = ['Content-Disposition', 'X-Moderation-Image']
 # Aperçus de déploiement Netlify de CE site uniquement (le cookie de refresh est envoyé avec credentials).
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r'^https://deploy-preview-\d+--plateformedetracabilite-pnlf\.netlify\.app$',
@@ -250,6 +258,7 @@ REST_FRAMEWORK = {
     },
     'DEFAULT_PAGINATION_CLASS': 'config.pagination.StandardResultsPagination',
     'PAGE_SIZE': 25,
+    'EXCEPTION_HANDLER': 'config.exceptions.gestionnaire_exceptions',
 }
 
 SIMPLE_JWT = {

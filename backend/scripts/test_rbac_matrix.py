@@ -224,7 +224,7 @@ def setup_fixtures(province: Province, produit: Produit, ctx_coop: RoleCtx, ctx_
         date_collecte=date.today(),
         quantite=10,
         unite='KG',
-        statut='DECLARE',
+        statut='BROUILLON',
         declare_par_id=ctx_coop.user.id,
         created_at=timezone.now(),
         updated_at=timezone.now(),
@@ -238,7 +238,7 @@ def setup_fixtures(province: Province, produit: Produit, ctx_coop: RoleCtx, ctx_
         date_collecte=date.today(),
         quantite=5,
         unite='KG',
-        statut='DECLARE',
+        statut='BROUILLON',
         created_at=timezone.now(),
         updated_at=timezone.now(),
     )

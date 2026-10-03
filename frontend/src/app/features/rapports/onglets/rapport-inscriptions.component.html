@@ -1,0 +1,166 @@
+@if (erreur()) {
+  <pnlf-alert tone="error" title="Impossible de charger les demandes d’inscription" class="onglet__alerte">
+    {{ erreur() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="charger()">Réessayer</button>
+  </pnlf-alert>
+}
+
+<div class="onglet__entete">
+  <p class="onglet__periode">
+    @if (donnees(); as d) {
+      Demandes reçues {{ d.periode.libelle }}
+    }
+  </p>
+  <app-export-rapport rapport="inscriptions" titre="Demandes d’inscription" nomFichier="pfnl-inscriptions" [filtres]="filtresExport()" />
+</div>
+
+<div class="onglet__kpis">
+  <pnlf-kpi-card label="Demandes reçues" icon="mail" tone="blue" [loading]="chargement()" [value]="donnees()?.totaux?.recues ?? 0" hint="Inscriptions publiques sur la période" />
+  <pnlf-kpi-card label="En attente" icon="clock" tone="gold" [loading]="chargement()" [value]="donnees()?.totaux?.en_attente ?? 0" hint="Sans décision à ce jour" />
+  <pnlf-kpi-card label="Validées" icon="check" tone="green" [loading]="chargement()" [value]="donnees()?.totaux?.validees ?? 0" [hint]="donnees() ? tauxValidation(donnees()!) : ''" />
+  <pnlf-kpi-card label="Rejetées" icon="x" tone="neutral" [loading]="chargement()" [value]="donnees()?.totaux?.rejetees ?? 0" hint="Avec motif lorsqu’il est renseigné" />
+  <pnlf-kpi-card label="Délai moyen de traitement" icon="clock" tone="blue" [loading]="chargement()" [value]="delai(donnees()?.totaux?.delai_moyen_heures)" hint="Entre la demande et la décision" />
+</div>
+
+<div class="onglet__grille onglet__grille--large">
+  <pnlf-card title="Demandes par période" subtitle="Selon la décision prise à ce jour">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="300px" radius="12px" />
+    } @else if (graphEvolution(); as g) {
+      <app-graphique [options]="g" description="Histogramme empilé des demandes d’inscription par période et par décision" />
+    }
+  </pnlf-card>
+  <pnlf-card title="Décisions">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="280px" radius="12px" />
+    } @else if (graphStatuts(); as g) {
+      <app-graphique [options]="g" description="Répartition des demandes validées, en attente et rejetées" />
+    }
+  </pnlf-card>
+</div>
+
+<div class="onglet__grille">
+  <pnlf-card title="Par type d’acteur">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="240px" radius="12px" />
+    } @else if (donnees(); as d) {
+      <app-graphique [options]="graphTypes()!" description="Nombre de demandes reçues par type d’acteur" />
+      <div class="pnlf-table-wrapper">
+        <table class="pnlf-table">
+          <caption class="pnlf-visually-hidden">Demandes par type d’acteur</caption>
+          <thead>
+            <tr>
+              <th scope="col">Type</th>
+              <th scope="col" class="onglet__nombre">Reçues</th>
+              <th scope="col" class="onglet__nombre">Validées</th>
+              <th scope="col" class="onglet__nombre">Rejetées</th>
+              <th scope="col" class="onglet__nombre">Délai moyen</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of d.par_type; track t.cle) {
+              <tr>
+                <td>{{ t.libelle }}</td>
+                <td class="onglet__nombre">{{ t.recues }}</td>
+                <td class="onglet__nombre">{{ t.validees }}</td>
+                <td class="onglet__nombre">{{ t.rejetees }}</td>
+                <td class="onglet__nombre">{{ delai(t.delai_moyen_heures) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </pnlf-card>
+  <pnlf-card title="Motifs de rejet les plus fréquents">
+    @if (chargement() && !donnees()) {
+      <pnlf-skeleton height="160px" radius="12px" />
+    } @else if (!donnees()?.motifs_rejet?.length) {
+      <p class="onglet__vide">Aucun rejet sur la période.</p>
+    } @else {
+      <ul class="onglet__liste-chiffres">
+        @for (m of donnees()!.motifs_rejet; track m.motif) {
+          <li><span>{{ m.motif }}</span><strong>{{ m.nombre }}</strong></li>
+        }
+      </ul>
+    }
+  </pnlf-card>
+</div>
+
+<pnlf-card title="Liste des demandes" [subtitle]="donnees() ? donnees()!.count + ' demande(s) selon les filtres' : ''">
+  <div card-actions class="onglet__filtres">
+    <label>
+      Type
+      <select class="pnlf-select" [value]="typeDemande()" (change)="filtrer('typeDemande', $event)">
+        <option value="">Tous les types</option>
+        @for (t of types; track t.value) {
+          <option [value]="t.value" [selected]="t.value === typeDemande()">{{ t.label }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      Décision
+      <select class="pnlf-select" [value]="statut()" (change)="filtrer('statut', $event)">
+        <option value="">Toutes</option>
+        @for (s of statuts; track s.value) {
+          <option [value]="s.value" [selected]="s.value === statut()">{{ s.label }}</option>
+        }
+      </select>
+    </label>
+  </div>
+  @if (chargement() && !donnees()) {
+    <pnlf-skeleton height="240px" radius="12px" />
+  } @else if (!donnees()?.results?.length) {
+    <pnlf-empty-state icon="mail" title="Aucune demande" description="Aucune demande d’inscription ne correspond à la période et aux filtres choisis." />
+  } @else {
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+      <table class="pnlf-table">
+        <caption class="pnlf-visually-hidden">Demandes d’inscription</caption>
+        <thead>
+          <tr>
+            <th scope="col">Reçue le</th>
+            <th scope="col">Demandeur</th>
+            <th scope="col">Type</th>
+            <th scope="col">Décision</th>
+            <th scope="col">Traitée par</th>
+            <th scope="col">Délai</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (d of donnees()!.results; track d.date + d.demandeur) {
+            <tr>
+              <td data-label="Reçue le">{{ d.date | pnlfDate: 'datetime' }}</td>
+              <td data-label="Demandeur">
+                @if (lien(d); as l) {
+                  <a class="pnlf-table__link" [routerLink]="l">{{ d.demandeur }}</a>
+                } @else {
+                  {{ d.demandeur }}
+                }
+                @if (d.email && d.email !== d.demandeur) {
+                  <span class="onglet__secondaire">{{ d.email }}</span>
+                }
+              </td>
+              <td data-label="Type">{{ d.type_libelle }}</td>
+              <td data-label="Décision">
+                <pnlf-status-badge [label]="d.statut_libelle" [tone]="tone(d.statut)" />
+                @if (d.motif) {
+                  <span class="onglet__secondaire">Motif : {{ d.motif }}</span>
+                }
+              </td>
+              <td data-label="Traitée par">
+                @if (d.decide_at) {
+                  {{ d.decideur || 'Non renseigné' }}
+                  <span class="onglet__secondaire">le {{ d.decide_at | pnlfDate: 'datetime' }}</span>
+                } @else {
+                  <span class="pnlf-table__muted">En attente</span>
+                }
+              </td>
+              <td data-label="Délai">{{ delai(d.delai_heures) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <pnlf-pagination label="Pagination des demandes" [page]="page()" [pageSize]="pageSize" [total]="donnees()!.count" (pageChange)="allerPage($event)" />
+  }
+</pnlf-card>

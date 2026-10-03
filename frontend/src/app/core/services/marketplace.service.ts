@@ -3,13 +3,29 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { AnnoncesFiltres, paramsAnnonces } from '../models/annonce.model';
 import { ApiListResponse } from '../models/common.model';
 import { OffreDemande } from '../models/notification.model';
 import { Cooperative, Producteur } from '../models/producteur.model';
 
+/** Annuaire interne : deux listes paginées côté serveur (`liste` permet de n'en recharger qu'une). */
 export interface AnnuaireResponse {
-  producteurs: Producteur[];
-  cooperatives: Cooperative[];
+  page_size: number;
+  producteurs?: Producteur[];
+  producteurs_count?: number;
+  page_producteurs?: number;
+  cooperatives?: Cooperative[];
+  cooperatives_count?: number;
+  page_cooperatives?: number;
+}
+
+export interface AnnuaireParams {
+  q?: string;
+  province?: string;
+  page_producteurs?: number;
+  page_cooperatives?: number;
+  page_size?: number;
+  liste?: 'producteurs' | 'cooperatives';
 }
 
 export interface ConversationResume {
@@ -28,14 +44,22 @@ export class MarketplaceService {
 
   constructor(private readonly http: HttpClient) {}
 
-  annuaire(params: Record<string, string> = {}): Observable<AnnuaireResponse> {
-    return this.http.get<AnnuaireResponse>(`${environment.apiUrl}/annuaire/`, { params });
+  annuaire(params: AnnuaireParams = {}): Observable<AnnuaireResponse> {
+    const query: Record<string, string> = {};
+    for (const [cle, valeur] of Object.entries(params)) {
+      if (valeur !== undefined && valeur !== null && String(valeur).trim() !== '') query[cle] = String(valeur).trim();
+    }
+    return this.http.get<AnnuaireResponse>(`${environment.apiUrl}/annuaire/`, { params: query });
   }
 
   offres(params: Record<string, string> = {}): Observable<ApiListResponse<OffreDemande>> {
     return this.http.get<ApiListResponse<OffreDemande>>(this.base, {
       params: { page_size: '12', ...params },
     });
+  }
+
+  rechercher(filtres: AnnoncesFiltres): Observable<ApiListResponse<OffreDemande>> {
+    return this.http.get<ApiListResponse<OffreDemande>>(this.base, { params: paramsAnnonces(filtres) });
   }
 
   get(id: string): Observable<OffreDemande> {
@@ -46,10 +70,18 @@ export class MarketplaceService {
     return this.http.post<OffreDemande>(this.base, payload);
   }
 
+  modifierOffre(id: string, payload: Partial<OffreDemande>): Observable<OffreDemande> {
+    return this.http.patch<OffreDemande>(`${this.base}${id}/`, payload);
+  }
+
   uploadPhotos(id: string, files: File[]): Observable<OffreDemande> {
     const form = new FormData();
     files.forEach((f) => form.append('photos', f));
     return this.http.post<OffreDemande>(`${this.base}${id}/photos/`, form);
+  }
+
+  supprimerPhoto(id: string, numero: number): Observable<OffreDemande> {
+    return this.http.post<OffreDemande>(`${this.base}${id}/photos/supprimer/`, { numero });
   }
 
   valider(id: string): Observable<OffreDemande> {

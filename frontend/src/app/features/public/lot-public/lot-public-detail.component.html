@@ -1,10 +1,22 @@
 <div class="lot-fiche">
-  <a [routerLink]="lot()?.producteur ? ['/annuaire', lot()!.producteur.id] : ['/annuaire']" class="lot-fiche__back">
-    <pnlf-icon name="arrow-left" [size]="14" /> Retour à la fiche du producteur
+  <a [routerLink]="lot()?.producteur?.id ? ['/annuaire', lot()!.producteur.id] : ['/annuaire']" class="lot-fiche__back no-print">
+    <pnlf-icon name="arrow-left" [size]="14" /> {{ lot()?.producteur?.id ? 'Retour à la fiche du producteur' : 'Retour à l’annuaire' }}
   </a>
 
   @if (loading()) {
     <pnlf-skeleton height="460px" />
+  } @else if (commercialiseUuid() !== null) {
+    <div class="lot-fiche__error" role="status">
+      <pnlf-icon name="shopping-bag" [size]="40" />
+      <h1>Ce lot a été commercialisé</h1>
+      <p>Il n’est plus proposé à la vente. Son origine et son parcours restent vérifiables grâce à son QR code.</p>
+      <div class="lot-fiche__error-actions">
+        @if (commercialiseUuid()) {
+          <a pnlfButton [routerLink]="['/verifier', commercialiseUuid()]" variant="primary">Vérifier sa traçabilité</a>
+        }
+        <a pnlfButton routerLink="/annuaire" variant="outline">Retour à l'annuaire</a>
+      </div>
+    </div>
   } @else if (notFound() || !lot()) {
     <div class="lot-fiche__error">
       <pnlf-icon name="package" [size]="40" />
@@ -51,28 +63,62 @@
           }
         </section>
 
-        @if (l.mouvements?.length) {
-          <section class="panel">
-            <header class="panel__head">
-              <h2><pnlf-icon name="layers" [size]="18" /> Parcours de traçabilité</h2>
-              <p>Étapes enregistrées depuis la collecte.</p>
-            </header>
-            <ol class="trace">
-              @for (m of l.mouvements; track $index; let last = $last) {
-                <li [class.is-last]="last">
-                  <span class="trace__dot" aria-hidden="true"></span>
-                  <div class="trace__body">
-                    <strong>{{ m.type_libelle }}</strong>
-                    <span>
-                      {{ m.date_mouvement | pnlfDate }}
-                      @if (m.lieu_libelle) { · {{ m.lieu_libelle }} }
-                    </span>
-                  </div>
+        <section class="panel">
+          <header class="panel__head">
+            <h2><pnlf-icon name="shield-check" [size]="18" /> Origine et validation</h2>
+            <p>Informations contrôlées lors de la validation du lot.</p>
+          </header>
+          <dl class="infos">
+            <div><dt>Produit</dt><dd>{{ l.produit.nom }}</dd></div>
+            @if (l.produit.nom_scientifique) {
+              <div><dt>Nom scientifique</dt><dd><em>{{ l.produit.nom_scientifique }}</em></dd></div>
+            }
+            @if (l.produit.categorie) {
+              <div><dt>Catégorie</dt><dd>{{ l.produit.categorie }}</dd></div>
+            }
+            <div><dt>Zone de collecte</dt><dd>{{ l.lieu.zone || 'Non précisée' }}</dd></div>
+            <div><dt>Province</dt><dd>{{ l.lieu.province || 'Non précisée' }}</dd></div>
+            @if (l.lieu.latitude && l.lieu.longitude) {
+              <div><dt>Position approximative</dt><dd>{{ l.lieu.latitude }}, {{ l.lieu.longitude }}</dd></div>
+            }
+            @if (l.validation; as v) {
+              <div>
+                <dt>Validation</dt>
+                <dd>{{ v.libelle }}@if (v.date) { , le {{ v.date | pnlfDate }} }</dd>
+              </div>
+            }
+          </dl>
+        </section>
+
+        <section class="panel">
+          <header class="panel__head">
+            <h2><pnlf-icon name="award" [size]="18" /> Certifications valides</h2>
+          </header>
+          @if (l.certifications.length) {
+            <ul class="certifs">
+              @for (c of l.certifications; track $index) {
+                <li>
+                  <strong>{{ c.libelle }}</strong>
+                  <span>
+                    {{ c.portee === 'LOT' ? 'Propre à ce lot' : 'Détenue par le producteur' }}
+                    @if (c.organisme) { , {{ c.organisme }} }
+                    @if (c.date_expiration) { , valable jusqu’au {{ c.date_expiration | pnlfDate }} }
+                  </span>
                 </li>
               }
-            </ol>
-          </section>
-        }
+            </ul>
+          } @else {
+            <p class="panel__vide">Aucune certification en cours de validité pour ce lot ou son producteur.</p>
+          }
+        </section>
+
+        <section class="panel">
+          <header class="panel__head">
+            <h2><pnlf-icon name="layers" [size]="18" /> Parcours du lot</h2>
+            <p>De la collecte à la validation, chaque étape enregistrée sur la plateforme.</p>
+          </header>
+          <app-frise-lot [evenements]="l.frise" mode="public" [titre]="'Parcours du lot ' + l.code_lot" />
+        </section>
       </div>
 
       <aside class="lot-fiche__aside">
@@ -123,16 +169,16 @@
               <li>
                 <pnlf-icon name="map-pin" [size]="16" />
                 <div>
-                  <span>Origine</span>
+                  <span>Origine{{ l.lieu.province ? ' : ' + l.lieu.province : '' }}</span>
                   <a [href]="mapsUrl(l.latitude, l.longitude)" target="_blank" rel="noopener" class="facts__map">
-                    Voir sur la carte <pnlf-icon name="external-link" [size]="12" />
+                    Voir sur la carte<span class="pnlf-visually-hidden"> (nouvel onglet)</span> <pnlf-icon name="external-link" [size]="12" />
                   </a>
                 </div>
               </li>
             }
           </ul>
 
-          <div class="offer__actions">
+          <div class="offer__actions no-print">
             @if (l.uuid_public) {
               <a pnlfButton variant="gold" [fullWidth]="true" [routerLink]="['/verifier', l.uuid_public]">
                 Vérifier le QR de traçabilité
@@ -174,9 +220,11 @@
               }
             </div>
           </div>
-          <a pnlfButton variant="primary" [fullWidth]="true" [routerLink]="['/annuaire', l.producteur.id]">
-            Voir la fiche &amp; contacter
-          </a>
+          @if (l.producteur.id) {
+            <a pnlfButton variant="primary" [fullWidth]="true" [routerLink]="['/annuaire', l.producteur.id]" class="no-print">
+              Voir la fiche &amp; contacter
+            </a>
+          }
         </section>
       </aside>
     </div>

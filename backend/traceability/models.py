@@ -234,10 +234,12 @@ class Lot(models.Model):
     devise = models.CharField(max_length=3, default='XAF')
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
-    statut = models.CharField(max_length=20, default='DECLARE')
+    statut = models.CharField(max_length=20, default='BROUILLON')
     qr_payload = models.TextField(null=True, blank=True)
     qr_image_path = models.TextField(null=True, blank=True)
     declare_par_id = models.UUIDField(null=True, blank=True, db_column='declare_par')
+    valide_par_id = models.UUIDField(null=True, blank=True, db_column='valide_par')
+    valide_at = models.DateTimeField(null=True, blank=True)
     observations = models.TextField(null=True, blank=True)
     client_uuid = models.UUIDField(null=True, blank=True)
     sync_statut = models.CharField(max_length=20, default='SYNCED')
@@ -278,6 +280,31 @@ class Mouvement(models.Model):
         ordering = ['date_mouvement']
 
 
+class LotTransition(models.Model):
+    """Journal des changements de statut d'un lot (table public.lots_transitions, évolution 15)."""
+
+    class Mode(models.TextChoices):
+        AGENT = 'AGENT', 'Validation par une autorité'
+        AUTO = 'AUTO', 'Auto-validation (titulaire certifié)'
+        PROPRIETAIRE = 'PROPRIETAIRE', 'Action du titulaire'
+        MIGRATION = 'MIGRATION', 'Reprise des données'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lot = models.ForeignKey(Lot, on_delete=models.DO_NOTHING, db_column='lot_id', related_name='transitions')
+    ancien_statut = models.CharField(max_length=20, null=True, blank=True)
+    nouveau_statut = models.CharField(max_length=20)
+    mode = models.CharField(max_length=20, choices=Mode.choices)
+    role_auteur = models.CharField(max_length=30, null=True, blank=True)
+    auteur_id = models.UUIDField(null=True, blank=True)
+    motif = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'lots_transitions'
+        ordering = ['created_at']
+
+
 class CooperativeMembre(models.Model):
     """Adhésion producteur ↔ coopérative. PK composite SQL, sans colonne id."""
 
@@ -295,6 +322,53 @@ class CooperativeMembre(models.Model):
     class Meta:
         managed = False
         db_table = 'cooperative_membres'
+
+
+class ProducteurProduit(models.Model):
+    """Produits exploités ou collectés par un producteur. PK composite SQL, sans colonne id."""
+
+    producteur = models.ForeignKey(
+        Producteur, on_delete=models.DO_NOTHING, db_column='producteur_id', related_name='produits_exploites'
+    )
+    produit = models.ForeignKey(Produit, on_delete=models.DO_NOTHING, db_column='produit_id')
+    principal = models.BooleanField(default=False)
+    created_at = models.DateTimeField()
+    pk = models.CompositePrimaryKey('producteur', 'produit')
+
+    class Meta:
+        managed = False
+        db_table = 'producteur_produits'
+
+
+class InvitationCooperative(models.Model):
+    """Invitation d'une coopérative à un producteur/collecteur (voir evolutions/14_invitations_cooperatives.sql)."""
+
+    class Statut(models.TextChoices):
+        EN_ATTENTE = 'EN_ATTENTE', 'En attente'
+        ACCEPTEE = 'ACCEPTEE', 'Acceptée'
+        REFUSEE = 'REFUSEE', 'Refusée'
+        ANNULEE = 'ANNULEE', 'Annulée'
+        CADUQUE = 'CADUQUE', 'Sans objet'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    cooperative = models.ForeignKey(
+        Cooperative, on_delete=models.DO_NOTHING, db_column='cooperative_id', related_name='invitations'
+    )
+    producteur = models.ForeignKey(
+        Producteur, on_delete=models.DO_NOTHING, db_column='producteur_id', related_name='invitations_coop'
+    )
+    statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.EN_ATTENTE)
+    message = models.TextField(null=True, blank=True)
+    invite_par_id = models.UUIDField(null=True, blank=True)
+    repondu_par_id = models.UUIDField(null=True, blank=True)
+    motif_reponse = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField()
+    repondu_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'invitations_cooperative'
+        ordering = ['-created_at']
 
 
 class TypeCertification(models.Model):
@@ -340,6 +414,27 @@ class Certification(models.Model):
         managed = False
         db_table = 'certifications'
         ordering = ['-date_demande']
+
+
+class PieceCertification(models.Model):
+    """Pièce justificative d'une demande de certification (table public.certifications_pieces, évolution 15)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    certification = models.ForeignKey(
+        Certification, on_delete=models.DO_NOTHING, db_column='certification_id', related_name='pieces',
+    )
+    intitule = models.CharField(max_length=150)
+    chemin = models.TextField()
+    nom_original = models.CharField(max_length=255, null=True, blank=True)
+    type_mime = models.CharField(max_length=60, null=True, blank=True)
+    taille_octets = models.IntegerField(null=True, blank=True)
+    depose_par_id = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'certifications_pieces'
+        ordering = ['created_at']
 
 
 class DocumentInscription(models.Model):

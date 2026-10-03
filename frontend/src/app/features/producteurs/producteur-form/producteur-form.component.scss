@@ -33,9 +33,227 @@
   }
 }
 
+.producteur-form__section {
+  grid-column: 1 / -1;
+  margin: var(--space-3) 0 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.producteur-form__bloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.producteur-form__gps {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+
+  p {
+    margin: 0;
+  }
+}
+
+.producteur-form__gps-ok {
+  margin: 0;
+  color: var(--color-success, #146b3f);
+}
+
+.producteur-form__gps-erreur {
+  margin: 0;
+  color: var(--color-danger, #a12a2a);
+}
+
+.producteur-form__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.producteur-form__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-muted, #f4f8f5);
+  font-size: 0.85rem;
+
+  small {
+    color: var(--text-secondary);
+  }
+
+  &--principal {
+    border-color: var(--color-primary, #146b3f);
+    font-weight: 600;
+  }
+}
+
+.producteur-form__chip-action {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--color-primary, #146b3f);
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.producteur-form__filtre {
+  max-width: 22rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  font: inherit;
+}
+
+.producteur-form__produits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-1) var(--space-4);
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+}
+
+.producteur-form__produit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.producteur-form__photo {
+  display: flex;
+  gap: var(--space-5);
+  align-items: flex-start;
+
+  @media (max-width: 560px) {
+    flex-direction: column;
+  }
+}
+
+.producteur-form__photo-cadre {
+  flex: 0 0 auto;
+  width: 7rem;
+  height: 8.75rem;
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary, #146b3f);
+  color: #fff;
+  font-size: 1.8rem;
+  font-weight: 700;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.producteur-form__photo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+
+  p {
+    margin: 0;
+  }
+}
+
+.producteur-form__ligne-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.producteur-form__fichier {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--color-primary, #146b3f);
+  border-radius: var(--radius-md, 8px);
+  color: var(--color-primary, #146b3f);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  &:focus-within {
+    outline: 2px solid var(--color-primary, #146b3f);
+    outline-offset: 2px;
+  }
+}
+
+.producteur-form__documents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.producteur-form__document {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+}
+
+.producteur-form__document-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.producteur-form__statut {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+
+  &--ok {
+    color: var(--color-success, #146b3f);
+    font-weight: 600;
+  }
+
+  &--attente {
+    color: var(--color-warning, #8a5a00);
+  }
+}
+
 .producteur-form__actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--space-3);
   padding-top: var(--space-4);
   border-top: 1px solid var(--border-subtle);

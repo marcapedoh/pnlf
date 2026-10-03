@@ -19,6 +19,9 @@ local_settings.py
 staticfiles/
 media/
 
+# Modèle IA de modération des images (téléchargé au build par scripts/telecharger_modele_nsfw.py)
+backend/modeles/
+
 # Sauvegardes de production (base + médias)
 sauvegardes/
 

@@ -8,43 +8,18 @@
     </p>
   </header>
 
-  <div class="offres-pub__filters">
-    <div class="offres-pub__field">
-      <pnlf-icon name="search" [size]="16" />
-      <label class="pnlf-visually-hidden" for="offres-pub-search">Rechercher une annonce</label>
-      <input
-        id="offres-pub-search"
-        type="search"
-        class="offres-pub__input"
-        placeholder="Rechercher un titre, un produit…"
-        [(ngModel)]="recherche"
-        (ngModelChange)="onFilterChange()"
-      />
-    </div>
-    <select class="offres-pub__select" aria-label="Type d’annonce" [(ngModel)]="typeAnnonce" (ngModelChange)="onFilterChange()">
-      <option value="">Toutes les annonces</option>
-      <option value="OFFRE">Offres (vente)</option>
-      <option value="DEMANDE">Demandes (achat)</option>
-    </select>
-    <select class="offres-pub__select" aria-label="Province" [(ngModel)]="province" (ngModelChange)="onFilterChange()">
-      <option value="">Toutes les provinces</option>
-      @for (pr of provinces(); track pr.id) {
-        <option [value]="pr.id">{{ pr.nom }}</option>
-      }
-    </select>
-    <select class="offres-pub__select" aria-label="Produit" [(ngModel)]="produit" (ngModelChange)="onFilterChange()">
-      <option value="">Tous les produits</option>
-      @for (p of produits(); track p.id) {
-        <option [value]="p.id">{{ p.nom }}</option>
-      }
-    </select>
-    <button type="button" class="offres-pub__btn" (click)="resetFilters()">Effacer les filtres</button>
-  </div>
+  <app-annonces-barre
+    [produits]="produits()"
+    [provinces]="provinces()"
+    [total]="loading() ? null : total()"
+    [(vue)]="vue"
+    (changement)="appliquerFiltres($event)"
+  />
 
   @if (loading()) {
-    <div class="offres-pub__grid">
+    <div class="offres-pub__grid" role="status" aria-label="Chargement des annonces">
       @for (i of [1, 2, 3, 4]; track i) {
-        <pnlf-skeleton height="280px" />
+        <pnlf-skeleton [height]="vue() === 'grille' ? '280px' : '80px'" />
       }
     </div>
   } @else if (loadError()) {
@@ -52,35 +27,13 @@
       <button type="button" class="offres-pub__btn" (click)="load()">Réessayer</button>
     </pnlf-empty-state>
   } @else if (items().length === 0) {
-    <pnlf-empty-state title="Aucune annonce publiée" description="Revenez ultérieurement ou élargissez vos critères.">
-      <button type="button" class="offres-pub__btn" (click)="resetFilters()">Effacer les filtres</button>
-    </pnlf-empty-state>
+    @if (filtresActifs) {
+      <pnlf-empty-state icon="search" title="Aucune annonce ne correspond à votre recherche" description="Modifiez les mots-clés ou retirez certains filtres pour élargir les résultats." />
+    } @else {
+      <pnlf-empty-state icon="shopping-bag" title="Aucune annonce publiée pour le moment" description="Les offres et demandes validées par l’ENEF apparaîtront ici. Revenez prochainement." />
+    }
   } @else {
-    <p class="offres-pub__count">{{ total() }} annonce{{ total() > 1 ? 's' : '' }} publiée{{ total() > 1 ? 's' : '' }}</p>
-    <div class="offres-pub__grid">
-      @for (o of items(); track o.id) {
-        <a class="offre-pub-card" [routerLink]="['/offres-demandes', o.id]">
-          <div class="offre-pub-card__photo">
-            @if (o.photos_urls?.length) {
-              <img [src]="o.photos_urls![0]" alt="" loading="lazy" />
-            } @else {
-              <span>Photo à venir</span>
-            }
-            <span class="offre-pub-card__type" [class.is-demande]="o.type_annonce === 'DEMANDE'">
-              {{ o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }}
-            </span>
-          </div>
-          <div class="offre-pub-card__body">
-            <h2>{{ o.titre }}</h2>
-            <p class="offre-pub-card__meta">{{ o.produit_nom }}@if (o.province_nom) { · {{ o.province_nom }} }</p>
-            @if (o.prix_unitaire) {
-              <p class="offre-pub-card__price">{{ o.prix_unitaire | pnlfMontant: o.devise }}@if (o.unite) { / {{ o.unite | pnlfUnite }} }</p>
-            }
-            <p class="offre-pub-card__date">Publiée le {{ o.created_at | pnlfDate }}</p>
-          </div>
-        </a>
-      }
-    </div>
+    <app-annonces-affichage [items]="items()" [vue]="vue()" lien="/offres-demandes" />
     @if (total() > pageSize) {
       <pnlf-pagination label="Pagination des annonces" [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
     }

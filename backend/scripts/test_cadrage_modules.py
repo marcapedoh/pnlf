@@ -114,7 +114,7 @@ def run():
             from datetime import date
             lot = Lot.objects.create(
                 produit=prod, producteur=pr, date_collecte=date.today(),
-                quantite=1, unite='KG', statut='DECLARE',
+                quantite=1, unite='KG', statut='BROUILLON',
                 created_at=timezone.now(), updated_at=timezone.now(),
             )
             lot.refresh_from_db()

@@ -11,41 +11,28 @@ from rest_framework.exceptions import ValidationError
 
 from config import media_store
 
-from .models import Lot, Mouvement
+from .models import Certification, Lot, LotTransition, Mouvement
 
-# Transitions lot déclenchées par type de mouvement (cadrage §6.4)
-MOUVEMENT_STATUT_LOT: dict[str, str] = {
-    'COLLECTE': 'DECLARE',
-    'RECEPTION_COOPERATIVE': 'VALIDE',
-    'CONTROLE': 'VALIDE',
-    'TRANSFERT': 'EN_TRANSIT',
-    'TRANSFORMATION': 'TRANSFORME',
-    'VENTE': 'COMMERCIALISE',
-    'EXPORT': 'COMMERCIALISE',
-}
-
-# Ordre autorisé des statuts (pas de retour arrière sauf admin)
-STATUT_ORDRE = {
-    'BROUILLON': 0,
-    'DECLARE': 1,
-    'VALIDE': 2,
-    'EN_TRANSIT': 3,
-    'TRANSFORME': 4,
-    'COMMERCIALISE': 5,
-    'ARCHIVE': 6,
-    'ANNULE': 7,
-}
+# Cycle de vie d'un lot : trois statuts seulement (les autres valeurs de l'énumération SQL
+# pnlf.statut_lot ne sont plus utilisées, voir l'évolution 15).
+STATUTS_LOT = ('BROUILLON', 'VALIDE', 'COMMERCIALISE')
 
 STATUT_LIBELLES = {
     'BROUILLON': 'Brouillon',
-    'DECLARE': 'Déclaré',
     'VALIDE': 'Validé',
-    'EN_TRANSIT': 'En transit',
-    'TRANSFORME': 'Transformé',
     'COMMERCIALISE': 'Commercialisé',
-    'ARCHIVE': 'Archivé',
-    'ANNULE': 'Annulé',
 }
+
+TRANSITIONS_LOT: dict[str, tuple[str, ...]] = {
+    'BROUILLON': ('VALIDE',),
+    'VALIDE': ('COMMERCIALISE',),
+    'COMMERCIALISE': (),
+}
+
+# Lots vérifiables par QR code : un lot commercialisé reste vérifiable par l'acheteur final.
+STATUTS_LOT_VERIFIABLES = ('VALIDE', 'COMMERCIALISE')
+# Lots présentés dans les listes, fiches et compteurs publics.
+STATUTS_LOT_PUBLICS = ('VALIDE',)
 
 TYPES_MOUVEMENT = {
     'COLLECTE', 'RECEPTION_COOPERATIVE', 'TRANSFERT', 'TRANSFORMATION',
@@ -54,13 +41,31 @@ TYPES_MOUVEMENT = {
 
 TYPES_MOUVEMENT_LIBELLES = {
     'COLLECTE': 'Collecte',
-    'RECEPTION_COOPERATIVE': 'Réception coopérative',
-    'TRANSFERT': 'Transfert',
+    'RECEPTION_COOPERATIVE': 'Réception par la coopérative',
+    'TRANSFERT': 'Transport',
     'TRANSFORMATION': 'Transformation',
     'CONTROLE': 'Contrôle',
     'VENTE': 'Vente',
-    'EXPORT': 'Export',
-    'AUTRE': 'Autre',
+    'EXPORT': 'Exportation',
+    'AUTRE': 'Autre étape',
+}
+
+# Seules étapes ayant un effet sur le statut : une vente ou une exportation commercialise le lot.
+TYPES_MOUVEMENT_COMMERCIALISATION = ('VENTE', 'EXPORT')
+
+ROLE_LIBELLES_GENERIQUES = {
+    'ADMINISTRATEUR': 'Administration PFNL',
+    'AGENT_MINISTERE': 'Agent du ministère',
+    'AGENT_FORESTIER': 'Agent forestier',
+    'COOPERATIVE': 'Coopérative',
+    'PRODUCTEUR': 'Producteur',
+    'ACHETEUR': 'Acheteur',
+}
+
+TYPE_ACTEUR_LIBELLES = {
+    'PRODUCTEUR': 'Producteur',
+    'COLLECTEUR': 'Collecteur',
+    'RECOLTEUR': 'Récolteur',
 }
 
 UNITES_MESURE = ('KG', 'G', 'LITRE', 'ML', 'UNITE', 'BOTTE', 'SAC', 'M3', 'METRE')
@@ -75,24 +80,147 @@ TYPES_MOUVEMENT_PAR_ROLE: dict[str, set[str]] = {
     'PRODUCTEUR': {'TRANSFERT', 'TRANSFORMATION', 'VENTE', 'EXPORT', 'AUTRE'},
 }
 
-STATUTS_LOT_SANS_MOUVEMENT = ('BROUILLON', 'ANNULE', 'ARCHIVE')
-
-STATUTS_LOT_MODIFIABLES = ('BROUILLON', 'DECLARE')
-
-TRANSITIONS_MANUELLES_LOT: dict[str, tuple[str, ...]] = {
-    'BROUILLON': ('DECLARE', 'ANNULE'),
-    'DECLARE': ('VALIDE', 'ANNULE', 'ARCHIVE'),
-    'VALIDE': ('EN_TRANSIT', 'TRANSFORME', 'COMMERCIALISE', 'ANNULE', 'ARCHIVE'),
-    'EN_TRANSIT': ('TRANSFORME', 'COMMERCIALISE', 'ANNULE', 'ARCHIVE'),
-    'TRANSFORME': ('EN_TRANSIT', 'COMMERCIALISE', 'ANNULE', 'ARCHIVE'),
-    'COMMERCIALISE': ('ARCHIVE',),
-    'ANNULE': ('ARCHIVE',),
-    'ARCHIVE': (),
-}
+# Titulaire (producteur, coopérative) : modification et suppression tant que le lot n'est pas validé.
+STATUTS_LOT_MODIFIABLES = ('BROUILLON',)
+# Autorités : correction possible jusqu'à la commercialisation ; un lot commercialisé est figé
+# (son QR code doit rester vérifiable par l'acheteur final).
+STATUTS_LOT_MODIFIABLES_AGENT = ('BROUILLON', 'VALIDE')
 
 
 def libelle_statut_lot(statut: str) -> str:
     return STATUT_LIBELLES.get(statut, statut)
+
+
+def libelle_type_acteur(type_acteur: str | None) -> str:
+    return TYPE_ACTEUR_LIBELLES.get((type_acteur or 'PRODUCTEUR').upper(), 'Producteur')
+
+
+def type_acteur_producteur(producteur) -> str:
+    from .db_utils import get_optional_column
+
+    return get_optional_column('producteurs', 'type_acteur', producteur.id, default='PRODUCTEUR') or 'PRODUCTEUR'
+
+
+def _cooperatives_gerees(user) -> set:
+    from .models import Cooperative
+
+    return set(Cooperative.objects.filter(utilisateur_id=getattr(user, 'id', None)).values_list('id', flat=True))
+
+
+def est_titulaire_lot(user, lot: Lot) -> bool:
+    """Producteur du lot, ou coopérative à laquelle le lot ou son producteur est rattaché."""
+    role = getattr(user, 'role', None)
+    if role == 'PRODUCTEUR':
+        return bool(lot.producteur_id and lot.producteur.utilisateur_id == user.id)
+    if role == 'COOPERATIVE':
+        coops = _cooperatives_gerees(user)
+        return bool(coops) and (
+            lot.cooperative_id in coops or (lot.producteur_id and lot.producteur.cooperative_id in coops)
+        )
+    return False
+
+
+def certifications_actives_qs(lot: Lot):
+    """Certifications obtenues et non expirées du producteur du lot ou du lot lui-même.
+
+    Le modèle de données ne porte pas de certification propre aux coopératives : pour un lot
+    géré par une coopérative, c'est la certification du producteur du lot qui compte.
+    """
+    from django.db.models import Q
+
+    aujourd_hui = timezone.localdate()
+    return (
+        Certification.objects.filter(Q(producteur_id=lot.producteur_id) | Q(lot_id=lot.id), statut='OBTENUE')
+        .filter(Q(date_expiration__isnull=True) | Q(date_expiration__gte=aujourd_hui))
+        .select_related('type_certification')
+    )
+
+
+def droits_lot(user, lot: Lot) -> dict:
+    """Actions possibles sur un lot pour l'utilisateur, avec l'explication d'un éventuel refus."""
+    role = getattr(user, 'role', None)
+    agent = role in ROLES_AGENTS
+    titulaire = est_titulaire_lot(user, lot)
+    certifie = titulaire and lot.statut == 'BROUILLON' and certifications_actives_qs(lot).exists()
+    motif = None
+    if lot.statut == 'BROUILLON' and titulaire and not certifie:
+        if role == 'COOPERATIVE':
+            motif = (
+                'La validation de ce lot revient à un agent du ministère, un agent forestier ou à '
+                "l'administration. Pour valider vous-même les lots de vos membres, le producteur "
+                'concerné doit détenir une certification active (demande depuis le menu Certifications).'
+            )
+        else:
+            motif = (
+                'La validation de ce lot revient à un agent du ministère, un agent forestier ou à '
+                "l'administration. Pour valider vous-même vos lots, obtenez une certification active "
+                '(demande depuis le menu Certifications).'
+            )
+    statuts_modifiables = STATUTS_LOT_MODIFIABLES_AGENT if agent else STATUTS_LOT_MODIFIABLES
+    gestionnaire = agent or titulaire
+    return {
+        'peut_valider': lot.statut == 'BROUILLON' and (agent or certifie),
+        'mode_validation': 'AGENT' if agent else ('AUTO' if certifie else None),
+        'motif_validation': motif,
+        'peut_commercialiser': lot.statut == 'VALIDE' and gestionnaire,
+        'peut_modifier': gestionnaire and lot.statut in statuts_modifiables,
+        'peut_supprimer': gestionnaire and lot.statut in statuts_modifiables,
+        'peut_ajouter_etape': gestionnaire and role in TYPES_MOUVEMENT_PAR_ROLE,
+    }
+
+
+def _journaliser_transition(lot: Lot, ancien: str, user, mode: str, motif: str | None = None) -> None:
+    LotTransition.objects.create(
+        lot=lot, ancien_statut=ancien, nouveau_statut=lot.statut, mode=mode,
+        role_auteur=getattr(user, 'role', None), auteur_id=getattr(user, 'id', None),
+        motif=motif, created_at=timezone.now(),
+    )
+
+
+def valider_lot(lot: Lot, user) -> str:
+    """Passe un lot BROUILLON au statut VALIDE. Retourne le mode de validation (AGENT ou AUTO)."""
+    if lot.statut != 'BROUILLON':
+        raise ValidationError({
+            'statut': f'Seul un lot en brouillon peut être validé (statut actuel : « {libelle_statut_lot(lot.statut)} »).',
+        })
+    droits = droits_lot(user, lot)
+    if not droits['peut_valider']:
+        from rest_framework.exceptions import PermissionDenied
+
+        raise PermissionDenied(droits['motif_validation'] or 'Vous n’êtes pas habilité à valider ce lot.')
+    if lot.producteur.statut != 'ACTIF' or lot.producteur.deleted_at is not None:
+        raise ValidationError({
+            'statut': 'La fiche du producteur de ce lot doit être active pour que le lot soit validé.',
+        })
+    now = timezone.now()
+    lot.statut = 'VALIDE'
+    lot.valide_par_id = user.id
+    lot.valide_at = now
+    lot.updated_at = now
+    lot.save(update_fields=['statut', 'valide_par_id', 'valide_at', 'updated_at'])
+    _journaliser_transition(lot, 'BROUILLON', user, droits['mode_validation'])
+    return droits['mode_validation']
+
+
+def commercialiser_lot(lot: Lot, user, *, motif: str | None = None) -> None:
+    """Passe un lot VALIDE au statut COMMERCIALISE (titulaire ou autorité)."""
+    if lot.statut != 'VALIDE':
+        if lot.statut == 'BROUILLON':
+            message = 'Le lot doit d’abord être validé avant d’être commercialisé.'
+        else:
+            message = 'Ce lot est déjà commercialisé.'
+        raise ValidationError({'statut': message})
+    if not droits_lot(user, lot)['peut_commercialiser']:
+        from rest_framework.exceptions import PermissionDenied
+
+        raise PermissionDenied(
+            'Seuls le producteur, la coopérative titulaire du lot ou une autorité peuvent le déclarer commercialisé.'
+        )
+    lot.statut = 'COMMERCIALISE'
+    lot.updated_at = timezone.now()
+    lot.save(update_fields=['statut', 'updated_at'])
+    mode = 'AGENT' if getattr(user, 'role', None) in ROLES_AGENTS else 'PROPRIETAIRE'
+    _journaliser_transition(lot, 'VALIDE', user, mode, motif)
 
 
 def valider_type_mouvement(type_mouvement: str) -> str:
@@ -112,33 +240,163 @@ def valider_type_mouvement_pour_role(type_mouvement: str, role: str | None) -> N
         })
 
 
-def verifier_lot_accepte_mouvement(lot: Lot) -> None:
-    if lot.statut in STATUTS_LOT_SANS_MOUVEMENT:
-        message = f'Aucune étape ne peut être ajoutée à un lot « {libelle_statut_lot(lot.statut)} ».'
-        if lot.statut == 'BROUILLON':
-            message += ' Publiez d’abord le brouillon.'
-        raise ValidationError({'lot': message})
+def verifier_mouvement_compatible(lot: Lot, type_mouvement: str) -> None:
+    """Toutes les étapes sont acceptées, sauf la vente ou l'exportation d'un lot non validé."""
+    if type_mouvement in TYPES_MOUVEMENT_COMMERCIALISATION and lot.statut == 'BROUILLON':
+        libelle = TYPES_MOUVEMENT_LIBELLES[type_mouvement].lower()
+        raise ValidationError({
+            'type_mouvement': f'Le lot doit être validé avant toute {libelle}.',
+        })
 
 
-def statut_apres_mouvement(lot: Lot, type_mouvement: str) -> str:
-    """Statut du lot après un mouvement : progression uniquement, jamais de retour arrière."""
-    cible = MOUVEMENT_STATUT_LOT.get(type_mouvement)
-    if not cible or cible == lot.statut:
-        return lot.statut
-    if STATUT_ORDRE.get(cible, 0) > STATUT_ORDRE.get(lot.statut, 0):
-        return cible
-    return lot.statut
-
-
-def appliquer_mouvement_sur_lot(lot: Lot, type_mouvement: str) -> bool:
-    """Met à jour le statut du lot selon le mouvement enregistré. Retourne True si le statut change."""
-    nouveau = statut_apres_mouvement(lot, type_mouvement)
-    if nouveau == lot.statut:
+def appliquer_mouvement_sur_lot(lot: Lot, type_mouvement: str, user) -> bool:
+    """Une vente ou une exportation commercialise un lot validé. Retourne True si le statut change."""
+    if type_mouvement not in TYPES_MOUVEMENT_COMMERCIALISATION or lot.statut != 'VALIDE':
         return False
-    lot.statut = nouveau
-    lot.updated_at = timezone.now()
-    lot.save(update_fields=['statut', 'updated_at'])
+    commercialiser_lot(lot, user, motif=f'Étape « {TYPES_MOUVEMENT_LIBELLES[type_mouvement]} » enregistrée.')
     return True
+
+
+def _role_par_utilisateur(ids) -> dict:
+    from accounts.models import Utilisateur
+
+    ids = {i for i in ids if i}
+    if not ids:
+        return {}
+    return dict(Utilisateur.objects.filter(id__in=ids).values_list('id', 'role'))
+
+
+def libelle_validation(mode: str | None, role: str | None, type_acteur: str | None = None) -> str:
+    """Autorité de validation exprimée sans aucune donnée personnelle de l'agent."""
+    if mode == 'AUTO':
+        if role == 'COOPERATIVE':
+            return 'Auto-validé par la coopérative (producteur certifié)'
+        return f'Auto-validé ({libelle_type_acteur(type_acteur).lower()} certifié)'
+    return {
+        'AGENT_MINISTERE': 'Validé par un agent du ministère',
+        'AGENT_FORESTIER': 'Validé par un agent forestier',
+        'ADMINISTRATEUR': "Validé par l'administration PFNL",
+    }.get(role or '', 'Validé par une autorité habilitée')
+
+
+def _gps_arrondi(valeur):
+    """Position arrondie (environ 1 km) : la parcelle exacte n'est pas diffusée publiquement."""
+    return round(valeur, 2) if valeur is not None else None
+
+
+def validation_lot(lot: Lot, transitions=None, roles=None) -> dict | None:
+    """Date et autorité de validation (journal des transitions, à défaut colonnes du lot)."""
+    if lot.statut not in STATUTS_LOT_VERIFIABLES:
+        return None
+    transitions = list(lot.transitions.all()) if transitions is None else transitions
+    t = next((t for t in transitions if t.nouveau_statut == 'VALIDE' and t.mode in ('AGENT', 'AUTO')), None)
+    type_acteur = type_acteur_producteur(lot.producteur)
+    if t is not None:
+        return {
+            'date': t.created_at, 'mode': t.mode, 'role': t.role_auteur,
+            'libelle': libelle_validation(t.mode, t.role_auteur, type_acteur),
+        }
+    roles = _role_par_utilisateur([lot.valide_par_id]) if roles is None else roles
+    role = roles.get(lot.valide_par_id)
+    mode = 'AUTO' if role in ('PRODUCTEUR', 'COOPERATIVE') else ('AGENT' if role else None)
+    return {'date': lot.valide_at, 'mode': mode, 'role': role, 'libelle': libelle_validation(mode, role, type_acteur)}
+
+
+def construire_frise_lot(lot: Lot, *, public: bool) -> list[dict]:
+    """Frise chronologique complète : collecte, déclaration, étapes, validation, commercialisation.
+
+    En mode public, aucun commentaire, destinataire ni identité d'acteur n'est exposé : l'acteur
+    est désigné par son rôle (producteur, coopérative, agent forestier...).
+    """
+    from datetime import datetime, time, timedelta
+
+    mouvements = list(lot.mouvements.all().order_by('date_mouvement', 'created_at'))
+    transitions = list(lot.transitions.all())
+    roles = _role_par_utilisateur(
+        [m.acteur_utilisateur_id for m in mouvements] + [lot.declare_par_id, lot.valide_par_id]
+    )
+    type_acteur = type_acteur_producteur(lot.producteur)
+    titulaire_uid = lot.producteur.utilisateur_id if lot.producteur_id else None
+
+    def acteur(uid) -> str:
+        if uid and uid == titulaire_uid:
+            return libelle_type_acteur(type_acteur)
+        return ROLE_LIBELLES_GENERIQUES.get(roles.get(uid), 'Acteur de la filière')
+
+    zone = lot.zone_collecte if lot.zone_collecte_id else None
+    lieu_collecte = zone.libelle if zone else None
+    debut_collecte = timezone.make_aware(datetime.combine(lot.date_collecte, time.min))
+    evenements = [
+        {
+            'type': 'COLLECTE', 'libelle': 'Collecte du produit', 'date': debut_collecte, 'date_seule': True,
+            'lieu': lieu_collecte, 'quantite': lot.quantite, 'unite': lot.unite,
+            'acteur': libelle_type_acteur(type_acteur),
+        },
+        {
+            'type': 'DECLARATION', 'libelle': 'Déclaration sur la plateforme', 'date': lot.created_at,
+            'lieu': None, 'quantite': None, 'unite': None, 'acteur': acteur(lot.declare_par_id),
+        },
+    ]
+    for m in mouvements:
+        # Étape de collecte générée automatiquement à la déclaration : déjà représentée ci-dessus.
+        if m.type_mouvement == 'COLLECTE' and abs(m.date_mouvement - lot.created_at) <= timedelta(minutes=10):
+            continue
+        evt = {
+            'type': 'MOUVEMENT', 'code': m.type_mouvement,
+            'libelle': TYPES_MOUVEMENT_LIBELLES.get(m.type_mouvement, m.type_mouvement),
+            'date': m.date_mouvement, 'lieu': m.lieu_libelle,
+            'quantite': m.quantite, 'unite': m.unite, 'acteur': acteur(m.acteur_utilisateur_id),
+        }
+        if public:
+            evt['latitude'], evt['longitude'] = _gps_arrondi(m.latitude), _gps_arrondi(m.longitude)
+        else:
+            evt.update({
+                'latitude': m.latitude, 'longitude': m.longitude,
+                'destinataire': m.destinataire_libelle, 'commentaire': m.commentaire,
+            })
+        evenements.append(evt)
+
+    validation = validation_lot(lot, transitions, roles)
+    if validation and validation['date']:
+        evenements.append({
+            'type': 'VALIDATION', 'libelle': validation['libelle'], 'date': validation['date'],
+            'lieu': None, 'quantite': None, 'unite': None,
+            'acteur': (
+                libelle_type_acteur(type_acteur) if validation['role'] == 'PRODUCTEUR'
+                else ROLE_LIBELLES_GENERIQUES.get(validation['role'], 'Autorité habilitée')
+            ),
+        })
+    if lot.statut == 'COMMERCIALISE':
+        t = next((t for t in reversed(transitions) if t.nouveau_statut == 'COMMERCIALISE'), None)
+        vente = next((m for m in mouvements if m.type_mouvement in TYPES_MOUVEMENT_COMMERCIALISATION), None)
+        date_c = t.created_at if t else (vente.date_mouvement if vente else lot.updated_at)
+        evenements.append({
+            'type': 'COMMERCIALISATION', 'libelle': 'Lot commercialisé', 'date': date_c,
+            'lieu': None, 'quantite': None, 'unite': None,
+            'acteur': (
+                ROLE_LIBELLES_GENERIQUES.get(t.role_auteur, 'Acteur de la filière')
+                if t and t.auteur_id != titulaire_uid else libelle_type_acteur(type_acteur)
+            ),
+        })
+    priorite = {'COLLECTE': 0, 'DECLARATION': 1, 'MOUVEMENT': 2, 'VALIDATION': 3, 'COMMERCIALISATION': 4}
+    evenements.sort(key=lambda e: (e['date'], priorite[e['type']]))
+    for e in evenements:
+        e.setdefault('date_seule', False)
+    return evenements
+
+
+def certifications_publiques(lot: Lot) -> list[dict]:
+    return [
+        {
+            'libelle': c.type_certification.libelle,
+            'organisme': c.type_certification.organisme,
+            'numero_certificat': c.numero_certificat,
+            'date_obtention': c.date_obtention,
+            'date_expiration': c.date_expiration,
+            'portee': 'LOT' if c.lot_id == lot.id else 'PRODUCTEUR',
+        }
+        for c in certifications_actives_qs(lot).order_by('type_certification__libelle')
+    ]
 
 
 def generer_qr_payload(lot: Lot) -> str:
@@ -232,6 +490,12 @@ def enregistrer_document(fichier, sous_dossier: str, entite_id) -> str:
     if ext not in DOCUMENT_ALLOWED_EXT:
         raise ValidationError({'document': 'Formats acceptés : PDF, JPG, PNG.'})
     _valider_magic_document(fichier, ext)
+    if ext != '.pdf':
+        from config import moderation_images
+
+        rel_image = f'documents/{sous_dossier}/{entite_id}{ext}'
+        analyse = moderation_images.controler_fichier(fichier, champ='document', rel=rel_image)
+        moderation_images.consigner(analyse, rel_image)
     doc_dir = Path(settings.MEDIA_ROOT) / 'documents' / sous_dossier
     doc_dir.mkdir(parents=True, exist_ok=True)
     # Supprime toute variante d'extension précédente pour éviter les doublons.
@@ -271,65 +535,45 @@ def photos_urls_lot(lot_id, request=None) -> list[str]:
 
 
 def enregistrer_photo(fichier, sous_dossier: str, entite_id, suffixe: str = '') -> str:
-    """Valide, redimensionne et enregistre une photo (producteur/produit/lot). Retourne le chemin relatif media."""
-    from PIL import Image, UnidentifiedImageError
+    """Valide, analyse (modération IA), redimensionne et enregistre une photo. Retourne le chemin relatif media."""
+    from config import moderation_images
 
     if fichier.size > PHOTO_MAX_SIZE_BYTES:
         raise ValidationError({'photo': 'Image trop volumineuse (5 Mo maximum).'})
 
-    try:
-        image = Image.open(fichier)
-        image.verify()
-        fichier.seek(0)
-        image = Image.open(fichier)
-        image = image.convert('RGB')
-    except (UnidentifiedImageError, OSError):
-        raise ValidationError({'photo': 'Fichier image invalide (JPEG/PNG/WEBP attendu).'})
-
-    image.thumbnail((PHOTO_MAX_DIMENSION, PHOTO_MAX_DIMENSION))
+    image = moderation_images.ouvrir_image(fichier, champ='photo', dimension_max=PHOTO_MAX_DIMENSION)
+    filename = f'{entite_id}{suffixe}.jpg'
+    rel = f'photos/{sous_dossier}/{filename}'
+    analyse = moderation_images.controler(image, champ='photo', rel=rel)
+    moderation_images.consigner(analyse, rel)
 
     photo_dir = Path(settings.MEDIA_ROOT) / 'photos' / sous_dossier
     photo_dir.mkdir(parents=True, exist_ok=True)
-    filename = f'{entite_id}{suffixe}.jpg'
-    filepath = photo_dir / filename
-    image.save(filepath, format='JPEG', quality=85)
-
-    rel = f'photos/{sous_dossier}/{filename}'
+    image.save(photo_dir / filename, format='JPEG', quality=85)
     media_store.pousser(rel)
     return rel
 
 
-def valider_transition_manuelle(statut_actuel: str, nouveau_statut: str) -> None:
-    if nouveau_statut not in STATUT_ORDRE:
-        raise ValidationError({'statut': 'Statut de lot inconnu.'})
-    if nouveau_statut == statut_actuel:
-        raise ValidationError({
-            'statut': f'Le lot est déjà au statut « {libelle_statut_lot(nouveau_statut)} ».',
-        })
-    autorises = TRANSITIONS_MANUELLES_LOT.get(statut_actuel, ())
-    if nouveau_statut not in autorises:
-        avant = libelle_statut_lot(statut_actuel)
-        apres = libelle_statut_lot(nouveau_statut)
-        if autorises:
-            possibles = ', '.join(f'« {libelle_statut_lot(s)} »' for s in autorises)
-            detail = f' Statuts possibles : {possibles}.'
-        else:
-            detail = ' Ce statut est définitif.'
-        raise ValidationError({
-            'statut': f'Un lot « {avant} » ne peut pas passer au statut « {apres} ».{detail}',
-        })
+PIECES_CERTIFICATION_MAX = 10
+PIECE_INTITULE_MAX = 150
+PIECES_TYPES_MIME = {'.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png'}
 
 
-def transition_lot_statut(lot: Lot, nouveau_statut: str, *, force: bool = False) -> None:
-    """Transition manuelle (validation agent / admin). `force` réservé à l'administrateur."""
-    if nouveau_statut not in STATUT_ORDRE:
-        raise ValidationError({'statut': 'Statut de lot inconnu.'})
-    if not force:
-        valider_transition_manuelle(lot.statut, nouveau_statut)
-    elif nouveau_statut == lot.statut:
-        raise ValidationError({
-            'statut': f'Le lot est déjà au statut « {libelle_statut_lot(nouveau_statut)} ».',
-        })
-    lot.statut = nouveau_statut
-    lot.updated_at = timezone.now()
-    lot.save(update_fields=['statut', 'updated_at'])
+def controler_piece_justificative(fichier, intitule: str, rang: int) -> str:
+    """Contrôle une pièce avant tout enregistrement (une erreur n'écrit aucun fichier). Retourne l'intitulé nettoyé."""
+    nom = fichier.name or 'document'
+    intitule = (intitule or '').strip()
+    if not intitule:
+        raise ValidationError({'pieces': f'Document {rang} (« {nom} ») : indiquez un intitulé (ex. « Attestation de récolte »).'})
+    if len(intitule) > PIECE_INTITULE_MAX:
+        raise ValidationError({'pieces': f'Document {rang} : l’intitulé ne doit pas dépasser {PIECE_INTITULE_MAX} caractères.'})
+    if fichier.size > DOCUMENT_MAX_SIZE_BYTES:
+        raise ValidationError({'pieces': f'« {nom} » est trop volumineux : 8 Mo maximum par document.'})
+    ext = Path(nom).suffix.lower()
+    if ext not in DOCUMENT_ALLOWED_EXT:
+        raise ValidationError({'pieces': f'« {nom} » n’est pas accepté : formats PDF, JPG ou PNG uniquement.'})
+    try:
+        _valider_magic_document(fichier, ext)
+    except ValidationError:
+        raise ValidationError({'pieces': f'Le contenu de « {nom} » ne correspond pas à un fichier {ext[1:].upper()} valide.'})
+    return intitule

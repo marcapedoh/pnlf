@@ -1,11 +1,12 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { LoginRequest, LoginResponse, RefreshResponse } from '../models/auth.model';
 import { RoleUtilisateur, Utilisateur } from '../models/user.model';
 import { displayInitials, displayName } from './display-name.util';
+import { PresenceService } from './presence.service';
 import { TokenStorageService } from './token-storage.service';
 
 @Injectable({ providedIn: 'root' })
@@ -23,7 +24,10 @@ export class AuthService {
   constructor(
     private readonly http: HttpClient,
     private readonly tokens: TokenStorageService,
-  ) {}
+  ) {
+    const presence = inject(PresenceService);
+    effect(() => (this.isAuthenticated() ? presence.demarrer() : presence.arreter()));
+  }
 
   login(payload: LoginRequest): Observable<LoginResponse> {
     return this.http

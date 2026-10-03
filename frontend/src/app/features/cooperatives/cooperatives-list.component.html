@@ -62,11 +62,9 @@
       </p>
     </div>
     <div class="pnlf-page-header__actions">
-      @if (!isProducteur) {
-        <button pnlfButton variant="outline" type="button" (click)="exporterListePdf()">
-          Exporter la liste (PDF)
-        </button>
-      }
+      <button pnlfButton variant="outline" type="button" (click)="exporterListePdf()">
+        Exporter la liste (PDF)
+      </button>
       @if (canCreate) {
         <button pnlfButton variant="primary" (click)="showForm.set(true)">
           + Nouvelle coopérative
@@ -88,6 +86,10 @@
       />
     </div>
   </div>
+
+  @if (isProducteur) {
+    <app-invitations-recues (reponse)="load()" />
+  }
 
   @if (loading()) {
     <div class="pnlf-table-wrapper" role="status" aria-label="Chargement des coopératives">
@@ -169,6 +171,9 @@
                       }
                       @case ('DEMANDE_AILLEURS') {
                         <span class="pnlf-table__muted">Demande en cours ailleurs</span>
+                      }
+                      @case ('INVITE') {
+                        <a pnlfButton size="sm" variant="outline" [routerLink]="[c.id]" [attr.aria-label]="'Répondre à l’invitation de ' + c.nom">Invitation reçue : répondre</a>
                       }
                       @default {
                         @if (c.statut === StatutCooperative.ACTIF) {

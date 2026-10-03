@@ -13,6 +13,7 @@ import { unwrapList } from '../../../core/models/common.model';
 import { UNITE_LOT_OPTIONS } from '../../../core/models/lot.model';
 import { Producteur } from '../../../core/models/producteur.model';
 import { ZoneCollecte } from '../../../core/models/reference.model';
+import { ErreurGeolocalisation, GeolocalisationService } from '../../../core/services/geolocalisation.service';
 import { LotsService } from '../../../core/services/lots.service';
 import { ProducteursService } from '../../../core/services/producteurs.service';
 import { ReferenceService } from '../../../core/services/reference.service';
@@ -60,6 +61,7 @@ export class LotFormComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly geolocalisation = inject(GeolocalisationService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly producteurInput = viewChild<ElementRef<HTMLInputElement>>('producteurInput');
 
@@ -82,6 +84,8 @@ export class LotFormComponent {
   readonly producteurError = signal('');
   readonly activeIndex = signal(-1);
   readonly isProducteurRole = this.auth.hasRole(RoleUtilisateur.PRODUCTEUR);
+  /** Seul l'administrateur crée des zones de collecte ; les autres rôles choisissent une zone existante. */
+  readonly peutCreerZone = this.auth.hasRole(RoleUtilisateur.ADMINISTRATEUR);
   private readonly producteurSearch$ = new Subject<string>();
 
   readonly photosMax = PHOTOS_MAX;
@@ -91,6 +95,7 @@ export class LotFormComponent {
 
   readonly locatingGps = signal(false);
   readonly gpsError = signal('');
+  readonly gpsPrecision = signal<number | null>(null);
 
   readonly form = this.fb.nonNullable.group({
     produit: ['', Validators.required],
@@ -197,7 +202,7 @@ export class LotFormComponent {
         value: z.id,
         label: `${z.libelle}${z.province_nom ? ' (' + z.province_nom + ')' : ''}`,
       })),
-      { value: NOUVELLE_ZONE, label: '+ Nouvelle zone de collecte…' },
+      ...(this.peutCreerZone ? [{ value: NOUVELLE_ZONE, label: '+ Nouvelle zone de collecte…' }] : []),
     ]);
   }
 
@@ -291,29 +296,35 @@ export class LotFormComponent {
     this.photoPreviews.update((list) => list.filter((_, i) => i !== index));
   }
 
-  useCurrentPosition(): void {
-    if (!('geolocation' in navigator)) {
-      this.gpsError.set("La géolocalisation n'est pas disponible sur cet appareil.");
-      return;
-    }
+  async useCurrentPosition(): Promise<void> {
     this.gpsError.set('');
+    this.gpsPrecision.set(null);
     this.locatingGps.set(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        this.form.patchValue({
-          latitude: position.coords.latitude.toFixed(7),
-          longitude: position.coords.longitude.toFixed(7),
-        });
-        this.form.controls.latitude.markAsTouched();
-        this.form.controls.longitude.markAsTouched();
-        this.locatingGps.set(false);
-      },
-      () => {
-        this.gpsError.set('Impossible de récupérer votre position. Vérifiez les autorisations de localisation.');
-        this.locatingGps.set(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    try {
+      const position = await this.geolocalisation.positionActuelle();
+      this.form.patchValue({
+        latitude: position.latitude.toFixed(7),
+        longitude: position.longitude.toFixed(7),
+      });
+      for (const control of [this.form.controls.latitude, this.form.controls.longitude]) {
+        control.markAsDirty();
+        control.markAsTouched();
+      }
+      this.gpsPrecision.set(position.precisionMetres);
+      if (this.form.controls.latitude.invalid || this.form.controls.longitude.invalid) {
+        this.gpsError.set(
+          'La position obtenue se situe hors du Gabon. Vérifiez la localisation de l’appareil ou saisissez les coordonnées manuellement.',
+        );
+      }
+    } catch (err) {
+      this.gpsError.set(
+        err instanceof ErreurGeolocalisation
+          ? err.message
+          : 'Votre position est indisponible pour le moment. Saisissez les coordonnées manuellement.',
+      );
+    } finally {
+      this.locatingGps.set(false);
+    }
   }
 
   private nombre(value: string): number | null {
@@ -321,15 +332,13 @@ export class LotFormComponent {
     return v ? Number(v) : null;
   }
 
-  submit(brouillon = false): void {
+  submit(): void {
     this.errorMessage.set('');
 
     if (!this.selectedProducteur()) {
       this.producteurError.set('Sélectionnez un producteur ou collecteur dans la liste de résultats.');
     }
-    const controls = this.form.controls;
-    const brouillonIncomplet = brouillon && (!controls.produit.value || !controls.quantite.value || !controls.zone_collecte.value);
-    if (!this.selectedProducteur() || this.form.invalid || brouillonIncomplet) {
+    if (!this.selectedProducteur() || this.form.invalid) {
       const message = revealFormErrors(this.form, this.host);
       if (!this.selectedProducteur()) {
         this.producteurInput()?.nativeElement.focus();
@@ -342,7 +351,7 @@ export class LotFormComponent {
 
     const raw = this.form.getRawValue();
     this.loading.set(true);
-    if (raw.zone_collecte === NOUVELLE_ZONE) {
+    if (raw.zone_collecte === NOUVELLE_ZONE && this.peutCreerZone) {
       this.referenceService
         .creerZoneCollecte({
           libelle: raw.nouvelle_zone_libelle.trim(),
@@ -356,7 +365,7 @@ export class LotFormComponent {
             this.zonesRaw = [...this.zonesRaw, zone];
             this.refreshZoneOptions();
             this.form.patchValue({ zone_collecte: zone.id, nouvelle_zone_libelle: '' });
-            this.createLot(zone.id, brouillon);
+            this.createLot(zone.id);
           },
           error: (err) => {
             this.loading.set(false);
@@ -370,10 +379,10 @@ export class LotFormComponent {
         });
       return;
     }
-    this.createLot(raw.zone_collecte, brouillon);
+    this.createLot(raw.zone_collecte);
   }
 
-  private createLot(zoneCollecteId: string, brouillon = false): void {
+  private createLot(zoneCollecteId: string): void {
     const raw = this.form.getRawValue();
     const payload = {
       produit: raw.produit,
@@ -388,7 +397,6 @@ export class LotFormComponent {
       observations: raw.observations,
       producteur: this.selectedProducteur()!.id,
       zone_collecte: zoneCollecteId,
-      brouillon,
     };
 
     this.service.create(payload).subscribe({
@@ -396,8 +404,8 @@ export class LotFormComponent {
         const done = () => {
           this.loading.set(false);
           this.toast.success(
-            brouillon ? 'Brouillon enregistré' : 'Lot déclaré avec succès',
-            `Code lot : ${lot.code_lot}`,
+            'Lot déclaré en brouillon',
+            `Code lot : ${lot.code_lot}. Il devient vérifiable publiquement après sa validation.`,
           );
           this.router.navigate(['/app/lots', lot.id]);
         };

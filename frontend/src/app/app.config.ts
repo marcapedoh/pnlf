@@ -21,6 +21,7 @@ import { AuthService } from './core/auth/auth.service';
 import { authInterceptor } from './core/http/auth.interceptor';
 import { errorInterceptor } from './core/http/error.interceptor';
 import { loadingInterceptor } from './core/http/loading.interceptor';
+import { moderationInterceptor } from './core/http/moderation.interceptor';
 import { registerLocaleFr } from './core/i18n/register-locale-fr';
 
 registerLocaleFr();
@@ -38,7 +39,7 @@ export const appConfig: ApplicationConfig = {
       // voir RouterLink + [fragment] dans confidentialite/conditions-utilisation.
       withInMemoryScrolling({ anchorScrolling: 'enabled', scrollPositionRestoration: 'enabled' }),
     ),
-    provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor, errorInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor, errorInterceptor, moderationInterceptor])),
     provideAppInitializer(() => {
       const auth = inject(AuthService);
       return firstValueFrom(auth.bootstrap());

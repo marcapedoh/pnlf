@@ -2,6 +2,8 @@ export interface ChatParticipant {
   id: string;
   nom: string;
   role: string;
+  role_libelle?: string | null;
+  organisation?: string | null;
   photo_url?: string | null;
 }
 
@@ -33,6 +35,8 @@ export interface ChatMessage {
   contenu: string | null;
   piece_type: 'IMAGE' | 'AUDIO' | null;
   piece_url: string | null;
+  /** Type MIME réel de la pièce (ex. audio/webm, audio/mp4), pour vérifier la lecture côté navigateur. */
+  piece_mime?: string | null;
   statut?: MessageStatut | null;
   lu_at: string | null;
   created_at: string;
@@ -43,9 +47,23 @@ export interface ChatContact {
   nom: string;
   prenoms: string;
   role: string;
+  /** Rôle en français ; pour un producteur : Producteur, Collecteur ou Récolteur. */
+  role_libelle?: string | null;
+  organisation?: string | null;
   libelle: string;
   photo_url?: string | null;
 }
+
+/** Filtres rapides du panneau « Nouvelle discussion » (paramètre `role` de l'API contacts). */
+export type ContactFiltreRole = '' | 'PRODUCTEUR' | 'COOPERATIVE' | 'ACHETEUR' | 'AGENT';
+
+export const CONTACT_FILTRES: { value: ContactFiltreRole; label: string }[] = [
+  { value: '', label: 'Tous' },
+  { value: 'PRODUCTEUR', label: 'Producteurs' },
+  { value: 'COOPERATIVE', label: 'Coopératives' },
+  { value: 'ACHETEUR', label: 'Acheteurs' },
+  { value: 'AGENT', label: 'Agents' },
+];
 
 export interface CoopMembreOption {
   id: string;

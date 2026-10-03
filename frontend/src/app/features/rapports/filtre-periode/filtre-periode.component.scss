@@ -1,0 +1,88 @@
+:host {
+  display: block;
+  margin-bottom: var(--space-5);
+}
+
+.filtre-periode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.filtre-periode__presets {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-self: center;
+}
+
+.filtre-periode__preset {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--pnlf-green-400);
+  }
+
+  &.is-active {
+    background: var(--pnlf-green-700);
+    border-color: var(--pnlf-green-700);
+    color: var(--white);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pnlf-green-500);
+    outline-offset: 2px;
+  }
+}
+
+.filtre-periode__champ {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.filtre-periode__recherche {
+  flex: 1 1 220px;
+}
+
+.filtre-periode__saisie {
+  position: relative;
+  display: block;
+
+  pnlf-icon {
+    position: absolute;
+    left: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  input {
+    width: 100%;
+    padding-left: 2rem;
+  }
+}
+
+.filtre-periode__erreur {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}

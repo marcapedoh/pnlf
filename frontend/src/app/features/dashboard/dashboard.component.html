@@ -4,22 +4,67 @@
     <h1 class="pnlf-page-header__title">{{ salutation() }}</h1>
     <p class="pnlf-page-header__subtitle">
       @if (isInstitutional()) {
-        Vue d'ensemble de la filière PFNL et file des demandes à traiter.
+        Vue d’ensemble de la filière PFNL et demandes que votre profil peut traiter.
       } @else if (isAcheteur) {
-        Consultez les offres, l’annuaire et la messagerie, et vérifiez l’origine des lots.
+        Annonces du marché, messagerie et lots traçables de la filière.
       } @else if (isCoop) {
-        Suivi des membres et des lots de votre coopérative.
+        Membres, lots, demandes d’adhésion et annonces de votre coopérative.
       } @else {
-        En tant que {{ roleLabel() }}, déclarez vos lots et suivez leur traçabilité.
+        En tant que {{ roleLabel() }}, déclarez vos lots, suivez leur traçabilité et publiez vos offres.
       }
     </p>
   </div>
-  @if (canDeclare) {
-    <a pnlfButton routerLink="/app/lots/nouveau" variant="primary">Déclarer un lot</a>
-  } @else {
-    <a pnlfButton routerLink="/app/marketplace/offres" variant="primary">Parcourir les offres</a>
-  }
+  <div class="dash-actions">
+    @if (canDeclare) {
+      <a pnlfButton routerLink="/app/lots/nouveau" variant="primary">Déclarer un lot</a>
+    }
+    @if (peutPublier && !isInstitutional()) {
+      <a pnlfButton routerLink="/app/marketplace/offres/nouvelle" [variant]="canDeclare ? 'outline' : 'primary'">Publier une annonce</a>
+    }
+  </div>
 </div>
+
+@if (erreurResume()) {
+  <pnlf-alert tone="error" title="Indicateurs indisponibles" class="dash-alerte">
+    {{ erreurResume() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="chargerResume()">Réessayer</button>
+  </pnlf-alert>
+}
+
+@if (resume(); as r) {
+  @if (isProducteur || isCoop) {
+    @if (!r.fiche) {
+      <pnlf-alert tone="info" title="Fiche à compléter" class="dash-alerte">
+        @if (isProducteur) {
+          Votre fiche producteur n’existe pas encore : complétez-la pour déclarer vos lots.
+          <a routerLink="/app/producteurs">Ouvrir les producteurs</a>
+        } @else {
+          Votre coopérative n’est pas encore enregistrée.
+          <a routerLink="/app/cooperatives">Ouvrir les coopératives</a>
+        }
+      </pnlf-alert>
+    } @else if (r.fiche.statut === 'EN_VALIDATION') {
+      <pnlf-alert tone="warning" title="Fiche en attente de validation" class="dash-alerte">
+        Un agent doit valider votre fiche avant que vos lots puissent être validés et publiés.
+        <a [routerLink]="isProducteur ? ['/app/producteurs', r.fiche.id] : ['/app/cooperatives', r.fiche.id]">Consulter ma fiche</a>
+      </pnlf-alert>
+    } @else if (r.fiche.statut !== 'ACTIF') {
+      <pnlf-alert tone="error" [title]="'Fiche ' + r.fiche.statut_libelle.toLowerCase()" class="dash-alerte">
+        Contactez l’administration de la plateforme pour réactiver votre fiche.
+        <a [routerLink]="isProducteur ? ['/app/producteurs', r.fiche.id] : ['/app/cooperatives', r.fiche.id]">Consulter ma fiche</a>
+      </pnlf-alert>
+    }
+    @if (isProducteur && (r.cooperative?.invitations_recues ?? 0) > 0 && r.fiche) {
+      <pnlf-alert tone="info" title="Invitation de coopérative" class="dash-alerte">
+        {{ pluriel(r.cooperative!.invitations_recues!, 'invitation attend', 'invitations attendent') }} votre réponse.
+        <a [routerLink]="['/app/producteurs', r.fiche.id]">Répondre</a>
+      </pnlf-alert>
+    }
+    @if (isProducteur && r.cooperative?.adhesion_en_attente) {
+      <pnlf-alert tone="info" class="dash-alerte">Votre demande d’adhésion à une coopérative est en attente de réponse.</pnlf-alert>
+    }
+  }
+}
 
 @if (showOnboarding()) {
   <div class="pnlf-mb-5">
@@ -27,15 +72,15 @@
     <ol class="dash-onboard">
       <li>
         <strong>Compléter ma fiche</strong>
-        <a [routerLink]="myProducteurId() ? ['/app/producteurs', myProducteurId()] : '/app/producteurs'">Ouvrir ma fiche →</a>
+        <a [routerLink]="resume()?.fiche ? ['/app/producteurs', resume()!.fiche!.id] : '/app/producteurs'">Ouvrir ma fiche</a>
       </li>
       <li>
         <strong>Déclarer mon premier lot</strong>
-        <a routerLink="/app/lots/nouveau">Déclarer →</a>
+        <a routerLink="/app/lots/nouveau">Déclarer</a>
       </li>
       <li>
         <strong>Demander une certification (optionnel)</strong>
-        <a routerLink="/app/certifications">Demander →</a>
+        <a routerLink="/app/certifications">Demander</a>
       </li>
     </ol>
   </pnlf-card>
@@ -43,70 +88,186 @@
 }
 
 @if (isInstitutional()) {
-  <form class="dash-periode" (ngSubmit)="appliquerPeriode()" aria-label="Période des indicateurs">
-    <pnlf-text-field label="Lots collectés du" type="date" name="date_debut" [(ngModel)]="dateDebut" />
-    <pnlf-text-field label="au" type="date" name="date_fin" [(ngModel)]="dateFin" />
-    <div class="dash-periode__actions">
-      <button pnlfButton variant="primary" type="submit" [loading]="loadingStats()">Appliquer</button>
-      @if (periodeActive()) {
-        <button pnlfButton variant="ghost" type="button" (click)="reinitialiserPeriode()">Toute la période</button>
-      }
+  <pnlf-card title="À traiter" subtitle="Demandes en attente que votre profil est habilité à traiter">
+    <div card-actions>
+      <a routerLink="/app/a-traiter" class="dashboard-see-all">Ouvrir la file</a>
     </div>
-  </form>
-  @if (statsError()) {
-    <pnlf-alert tone="error" style="display:block; margin-bottom: 1rem;">{{ statsError() }}</pnlf-alert>
-  }
-  <div class="dashboard-kpis">
-    <pnlf-kpi-card label="Producteurs actifs" icon="users" tone="green" [value]="stats()?.totaux?.producteurs_actifs ?? 0" [loading]="loading()" />
-    <pnlf-kpi-card label="Lots actifs" icon="package" tone="gold" [value]="stats()?.totaux?.lots_actifs ?? 0" [loading]="loading()" />
-    <pnlf-kpi-card label="À traiter" icon="file-text" tone="blue" [value]="inboxTotal()" [loading]="loading()" hint="Inscriptions, coopératives, certifications, annonces" />
-    <pnlf-kpi-card label="Produits du référentiel" icon="leaf" tone="neutral" [value]="stats()?.totaux?.produits_referentiel ?? 0" [loading]="loading()" hint="PFNL actifs suivis par la plateforme" />
-  </div>
-
-  @if (inboxTotal() > 0) {
-    <p class="dash-inbox-banner">
-      <a routerLink="/app/a-traiter">{{ inboxTotal() }} {{ inboxTotal() > 1 ? 'demandes' : 'demande' }} en attente : ouvrir la file « À traiter » →</a>
-    </p>
-  }
-
-  <div class="dashboard-charts">
-    <pnlf-card title="Répartition des lots par statut" [subtitle]="periodeActive() ? 'Lots collectés sur la période choisie' : 'Vue nationale, tous produits confondus'">
-      @if (loading()) {
-        <pnlf-skeleton height="280px" radius="12px" />
-      } @else {
-        <apx-chart [series]="statusChart().series!" [chart]="statusChart().chart!" [xaxis]="statusChart().xaxis!" [yaxis]="statusChart().yaxis!" [plotOptions]="statusChart().plotOptions!" [colors]="statusChart().colors!" [dataLabels]="statusChart().dataLabels!" [grid]="statusChart().grid!" [legend]="statusChart().legend!" />
-      }
-    </pnlf-card>
-    <pnlf-card title="Producteurs actifs par province" subtitle="Top 8 provinces les plus actives">
-      @if (loading()) {
-        <pnlf-skeleton height="280px" radius="12px" />
-      } @else {
-        <apx-chart [series]="provinceChart().series!" [chart]="provinceChart().chart!" [xaxis]="provinceChart().xaxis!" [yaxis]="provinceChart().yaxis!" [plotOptions]="provinceChart().plotOptions!" [colors]="provinceChart().colors!" [dataLabels]="provinceChart().dataLabels!" [grid]="provinceChart().grid!" [legend]="provinceChart().legend!" />
-      }
-    </pnlf-card>
-  </div>
-} @else {
-  <div class="dashboard-kpis dashboard-kpis--3">
-    <pnlf-kpi-card label="Lots suivis" icon="package" tone="green" [value]="lotsTotal()" [loading]="loading()" hint="Total de votre périmètre" />
-    <pnlf-kpi-card label="Votre profil" icon="user-check" tone="blue" [value]="roleLabel()" hint="Compte actif" />
-    @if (isAcheteur) {
-      <a class="dash-kpi-link" routerLink="/app/messagerie">
-        <pnlf-kpi-card label="Messagerie" icon="message" tone="gold" value="Discuter" hint="Contacter un producteur ou une coopérative" />
-      </a>
-    } @else if (isCoop) {
-      <pnlf-kpi-card label="Membres visibles" icon="users" tone="gold" [value]="myProducteurCount()" hint="Producteurs de votre périmètre" />
+    @if (chargementResume() && !resume()) {
+      <div class="dash-a-traiter">
+        @for (i of [1, 2, 3, 4]; track i) { <pnlf-skeleton height="72px" radius="12px" /> }
+      </div>
+    } @else if ((resume()?.a_traiter_total ?? 0) === 0) {
+      <p class="dash-vide"><pnlf-icon name="check" [size]="18" /> Aucune demande en attente. Tout est à jour.</p>
     } @else {
-      <pnlf-kpi-card label="Assistance" icon="phone" tone="gold" value="ENEF" hint="Support technique PFNL" />
+      <ul class="dash-a-traiter">
+        @for (s of sectionsATraiter(); track s.cle) {
+          <li>
+            <a class="dash-a-traiter__item" [class.is-vide]="s.count === 0" [routerLink]="s.lien" [queryParams]="s.params ?? null">
+              <pnlf-icon [name]="s.icone" [size]="20" />
+              <span class="dash-a-traiter__nombre">{{ s.count }}</span>
+              <span class="dash-a-traiter__libelle">{{ s.libelle }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    }
+  </pnlf-card>
+
+  <div class="dashboard-kpis">
+    <a class="dash-kpi-link" routerLink="/app/lots">
+      <pnlf-kpi-card label="Lots suivis" icon="package" tone="green" [value]="resume()?.lots?.total ?? 0" [loading]="chargementResume() && !resume()" [hint]="nombre(resume()?.lots, 'VALIDE') + ' validés, ' + nombre(resume()?.lots, 'COMMERCIALISE') + ' commercialisés'" />
+    </a>
+    <a class="dash-kpi-link" routerLink="/app/producteurs" [queryParams]="{ statut: 'ACTIF' }">
+      <pnlf-kpi-card label="Producteurs actifs" icon="users" tone="gold" [value]="nombre(resume()?.producteurs, 'ACTIF')" [loading]="chargementResume() && !resume()" [hint]="nombre(resume()?.producteurs, 'EN_VALIDATION') + ' en attente de validation'" />
+    </a>
+    <a class="dash-kpi-link" routerLink="/app/cooperatives">
+      <pnlf-kpi-card label="Coopératives actives" icon="building" tone="blue" [value]="nombre(resume()?.cooperatives, 'ACTIF')" [loading]="chargementResume() && !resume()" [hint]="nombre(resume()?.cooperatives, 'EN_VALIDATION') + ' en attente de validation'" />
+    </a>
+    <a class="dash-kpi-link" routerLink="/app/certifications">
+      <pnlf-kpi-card label="Certifications valides" icon="award" tone="neutral" [value]="resume()?.certifications?.valides ?? 0" [loading]="chargementResume() && !resume()" [hint]="(resume()?.certifications?.en_instruction ?? 0) + ' en cours d’instruction'" />
+    </a>
+  </div>
+
+  @if (resume()?.activite; as a) {
+    <pnlf-card title="Activité en temps réel" [subtitle]="'Actualisé à ' + (resume()!.genere_at | pnlfDate: 'time') + ', toutes les minutes'">
+      <div card-actions>
+        <a routerLink="/app/rapports" [queryParams]="{ onglet: 'activite' }" class="dashboard-see-all">Statistiques détaillées</a>
+      </div>
+      <ul class="dash-activite">
+        <li class="dash-activite__item dash-activite__item--direct">
+          <span class="dash-activite__pastille" aria-hidden="true"></span>
+          <strong>{{ a.en_ligne }}</strong>
+          <span>{{ a.en_ligne > 1 ? 'utilisateurs en ligne' : 'utilisateur en ligne' }}</span>
+        </li>
+        <li class="dash-activite__item"><strong>{{ a.appareils_en_ligne }}</strong><span>{{ a.appareils_en_ligne > 1 ? 'appareils actifs' : 'appareil actif' }}</span></li>
+        <li class="dash-activite__item"><strong>{{ a.connexions_jour }}</strong><span>{{ a.connexions_jour > 1 ? 'connexions aujourd’hui' : 'connexion aujourd’hui' }}</span></li>
+        <li class="dash-activite__item"><strong>{{ a.utilisateurs_jour }}</strong><span>{{ a.utilisateurs_jour > 1 ? 'utilisateurs distincts' : 'utilisateur distinct' }}</span></li>
+        <li class="dash-activite__item" [class.dash-activite__item--alerte]="a.echecs_jour > 0"><strong>{{ a.echecs_jour }}</strong><span>{{ a.echecs_jour > 1 ? 'échecs de connexion' : 'échec de connexion' }}</span></li>
+        <li class="dash-activite__item"><strong>{{ a.visites_jour }}</strong><span>{{ a.visites_jour > 1 ? 'visites publiques' : 'visite publique' }}</span></li>
+      </ul>
+    </pnlf-card>
+  }
+}
+
+@if (!isInstitutional() && !isAcheteur) {
+  <div class="dashboard-kpis">
+    @if (isCoop) {
+      <a class="dash-kpi-link" [routerLink]="resume()?.fiche ? ['/app/cooperatives', resume()!.fiche!.id] : '/app/cooperatives'">
+        <pnlf-kpi-card label="Membres actifs" icon="users" tone="green" [value]="resume()?.cooperative?.membres_actifs ?? 0" [loading]="chargementResume() && !resume()" [hint]="(resume()?.cooperative?.demandes_adhesion ?? 0) + ' demande(s) d’adhésion, ' + (resume()?.cooperative?.invitations_en_attente ?? 0) + ' invitation(s) envoyée(s)'" />
+      </a>
+    }
+    <a class="dash-kpi-link" routerLink="/app/lots">
+      <pnlf-kpi-card label="Lots" icon="package" [tone]="isCoop ? 'gold' : 'green'" [value]="resume()?.lots?.total ?? 0" [loading]="chargementResume() && !resume()" [hint]="nombre(resume()?.lots, 'BROUILLON') + ' en brouillon, en attente de validation'" />
+    </a>
+    <a class="dash-kpi-link" routerLink="/app/certifications">
+      <pnlf-kpi-card label="Certifications valides" icon="award" tone="blue" [value]="resume()?.certifications?.valides ?? 0" [loading]="chargementResume() && !resume()" [hint]="(resume()?.certifications?.en_instruction ?? 0) + ' en cours d’instruction'" />
+    </a>
+    @if (!isCoop) {
+      <a class="dash-kpi-link" routerLink="/app/marketplace/offres" [queryParams]="{ mine: 1 }">
+        <pnlf-kpi-card label="Mes annonces" icon="shopping-bag" tone="gold" [value]="resume()?.annonces?.miennes?.total ?? 0" [loading]="chargementResume() && !resume()" [hint]="nombre(resume()?.annonces?.miennes, 'OUVERTE') + ' publiée(s), ' + nombre(resume()?.annonces?.miennes, 'EN_VALIDATION') + ' en attente'" />
+      </a>
+    }
+    <a class="dash-kpi-link" routerLink="/app/messagerie">
+      <pnlf-kpi-card label="Messages non lus" icon="message" tone="neutral" [value]="resume()?.messages?.non_lus ?? 0" [loading]="chargementResume() && !resume()" [hint]="pluriel(resume()?.messages?.conversations ?? 0, 'conversation', 'conversations')" />
+    </a>
+  </div>
+}
+
+@if (isAcheteur) {
+  <div class="dashboard-kpis">
+    <a class="dash-kpi-link" routerLink="/app/marketplace/offres" [queryParams]="{ type_annonce: 'OFFRE' }">
+      <pnlf-kpi-card label="Offres disponibles" icon="shopping-bag" tone="green" [value]="resume()?.annonces?.marche?.offres ?? 0" [loading]="chargementResume() && !resume()" hint="Produits proposés à la vente" />
+    </a>
+    <a class="dash-kpi-link" routerLink="/app/marketplace/offres" [queryParams]="{ mine: 1 }">
+      <pnlf-kpi-card label="Mes demandes et offres" icon="file-text" tone="gold" [value]="resume()?.annonces?.miennes?.total ?? 0" [loading]="chargementResume() && !resume()" [hint]="nombre(resume()?.annonces?.miennes, 'OUVERTE') + ' publiée(s), ' + nombre(resume()?.annonces?.miennes, 'EN_VALIDATION') + ' en attente'" />
+    </a>
+    <a class="dash-kpi-link" routerLink="/app/messagerie">
+      <pnlf-kpi-card label="Messages non lus" icon="message" tone="blue" [value]="resume()?.messages?.non_lus ?? 0" [loading]="chargementResume() && !resume()" [hint]="pluriel(resume()?.messages?.conversations ?? 0, 'conversation', 'conversations')" />
+    </a>
+    <a class="dash-kpi-link" routerLink="/app/lots">
+      <pnlf-kpi-card label="Lots traçables" icon="qrcode" tone="neutral" [value]="resume()?.lots_disponibles ?? 0" [loading]="chargementResume() && !resume()" hint="Origine vérifiable par QR code" />
+    </a>
+  </div>
+}
+
+@if (!isAcheteur) {
+  <div class="dashboard-charts">
+    <pnlf-card title="Lots par statut" subtitle="Cycle Brouillon, Validé, Commercialisé">
+      @if (chargementResume() && !resume()) {
+        <pnlf-skeleton height="260px" radius="12px" />
+      } @else if (resume()?.lots; as lots) {
+        <ul class="dash-statuts">
+          @for (s of lots.par_statut; track s.cle) {
+            <li>
+              <a class="dash-statuts__item" routerLink="/app/lots" [queryParams]="{ statut: s.cle }">
+                <span class="dash-statuts__pastille" [style.background]="couleurStatutLot(s.cle)" aria-hidden="true"></span>
+                <span class="dash-statuts__libelle">{{ s.libelle }}</span>
+                <strong>{{ s.nombre }}</strong>
+                <span class="dash-statuts__part">{{ part(s.nombre, lots.total) }} %</span>
+              </a>
+            </li>
+          }
+        </ul>
+        @if (graphLots(); as g) {
+          <app-graphique [options]="g" description="Répartition des lots entre brouillon, validé et commercialisé" messageVide="Aucun lot pour le moment." />
+        }
+      }
+    </pnlf-card>
+    @if (isInstitutional()) {
+      <pnlf-card title="Producteurs actifs par province" subtitle="8 provinces les plus actives">
+        @if (chargementStats()) {
+          <pnlf-skeleton height="280px" radius="12px" />
+        } @else if (provinceChart(); as g) {
+          <app-graphique [options]="g" description="Classement des provinces par nombre de producteurs actifs" messageVide="Aucun producteur actif pour le moment." />
+        } @else {
+          <p class="dash-vide">Répartition indisponible pour le moment.</p>
+        }
+      </pnlf-card>
+    } @else {
+      <pnlf-card title="Annonces" subtitle="Vos offres et demandes, et le marché">
+        <div card-actions>
+          <a routerLink="/app/marketplace/offres" [queryParams]="{ mine: 1 }" class="dashboard-see-all">Gérer mes annonces</a>
+        </div>
+        @if (chargementResume() && !resume()) {
+          <pnlf-skeleton height="200px" radius="12px" />
+        } @else if (resume(); as r) {
+          @if (r.annonces.miennes.total === 0) {
+            <p class="dash-vide">Vous n’avez encore publié aucune annonce.</p>
+          } @else {
+            <ul class="dash-statuts">
+              @for (s of r.annonces.miennes.par_statut; track s.cle) {
+                @if (s.nombre > 0) {
+                  <li>
+                    <a class="dash-statuts__item" routerLink="/app/marketplace/offres" [queryParams]="{ mine: 1 }">
+                      <span class="dash-statuts__libelle">{{ s.libelle }}</span>
+                      <strong>{{ s.nombre }}</strong>
+                    </a>
+                  </li>
+                }
+              }
+            </ul>
+          }
+          <p class="dash-marche">
+            Sur le marché :
+            <a routerLink="/app/marketplace/offres" [queryParams]="{ type_annonce: 'OFFRE' }">{{ pluriel(r.annonces.marche.offres, 'offre', 'offres') }}</a>
+            et
+            <a routerLink="/app/marketplace/offres" [queryParams]="{ type_annonce: 'DEMANDE' }">{{ pluriel(r.annonces.marche.demandes, 'demande', 'demandes') }}</a>
+            publiées.
+          </p>
+          <a pnlfButton routerLink="/app/marketplace/offres/nouvelle" variant="outline" size="sm">Publier une annonce</a>
+        }
+      </pnlf-card>
     }
   </div>
 }
 
 @if (isAcheteur && offresRecentes().length > 0) {
-  <pnlf-card title="Dernières offres & demandes" subtitle="Annonces publiées de la filière">
+  <pnlf-card title="Dernières offres et demandes" subtitle="Annonces publiées de la filière">
     <div card-actions><a routerLink="/app/marketplace/offres" class="dashboard-see-all">Voir tout →</a></div>
     <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
-        <thead><tr><th>Titre</th><th>Produit</th><th>Type</th></tr></thead>
+        <caption class="pnlf-visually-hidden">Dernières annonces publiées</caption>
+        <thead><tr><th scope="col">Titre</th><th scope="col">Produit</th><th scope="col">Type</th></tr></thead>
         <tbody>
           @for (o of offresRecentes(); track o.id) {
             <tr>
@@ -126,8 +287,8 @@
     <a routerLink="/app/lots" class="dashboard-see-all">Voir tout →</a>
   </div>
 
-  @if (loading()) {
-    <div class="pnlf-stack" style="gap: var(--space-3);">
+  @if (chargementLots()) {
+    <div class="pnlf-stack dash-squelette">
       @for (i of [1, 2, 3]; track i) { <pnlf-skeleton height="20px" /> }
     </div>
   } @else if (recentLots().length === 0) {
@@ -141,8 +302,9 @@
   } @else {
     <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">
+        <caption class="pnlf-visually-hidden">Lots récents</caption>
         <thead>
-          <tr><th>Code lot</th><th>Produit</th><th>Producteur</th><th>Quantité</th><th>Statut</th></tr>
+          <tr><th scope="col">Code lot</th><th scope="col">Produit</th><th scope="col">Producteur</th><th scope="col">Quantité</th><th scope="col">Statut</th></tr>
         </thead>
         <tbody>
           @for (lot of recentLots(); track lot.id) {

@@ -1,7 +1,17 @@
 import { PnlfDatePipe } from '../../shared/pipes/format.pipes';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+
+import { FiltresRapport } from '../../core/models/rapports.model';
+import { FiltrePeriodeComponent, filtresParDefaut } from './filtre-periode/filtre-periode.component';
+import { RapportActiviteComponent } from './onglets/rapport-activite.component';
+import { RapportFiliereComponent } from './onglets/rapport-filiere.component';
+import { RapportInscriptionsComponent } from './onglets/rapport-inscriptions.component';
+import { IconComponent, IconName } from '../../design-system/icon/icon.component';
+
+type Onglet = 'activite' | 'inscriptions' | 'filiere' | 'journal';
 
 import {
   DashboardService,
@@ -28,6 +38,7 @@ import { STATUT_PRODUCTEUR_LABELS, StatutProducteur } from '../../core/models/pr
 import { STATUT_CERTIFICATION_LABELS, StatutCertification } from '../../core/models/certification.model';
 import { formatDateFr } from '../../core/format/format.util';
 import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
+import { toApiError } from '../../core/http/api-error.util';
 
 const ACTION_LABELS: Record<string, string> = {
   CREATE: 'Création',
@@ -93,6 +104,11 @@ function ligneCsv(valeurs: unknown[]): string {
     PaginationComponent,
     TextFieldComponent,
     AlertBannerComponent,
+    IconComponent,
+    FiltrePeriodeComponent,
+    RapportActiviteComponent,
+    RapportInscriptionsComponent,
+    RapportFiliereComponent,
   ],
   templateUrl: './rapports.component.html',
   styleUrl: './rapports.component.scss',
@@ -106,11 +122,27 @@ export class RapportsComponent {
   private readonly certifications = inject(CertificationsService);
   private readonly pdfPreview = inject(PdfPreviewService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
-  /** Export journal réservé admin / ministère (SEC-15). */
+  /** Statistiques de connexion, inscriptions, journal et exports : administrateur et agent du ministère. */
   readonly canExportJournal = computed(() =>
     this.auth.hasRole(RoleUtilisateur.ADMINISTRATEUR, RoleUtilisateur.AGENT_MINISTERE),
   );
+
+  readonly onglets = computed<{ id: Onglet; libelle: string; icone: IconName }[]>(() =>
+    this.canExportJournal()
+      ? [
+          { id: 'activite', libelle: 'Activité et connexions', icone: 'users' },
+          { id: 'inscriptions', libelle: 'Inscriptions', icone: 'user-check' },
+          { id: 'filiere', libelle: 'Filière et lots', icone: 'package' },
+          { id: 'journal', libelle: 'Journal d’audit', icone: 'file-text' },
+        ]
+      : [{ id: 'filiere', libelle: 'Filière et lots', icone: 'package' }],
+  );
+  readonly onglet = signal<Onglet>(this.ongletInitial());
+  readonly filtres = signal<FiltresRapport>(filtresParDefaut());
+  private journalCharge = false;
 
   readonly downloading = signal<string | null>(null);
   readonly granularite = signal<JournalGranularite>('jour');
@@ -135,13 +167,54 @@ export class RapportsComponent {
   private readonly filterReload$ = new Subject<string>();
 
   constructor() {
-    if (this.canExportJournal()) this.loadPeriodes();
+    if (this.onglet() === 'journal') this.activerJournal();
     this.filterReload$
       .pipe(debounceTime(250), distinctUntilChanged())
       .subscribe(() => {
         this.eventsPage.set(1);
         this.loadEvents();
       });
+  }
+
+  private ongletInitial(): Onglet {
+    const demande = this.route.snapshot.queryParamMap.get('onglet');
+    const disponibles = this.onglets().map((o) => o.id);
+    return disponibles.includes(demande as Onglet) ? (demande as Onglet) : disponibles[0];
+  }
+
+  choisirOnglet(onglet: Onglet): void {
+    this.onglet.set(onglet);
+    if (onglet === 'journal') this.activerJournal();
+    this.router.navigate([], { relativeTo: this.route, queryParams: { onglet }, replaceUrl: true });
+  }
+
+  naviguerOnglets(event: KeyboardEvent, index: number): void {
+    const liste = this.onglets();
+    const cible =
+      event.key === 'ArrowRight' ? (index + 1) % liste.length
+      : event.key === 'ArrowLeft' ? (index - 1 + liste.length) % liste.length
+      : event.key === 'Home' ? 0
+      : event.key === 'End' ? liste.length - 1
+      : -1;
+    if (cible < 0) return;
+    event.preventDefault();
+    this.choisirOnglet(liste[cible].id);
+    document.getElementById(`onglet-${liste[cible].id}`)?.focus();
+  }
+
+  appliquerFiltres(filtres: FiltresRapport): void {
+    this.filtres.set(filtres);
+    if (this.journalCharge) {
+      this.selected.set(null);
+      this.events.set([]);
+      this.loadPeriodes();
+    }
+  }
+
+  private activerJournal(): void {
+    if (this.journalCharge || !this.canExportJournal()) return;
+    this.journalCharge = true;
+    this.loadPeriodes();
   }
 
   setGranularite(g: JournalGranularite): void {
@@ -155,7 +228,8 @@ export class RapportsComponent {
   loadPeriodes(): void {
     this.loadingPeriodes.set(true);
     this.periodesError.set('');
-    this.dashboardService.journalPeriodes(this.granularite()).subscribe({
+    const f = this.filtres();
+    this.dashboardService.journalPeriodes(this.granularite(), { date_debut: f.date_debut, date_fin: f.date_fin, q: f.q }).subscribe({
       next: (res) => {
         this.periodes.set(res.results);
         this.loadingPeriodes.set(false);
@@ -164,10 +238,10 @@ export class RapportsComponent {
           this.openPeriode(res.results[0]);
         }
       },
-      error: () => {
+      error: (err) => {
         this.periodes.set([]);
         this.loadingPeriodes.set(false);
-        this.periodesError.set('Impossible de charger le journal d’activité. Vérifiez votre connexion puis réessayez.');
+        this.periodesError.set(toApiError(err).message);
       },
     });
   }
@@ -221,10 +295,10 @@ export class RapportsComponent {
           this.selectedLibelle.set(res.libelle);
           this.loadingEvents.set(false);
         },
-        error: () => {
+        error: (err) => {
           this.loadingEvents.set(false);
           this.events.set([]);
-          this.eventsError.set('Impossible de charger le détail du journal.');
+          this.eventsError.set(toApiError(err).message);
         },
       });
   }
@@ -251,14 +325,6 @@ export class RapportsComponent {
     return TABLE_LABELS[table] ?? table;
   }
 
-  downloadLots(format: ExportFormat): void {
-    if (format === 'pdf') {
-      this._openPdf('lots');
-      return;
-    }
-    this._download(this.dashboardService.exportUrl(format), `pfnl-lots.${format}`, format, `lots-${format}`);
-  }
-
   downloadProducteurs(): void {
     this.downloading.set('prod-csv');
     this.producteurs.list({ page_size: 500 }).subscribe({
@@ -281,9 +347,9 @@ export class RapportsComponent {
         this.downloading.set(null);
         this.toast.success('Export producteurs téléchargé');
       },
-      error: () => {
+      error: (err) => {
         this.downloading.set(null);
-        this.toast.error("Échec de l'export");
+        this.toast.error(`Export des producteurs impossible. ${toApiError(err).message}`);
       },
     });
   }
@@ -309,9 +375,9 @@ export class RapportsComponent {
         this.downloading.set(null);
         this.toast.success('Export certifications téléchargé');
       },
-      error: () => {
+      error: (err) => {
         this.downloading.set(null);
-        this.toast.error("Échec de l'export");
+        this.toast.error(`Export des certifications impossible. ${toApiError(err).message}`);
       },
     });
   }
@@ -328,7 +394,7 @@ export class RapportsComponent {
       return;
     }
     if (format === 'pdf') {
-      this._openPdf('journal');
+      this._openPdfJournal();
       return;
     }
     const filtres = this.currentFiltres();
@@ -339,11 +405,7 @@ export class RapportsComponent {
     this._download(url, `${slug}.${format}`, format, `journal-${format}`);
   }
 
-  private _openPdf(kind: 'lots' | 'journal'): void {
-    if (kind === 'lots') {
-      this.pdfPreview.open('Export des lots (PDF)', 'pfnl-lots.pdf', () => this.dashboardService.lotsPdfBlob());
-      return;
-    }
+  private _openPdfJournal(): void {
     const p = this.selected();
     if (!p) return;
     const filtres = this.currentFiltres();

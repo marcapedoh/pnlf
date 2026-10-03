@@ -1,33 +1,24 @@
+/** Cycle de vie d'un lot : brouillon, puis validé (vérifiable par QR), puis commercialisé. */
 export enum StatutLot {
   BROUILLON = 'BROUILLON',
-  DECLARE = 'DECLARE',
   VALIDE = 'VALIDE',
-  EN_TRANSIT = 'EN_TRANSIT',
-  TRANSFORME = 'TRANSFORME',
   COMMERCIALISE = 'COMMERCIALISE',
-  ARCHIVE = 'ARCHIVE',
-  ANNULE = 'ANNULE',
 }
 
 export const STATUT_LOT_LABELS: Record<StatutLot, string> = {
   [StatutLot.BROUILLON]: 'Brouillon',
-  [StatutLot.DECLARE]: 'Déclaré',
   [StatutLot.VALIDE]: 'Validé',
-  [StatutLot.EN_TRANSIT]: 'En transit',
-  [StatutLot.TRANSFORME]: 'Transformé',
   [StatutLot.COMMERCIALISE]: 'Commercialisé',
-  [StatutLot.ARCHIVE]: 'Archivé',
-  [StatutLot.ANNULE]: 'Annulé',
 };
 
-export const STATUT_LOT_ORDRE: StatutLot[] = [
-  StatutLot.BROUILLON,
-  StatutLot.DECLARE,
-  StatutLot.VALIDE,
-  StatutLot.EN_TRANSIT,
-  StatutLot.TRANSFORME,
-  StatutLot.COMMERCIALISE,
-];
+/** Explication courte de chaque statut (aide contextuelle des listes et fiches). */
+export const STATUT_LOT_AIDES: Record<StatutLot, string> = {
+  [StatutLot.BROUILLON]: 'Déclaré, en attente de validation. Pas encore vérifiable publiquement.',
+  [StatutLot.VALIDE]: 'Contrôlé : visible dans l’annuaire et vérifiable par son QR code.',
+  [StatutLot.COMMERCIALISE]: 'Vendu : retiré des listes publiques, son QR code reste vérifiable.',
+};
+
+export const STATUT_LOT_ORDRE: StatutLot[] = [StatutLot.BROUILLON, StatutLot.VALIDE, StatutLot.COMMERCIALISE];
 
 export enum TypeMouvement {
   COLLECTE = 'COLLECTE',
@@ -42,32 +33,17 @@ export enum TypeMouvement {
 
 export const TYPE_MOUVEMENT_LABELS: Record<TypeMouvement, string> = {
   [TypeMouvement.COLLECTE]: 'Collecte',
-  [TypeMouvement.RECEPTION_COOPERATIVE]: 'Réception coopérative',
-  [TypeMouvement.TRANSFERT]: 'Transfert',
+  [TypeMouvement.RECEPTION_COOPERATIVE]: 'Réception par la coopérative',
+  [TypeMouvement.TRANSFERT]: 'Transport',
   [TypeMouvement.TRANSFORMATION]: 'Transformation',
   [TypeMouvement.CONTROLE]: 'Contrôle',
   [TypeMouvement.VENTE]: 'Vente',
-  [TypeMouvement.EXPORT]: 'Export',
-  [TypeMouvement.AUTRE]: 'Autre',
+  [TypeMouvement.EXPORT]: 'Exportation',
+  [TypeMouvement.AUTRE]: 'Autre étape',
 };
 
-/** Transitions manuelles acceptées par le serveur (traceability/services.py, TRANSITIONS_MANUELLES_LOT). */
-export const TRANSITIONS_MANUELLES_LOT: Record<StatutLot, StatutLot[]> = {
-  [StatutLot.BROUILLON]: [StatutLot.DECLARE, StatutLot.ANNULE],
-  [StatutLot.DECLARE]: [StatutLot.VALIDE, StatutLot.ANNULE, StatutLot.ARCHIVE],
-  [StatutLot.VALIDE]: [StatutLot.EN_TRANSIT, StatutLot.TRANSFORME, StatutLot.COMMERCIALISE, StatutLot.ANNULE, StatutLot.ARCHIVE],
-  [StatutLot.EN_TRANSIT]: [StatutLot.TRANSFORME, StatutLot.COMMERCIALISE, StatutLot.ANNULE, StatutLot.ARCHIVE],
-  [StatutLot.TRANSFORME]: [StatutLot.EN_TRANSIT, StatutLot.COMMERCIALISE, StatutLot.ANNULE, StatutLot.ARCHIVE],
-  [StatutLot.COMMERCIALISE]: [StatutLot.ARCHIVE],
-  [StatutLot.ANNULE]: [StatutLot.ARCHIVE],
-  [StatutLot.ARCHIVE]: [],
-};
-
-/** Statuts pour lesquels un producteur ou une coopérative peut encore modifier ou supprimer le lot. */
-export const STATUTS_LOT_MODIFIABLES: StatutLot[] = [StatutLot.BROUILLON, StatutLot.DECLARE];
-
-/** Statuts sur lesquels aucune étape de traçabilité ne peut être ajoutée. */
-export const STATUTS_LOT_SANS_MOUVEMENT: StatutLot[] = [StatutLot.BROUILLON, StatutLot.ANNULE, StatutLot.ARCHIVE];
+/** Étapes qui commercialisent un lot validé (refusées tant que le lot est en brouillon). */
+export const TYPES_MOUVEMENT_COMMERCIALISATION: TypeMouvement[] = [TypeMouvement.VENTE, TypeMouvement.EXPORT];
 
 const TOUS_TYPES_MOUVEMENT = Object.values(TypeMouvement);
 
@@ -144,32 +120,125 @@ export interface Lot {
   latitude: number | null;
   longitude: number | null;
   statut: StatutLot;
+  statut_libelle?: string;
+  province_nom?: string | null;
   qr_payload: string | null;
   qr_image_path: string | null;
   qr_image_url: string | null;
   photos_urls: string[];
   declare_par_id: string | null;
+  valide_at?: string | null;
   observations: string | null;
   client_uuid: string | null;
   mouvements: Mouvement[];
+  /** Présents sur une fiche (pas dans les listes). */
+  droits?: DroitsLot | null;
+  validation?: ValidationLot | null;
+  frise?: EvenementFrise[] | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface LotVerification {
+/** Actions permises à l'utilisateur courant, calculées par le serveur. */
+export interface DroitsLot {
+  peut_valider: boolean;
+  /** AGENT : autorité habilitée ; AUTO : titulaire disposant d'une certification active. */
+  mode_validation: 'AGENT' | 'AUTO' | null;
+  /** Explication affichée au titulaire qui ne peut pas valider lui-même. */
+  motif_validation: string | null;
+  peut_commercialiser: boolean;
+  peut_modifier: boolean;
+  peut_supprimer: boolean;
+  peut_ajouter_etape: boolean;
+}
+
+export interface ValidationLot {
+  date: string | null;
+  mode: 'AGENT' | 'AUTO' | null;
+  role?: string | null;
+  /** Ex. « Validé par un agent du ministère », « Auto-validé (producteur certifié) ». */
+  libelle: string;
+}
+
+export type TypeEvenementFrise = 'COLLECTE' | 'DECLARATION' | 'MOUVEMENT' | 'VALIDATION' | 'COMMERCIALISATION';
+
+/** Événement de la frise chronologique d'un lot (fiche interne ou page publique). */
+export interface EvenementFrise {
+  type: TypeEvenementFrise;
+  /** Type d'étape pour un MOUVEMENT. */
+  code?: TypeMouvement;
+  libelle: string;
+  date: string;
+  /** Vrai si seule la date (sans heure) est connue. */
+  date_seule: boolean;
+  lieu: string | null;
+  quantite: number | string | null;
+  unite: string | null;
+  /** Rôle générique (Producteur, Coopérative, Agent forestier...), jamais une identité. */
+  acteur: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  /** Fiche interne uniquement. */
+  destinataire?: string | null;
+  commentaire?: string | null;
+}
+
+export interface CertificationPublique {
+  libelle: string;
+  organisme: string | null;
+  numero_certificat: string | null;
+  date_obtention: string | null;
+  date_expiration: string | null;
+  portee: 'LOT' | 'PRODUCTEUR';
+}
+
+/** Fiche publique complète d'un lot : vérification QR (/verifier) et page lot de l'annuaire. */
+export interface LotPublicComplet {
+  id: string;
   code_lot: string;
-  uuid_public: string;
+  uuid_public: string | null;
   produit_nom: string;
-  producteur_nom: string;
-  province_nom: string;
-  date_collecte: string;
-  quantite: number;
+  produit: { nom: string; nom_scientifique: string | null; categorie: string | null };
+  quantite: number | string;
   unite: string;
+  qualite_indicateur: string | null;
+  prix_indicatif: number | string | null;
+  devise: string;
+  date_collecte: string;
+  lieu: { zone: string | null; province: string | null; latitude: number | string | null; longitude: number | string | null };
+  latitude: number | string | null;
+  longitude: number | string | null;
+  province_nom: string | null;
+  producteur_nom: string;
+  producteur: {
+    /** Renseigné seulement si la fiche du producteur est publique. */
+    id: string | null;
+    nom: string;
+    prenoms: string;
+    type_acteur: string;
+    type_acteur_libelle: string;
+    communaute: string | null;
+    province_nom: string | null;
+    cooperative_nom: string | null;
+    photo_url: string | null;
+    fiche_publique: boolean;
+  };
+  certifications: CertificationPublique[];
   statut: StatutLot;
-  statut_libelle?: string;
-  qr_payload: string;
+  statut_libelle: string;
+  validation: { date: string | null; mode: 'AGENT' | 'AUTO' | null; libelle: string } | null;
+  commercialisation: { date: string } | null;
   photos_urls: string[];
-  authenticite: string;
+  qr_payload: string | null;
+  authenticite: 'VERIFIE';
+  frise: EvenementFrise[];
   mouvements_count: number;
-  mouvements?: { type_libelle: string; date_mouvement: string; lieu_libelle: string | null }[];
+}
+
+/** Réponse 404 explicite de la vérification publique ou de la page lot. */
+export interface LotPublicIndisponible {
+  detail: string;
+  code?: 'LOT_INTROUVABLE' | 'LOT_NON_VALIDE' | 'LOT_COMMERCIALISE';
+  code_lot?: string;
+  uuid_public?: string | null;
 }

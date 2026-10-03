@@ -3,8 +3,15 @@
 
   @if (loading()) {
     <pnlf-skeleton height="400px" />
+  } @else if (erreurChargement()) {
+    <pnlf-alert tone="error" title="Annonce momentanément indisponible">
+      {{ erreurChargement() }}
+      <button pnlfButton type="button" variant="outline" size="sm" (click)="charger()">Réessayer</button>
+    </pnlf-alert>
   } @else if (notFound() || !offre()) {
-    <pnlf-empty-state title="Annonce introuvable" description="Cette offre ou demande n'est plus publiée." />
+    <pnlf-empty-state title="Annonce introuvable" description="Cette annonce est introuvable, expirée ou n’est plus publiée.">
+      <a pnlfButton variant="primary" routerLink="/offres-demandes">Voir les annonces publiées</a>
+    </pnlf-empty-state>
   } @else if (offre(); as o) {
     <div class="offre-pub-detail__grid">
       <section aria-label="Photos de l’annonce">
@@ -43,25 +50,108 @@
         <h1>{{ o.titre }}</h1>
         @if (o.prix_unitaire) {
           <p class="offre-pub-detail__price">{{ o.prix_unitaire | pnlfMontant: o.devise }} <span>/ {{ o.unite | pnlfUnite }}</span></p>
+        } @else if (o.prix_total) {
+          <p class="offre-pub-detail__price">{{ o.prix_total | pnlfMontant: o.devise }} <span>au total</span></p>
         }
+        @if (o.negociable) {
+          <p class="offre-pub-detail__puce">Prix négociable</p>
+        }
+
+        <pnlf-card title="Auteur de l’annonce">
+          <div class="offre-auteur">
+            <div class="offre-auteur__avatar" aria-hidden="true">
+              @if (o.auteur?.photo_url) {
+                <img [src]="o.auteur!.photo_url" alt="" />
+              } @else {
+                {{ initiales(o.auteur?.nom || o.auteur_nom) }}
+              }
+            </div>
+            <div class="offre-auteur__infos">
+              <strong>
+                {{ o.auteur?.nom || o.auteur_nom || 'Membre de la plateforme' }}
+                @if (o.auteur?.certifie) {
+                  <span class="offre-auteur__certifie" title="Acteur disposant d’une certification valide">Certifié</span>
+                }
+              </strong>
+              <span>{{ o.auteur?.type_acteur || 'Acteur de la filière' }}{{ o.auteur?.province ? ' · ' + o.auteur!.province : '' }}</span>
+              @if (o.auteur?.membre_depuis) {
+                <span>Membre depuis {{ o.auteur!.membre_depuis | pnlfDate }}</span>
+              }
+              @if (o.contact?.telephone) {
+                <a [href]="'tel:' + o.contact!.telephone">{{ o.contact!.telephone | pnlfTelephone }}</a>
+              }
+              @if (o.contact?.email) {
+                <a [href]="'mailto:' + o.contact!.email">{{ o.contact!.email }}</a>
+              }
+              @if (o.auteur?.fiche_publique_id) {
+                <a [routerLink]="['/annuaire', o.auteur!.fiche_publique_id]">Voir la fiche publique</a>
+              }
+            </div>
+          </div>
+        </pnlf-card>
+
         <pnlf-card title="Détails">
           <dl class="offre-pub-detail__dl">
-            <div><dt>Publiée par</dt><dd>{{ o.auteur_nom || 'Non renseigné' }}</dd></div>
             <div><dt>Produit</dt><dd>{{ o.produit_nom || 'Non renseigné' }}</dd></div>
-            <div><dt>Province</dt><dd>{{ o.province_nom || 'Non précisée' }}</dd></div>
+            @if (o.categorie_nom) {
+              <div><dt>Catégorie</dt><dd>{{ o.categorie_nom }}</dd></div>
+            }
+            <div><dt>Lieu</dt><dd>{{ o.province_nom || 'Province non précisée' }}{{ o.localite ? ', ' + o.localite : '' }}</dd></div>
             @if (o.quantite) {
               <div><dt>Quantité</dt><dd>{{ o.quantite | pnlfQuantite: o.unite }}</dd></div>
             }
-            <div><dt>Certification requise</dt><dd>{{ o.certification_requise ? 'Oui' : 'Non' }}</dd></div>
+            @if (o.prix_unitaire && o.prix_total) {
+              <div><dt>Prix total</dt><dd>{{ o.prix_total | pnlfMontant: o.devise }}</dd></div>
+            }
+            @if (o.conditionnement) {
+              <div><dt>Conditionnement</dt><dd>{{ o.conditionnement }}</dd></div>
+            }
+            @if (o.qualite) {
+              <div><dt>Qualité</dt><dd>{{ o.qualite }}</dd></div>
+            }
+            <div>
+              <dt>{{ o.type_annonce === 'DEMANDE' ? 'Certification exigée' : 'Produit certifié' }}</dt>
+              <dd>{{ o.certification_requise ? 'Oui' : 'Non' }}</dd>
+            </div>
+            @if (o.disponible_du) {
+              <div><dt>Disponible à partir du</dt><dd>{{ o.disponible_du | pnlfDate }}</dd></div>
+            }
+            @if (o.expire_at) {
+              <div><dt>Date limite</dt><dd>{{ o.expire_at | pnlfDate }}</dd></div>
+            }
+            @if (o.mode_remise) {
+              <div><dt>Remise du produit</dt><dd>{{ libelleModeRemise(o.mode_remise) }}</dd></div>
+            }
+            @if (o.modalites_livraison) {
+              <div><dt>Modalités de livraison</dt><dd>{{ o.modalites_livraison }}</dd></div>
+            }
+            @if (o.moyens_paiement?.length) {
+              <div><dt>Moyens de paiement</dt><dd>{{ moyensPaiement(o) }}</dd></div>
+            }
+            @if (o.conditions_paiement) {
+              <div><dt>Conditions de paiement</dt><dd>{{ o.conditions_paiement }}</dd></div>
+            }
             <div><dt>Publiée le</dt><dd>{{ o.created_at | pnlfDate }}</dd></div>
           </dl>
         </pnlf-card>
         @if (o.description) {
           <pnlf-card title="Description">
-            <p>{{ o.description }}</p>
+            <p class="offre-pub-detail__desc">{{ o.description }}</p>
           </pnlf-card>
         }
-        <pnlf-card [title]="contactTitre(o)" subtitle="Le message transite par la plateforme. Le téléphone de l’auteur n’est pas affiché publiquement.">
+
+        @if (connecte) {
+          <pnlf-card [title]="contactTitre(o)" subtitle="Échangez avec l’auteur depuis votre messagerie : l’historique reste rattaché à l’annonce.">
+            <a pnlfButton variant="primary" routerLink="/app/messagerie" [queryParams]="{ offre: o.id }">Contacter via la messagerie</a>
+          </pnlf-card>
+        } @else {
+          <pnlf-card title="Vous avez un compte sur la plateforme ?" subtitle="Connectez-vous pour échanger avec l’auteur via la messagerie sécurisée et suivre vos conversations.">
+            <div class="offre-pub-detail__connexion">
+              <a pnlfButton variant="primary" routerLink="/connexion" [queryParams]="{ returnUrl: '/app/messagerie?offre=' + o.id }">Se connecter pour contacter l’auteur</a>
+              <a pnlfButton variant="ghost" routerLink="/inscription">Créer un compte</a>
+            </div>
+          </pnlf-card>
+        <pnlf-card [title]="contactTitre(o)" subtitle="Sans compte, envoyez un message via ce formulaire. Il transite par la plateforme et vos coordonnées sont transmises à l’auteur.">
           @if (sent()) {
             <pnlf-alert tone="success" title="Message transmis">L’auteur de l’annonce en sera informé et pourra vous répondre par e-mail ou par téléphone.</pnlf-alert>
           } @else {
@@ -97,6 +187,7 @@
             </form>
           }
         </pnlf-card>
+        }
       </section>
     </div>
   }

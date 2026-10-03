@@ -1,0 +1,38 @@
+<div class="filtre-periode" role="search" aria-label="Période et recherche du rapport">
+  <div class="filtre-periode__presets" role="group" aria-label="Périodes rapides">
+    @for (p of presets; track p.jours) {
+      <button type="button" class="filtre-periode__preset" [class.is-active]="presetActif(p.jours)" [attr.aria-pressed]="presetActif(p.jours)" (click)="choisirPreset(p.jours)">
+        {{ p.libelle }}
+      </button>
+    }
+  </div>
+
+  <label class="filtre-periode__champ">
+    <span>Du</span>
+    <input class="pnlf-select" type="date" [max]="fin() || aujourdhui" [value]="debut()" (change)="changerDate('debut', $event)" />
+  </label>
+  <label class="filtre-periode__champ">
+    <span>Au</span>
+    <input class="pnlf-select" type="date" [min]="debut()" [max]="aujourdhui" [value]="fin()" (change)="changerDate('fin', $event)" />
+  </label>
+  <label class="filtre-periode__champ">
+    <span>Regrouper par</span>
+    <select class="pnlf-select" [value]="granularite()" (change)="changerGranularite($event)">
+      <option value="" [selected]="granularite() === ''">Automatique</option>
+      <option value="jour" [selected]="granularite() === 'jour'">Jour</option>
+      <option value="semaine" [selected]="granularite() === 'semaine'">Semaine</option>
+      <option value="mois" [selected]="granularite() === 'mois'">Mois</option>
+    </select>
+  </label>
+  <label class="filtre-periode__champ filtre-periode__recherche">
+    <span>Recherche</span>
+    <span class="filtre-periode__saisie">
+      <pnlf-icon name="search" [size]="15" />
+      <input class="pnlf-select" type="search" maxlength="100" autocomplete="off" [placeholder]="placeholderRecherche()" [value]="q()" (input)="saisirRecherche($event)" />
+    </span>
+  </label>
+
+  @if (erreur()) {
+    <p class="filtre-periode__erreur" role="alert">{{ erreur() }}</p>
+  }
+</div>

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subject, debounceTime } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
@@ -40,6 +40,7 @@ import { PnlfDatePipe, PnlfQuantitePipe } from '../../../shared/pipes/format.pip
 export class LotsListComponent {
   private readonly service = inject(LotsService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
   private readonly search$ = new Subject<void>();
 
   readonly items = signal<Lot[]>([]);
@@ -50,7 +51,7 @@ export class LotsListComponent {
   readonly pageSize = 10;
 
   readonly search = signal('');
-  readonly statutFilter = signal('');
+  readonly statutFilter = signal(this.statutInitial());
   readonly statutLabels = STATUT_LOT_LABELS;
   readonly allStatuts = Object.values(StatutLot);
   readonly tone = lotStatusTone;
@@ -73,6 +74,11 @@ export class LotsListComponent {
 
   get hasFilters(): boolean {
     return !!(this.search() || this.statutFilter());
+  }
+
+  private statutInitial(): string {
+    const statut = this.route.snapshot.queryParamMap.get('statut') ?? '';
+    return (Object.values(StatutLot) as string[]).includes(statut) ? statut : '';
   }
 
   onSearchInput(value: string): void {

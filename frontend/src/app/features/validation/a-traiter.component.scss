@@ -1,3 +1,10 @@
+.inbox-total {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .inbox-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

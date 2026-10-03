@@ -5,7 +5,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AJAX_EXPORT_HEADERS } from '../http/download-file.util';
 import { ApiListResponse } from '../models/common.model';
-import { Cooperative } from '../models/producteur.model';
+import { CandidatInvitation, Cooperative, InvitationCooperative } from '../models/producteur.model';
 
 export interface CooperativeQueryParams {
   page?: number;
@@ -89,6 +89,39 @@ export class CooperativesService {
 
   refuserAdhesion(id: string, producteur: string, motif?: string): Observable<{ detail: string }> {
     return this.http.post<{ detail: string }>(`${this.base}${id}/membres/refuser/`, { producteur, motif });
+  }
+
+  /** Producteurs actifs sans coopérative correspondant à la recherche (2 caractères minimum). */
+  candidatsInvitation(id: string, search: string): Observable<CandidatInvitation[]> {
+    return this.http.get<CandidatInvitation[]>(`${this.base}${id}/candidats-invitation/`, { params: { search } });
+  }
+
+  invitations(id: string): Observable<InvitationCooperative[]> {
+    return this.http.get<InvitationCooperative[]>(`${this.base}${id}/invitations/`);
+  }
+
+  inviter(id: string, producteur: string, message?: string): Observable<InvitationCooperative> {
+    return this.http.post<InvitationCooperative>(`${this.base}${id}/invitations/`, { producteur, message });
+  }
+
+  annulerInvitation(id: string, invitationId: string): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(`${this.base}${id}/invitations/${invitationId}/annuler/`, {});
+  }
+
+  /** Invitations en attente reçues par le producteur connecté. */
+  invitationsRecues(): Observable<InvitationCooperative[]> {
+    return this.http.get<InvitationCooperative[]>(`${this.base}invitations-recues/`);
+  }
+
+  accepterInvitation(invitationId: string): Observable<{ detail: string; cooperative: string }> {
+    return this.http.post<{ detail: string; cooperative: string }>(
+      `${this.base}invitations-recues/${invitationId}/accepter/`,
+      {},
+    );
+  }
+
+  refuserInvitation(invitationId: string, motif?: string): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(`${this.base}invitations-recues/${invitationId}/refuser/`, { motif });
   }
 
   /** Récupère la fiche PDF de cette coopérative en Blob authentifié. */

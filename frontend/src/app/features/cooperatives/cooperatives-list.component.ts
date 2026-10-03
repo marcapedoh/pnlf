@@ -27,6 +27,7 @@ import { ToastService } from '../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../design-system/confirm-dialog/confirm-dialog.component';
 import { toApiError } from '../../core/http/api-error.util';
 import { PnlfTelephonePipe } from '../../shared/pipes/format.pipes';
+import { InvitationsRecuesComponent } from './invitations-recues/invitations-recues.component';
 
 type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer' | 'adhesion';
 
@@ -57,6 +58,7 @@ type FormKey = 'code' | 'nom' | 'telephone' | 'email' | 'province';
     PaginationComponent,
     ConfirmDialogComponent,
     SkeletonComponent,
+    InvitationsRecuesComponent,
   ],
   templateUrl: './cooperatives-list.component.html',
   styleUrl: './cooperatives-list.component.scss',

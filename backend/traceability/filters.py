@@ -34,7 +34,9 @@ def _choix(message: str):
 class LotFilter(django_filters.FilterSet):
     statut = django_filters.ChoiceFilter(
         choices=tuple(STATUT_LIBELLES.items()),
-        error_messages=_choix('Statut de lot inconnu : « %(value)s ».'),
+        error_messages=_choix(
+            'Statut de lot inconnu : « %(value)s ». Statuts possibles : BROUILLON, VALIDE, COMMERCIALISE.'
+        ),
     )
 
     class Meta:

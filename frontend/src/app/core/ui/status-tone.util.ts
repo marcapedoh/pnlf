@@ -6,15 +6,11 @@ import { StatutCooperative, StatutProducteur } from '../models/producteur.model'
 export function lotStatusTone(statut: StatutLot): BadgeTone {
   switch (statut) {
     case StatutLot.VALIDE:
-    case StatutLot.COMMERCIALISE:
       return 'success';
-    case StatutLot.DECLARE:
-    case StatutLot.EN_TRANSIT:
-      return 'info';
-    case StatutLot.TRANSFORME:
+    case StatutLot.COMMERCIALISE:
       return 'gold';
-    case StatutLot.ANNULE:
-      return 'danger';
+    case StatutLot.BROUILLON:
+      return 'warning';
     default:
       return 'neutral';
   }

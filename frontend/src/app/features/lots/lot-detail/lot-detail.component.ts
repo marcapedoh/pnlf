@@ -11,15 +11,16 @@ import { toApiError } from '../../../core/http/api-error.util';
 import { environment } from '../../../../environments/environment';
 import {
   Lot,
+  STATUT_LOT_AIDES,
   STATUT_LOT_LABELS,
-  STATUTS_LOT_MODIFIABLES,
-  STATUTS_LOT_SANS_MOUVEMENT,
+  STATUT_LOT_ORDRE,
   StatutLot,
-  TRANSITIONS_MANUELLES_LOT,
   TypeMouvement,
   TYPE_MOUVEMENT_LABELS,
+  TYPES_MOUVEMENT_COMMERCIALISATION,
   TYPES_MOUVEMENT_PAR_ROLE,
 } from '../../../core/models/lot.model';
+import { FriseLotComponent } from '../frise-lot/frise-lot.component';
 import { RoleUtilisateur } from '../../../core/models/user.model';
 import { LotsService } from '../../../core/services/lots.service';
 import { lotStatusTone } from '../../../core/ui/status-tone.util';
@@ -58,6 +59,7 @@ function maintenantLocal(): string {
     IconComponent,
     ConfirmDialogComponent,
     AlertBannerComponent,
+    FriseLotComponent,
   ],
   templateUrl: './lot-detail.component.html',
   styleUrl: './lot-detail.component.scss',
@@ -76,9 +78,10 @@ export class LotDetailComponent {
   readonly lot = signal<Lot | null>(null);
   readonly loading = signal(true);
   readonly loadError = signal('');
-  readonly changingStatus = signal(false);
-  readonly nextStatut = signal('');
-  readonly confirmStatut = signal(false);
+  readonly confirmValider = signal(false);
+  readonly validating = signal(false);
+  readonly confirmCommercialiser = signal(false);
+  readonly commercialising = signal(false);
   readonly photoToRemove = signal<string | null>(null);
   readonly removingPhoto = signal(false);
   readonly uploadingPhotos = signal(false);
@@ -92,33 +95,30 @@ export class LotDetailComponent {
   readonly mouvementLieu = signal('');
   readonly mouvementQuantite = signal('');
   readonly mouvementCommentaire = signal('');
-  readonly mouvementTypes = (TYPES_MOUVEMENT_PAR_ROLE[this.auth.currentUser()?.role ?? ''] ?? []).map((value) => ({
-    value,
-    label: TYPE_MOUVEMENT_LABELS[value],
-  }));
-  readonly confirmPublier = signal(false);
-  readonly publishing = signal(false);
+  private readonly typesDuRole = TYPES_MOUVEMENT_PAR_ROLE[this.auth.currentUser()?.role ?? ''] ?? [];
+  /** Vente et exportation ne sont proposées qu'une fois le lot validé (règle du serveur). */
+  readonly mouvementTypes = computed(() => {
+    const brouillon = this.lot()?.statut === StatutLot.BROUILLON;
+    return this.typesDuRole
+      .filter((t) => !(brouillon && TYPES_MOUVEMENT_COMMERCIALISATION.includes(t)))
+      .map((value) => ({ value, label: TYPE_MOUVEMENT_LABELS[value] }));
+  });
   readonly confirmSuppression = signal(false);
   readonly deleting = signal(false);
 
   readonly statutLabels = STATUT_LOT_LABELS;
+  readonly statutAides = STATUT_LOT_AIDES;
+  readonly etapesCycle = STATUT_LOT_ORDRE;
   readonly typeMouvementLabels = TYPE_MOUVEMENT_LABELS;
   readonly tone = lotStatusTone;
   readonly verifyUrl = (uuid: string) => `${window.location.origin}/verifier/${uuid}`;
   readonly appApiOrigin = environment.apiUrl.replace(/\/api$/, '');
 
-  readonly canChangeStatus = this.auth.hasRole(
-    RoleUtilisateur.ADMINISTRATEUR,
-    RoleUtilisateur.AGENT_MINISTERE,
-    RoleUtilisateur.AGENT_FORESTIER,
-  );
-  readonly canAddMouvement = this.auth.hasRole(
-    RoleUtilisateur.ADMINISTRATEUR,
-    RoleUtilisateur.AGENT_MINISTERE,
-    RoleUtilisateur.AGENT_FORESTIER,
-    RoleUtilisateur.PRODUCTEUR,
-    RoleUtilisateur.COOPERATIVE,
-  );
+  /** Droits calculés par le serveur pour l'utilisateur courant (validation, commercialisation...). */
+  readonly droits = computed(() => this.lot()?.droits ?? null);
+  readonly peutValider = computed(() => !!this.droits()?.peut_valider);
+  readonly peutCommercialiser = computed(() => !!this.droits()?.peut_commercialiser);
+  readonly autoValidation = computed(() => this.droits()?.mode_validation === 'AUTO');
   /**
    * L'API n'expose aux producteurs et coopératives que leurs propres lots : la photo est donc
    * modifiable par les agents et par le producteur ou la coopérative titulaire du lot.
@@ -131,42 +131,25 @@ export class LotDetailComponent {
     RoleUtilisateur.COOPERATIVE,
   );
 
-  private readonly isAgent = this.canChangeStatus;
+  readonly peutAjouterEtape = computed(() => !!this.droits()?.peut_ajouter_etape && this.mouvementTypes().length > 0);
+  readonly peutSupprimer = computed(() => !!this.droits()?.peut_supprimer);
 
-  /** Statuts proposés : uniquement les transitions acceptées par le serveur. */
-  readonly nextStatusOptions = computed<StatutLot[]>(() => {
-    const current = this.lot()?.statut as StatutLot | undefined;
-    return current ? (TRANSITIONS_MANUELLES_LOT[current] ?? []) : [];
+  readonly confirmValiderMessage = computed(() => {
+    const lot = this.lot();
+    if (!lot) return '';
+    const auteur = this.autoValidation()
+      ? 'Vous validez ce lot au titre de votre certification active : la fiche publique indiquera « Auto-validé ».'
+      : 'La fiche publique indiquera le type d’autorité qui a validé le lot, sans votre nom.';
+    return `Le lot ${lot.code_lot} deviendra « Validé » : il sera visible dans l’annuaire et vérifiable par son QR code. ${auteur}`;
   });
 
-  /** Le serveur refuse toute étape sur un brouillon, un lot annulé ou archivé. */
-  readonly peutAjouterEtape = computed(() => {
+  readonly confirmCommercialiserMessage = computed(() => {
     const lot = this.lot();
+    if (!lot) return '';
     return (
-      this.canAddMouvement &&
-      this.mouvementTypes.length > 0 &&
-      !!lot &&
-      !STATUTS_LOT_SANS_MOUVEMENT.includes(lot.statut)
+      `Le lot ${lot.code_lot} sera retiré des listes publiques et de l’annuaire. ` +
+      'Son QR code restera vérifiable par l’acheteur. Ce changement est définitif.'
     );
-  });
-
-  readonly peutPublier = computed(() => this.canAddMouvement && this.lot()?.statut === StatutLot.BROUILLON);
-
-  /** Producteurs et coopératives ne suppriment que les lots en brouillon ou déclarés. */
-  readonly peutSupprimer = computed(() => {
-    const statut = this.lot()?.statut;
-    if (!statut || !this.canAddMouvement) return false;
-    if (statut === StatutLot.ANNULE || statut === StatutLot.ARCHIVE) return false;
-    return this.isAgent || STATUTS_LOT_MODIFIABLES.includes(statut);
-  });
-
-  readonly confirmStatutMessage = computed(() => {
-    const lot = this.lot();
-    const cible = this.nextStatut() as StatutLot;
-    if (!lot || !cible) return '';
-    const base = `Le lot ${lot.code_lot} passera de « ${this.statutLabels[lot.statut]} » à « ${this.statutLabels[cible]} ».`;
-    if (cible === StatutLot.ANNULE) return `${base} Un lot annulé ne peut plus évoluer, sauf vers « Archivé ».`;
-    return `${base} Ce changement ne pourra pas être annulé.`;
   });
 
   constructor() {
@@ -190,26 +173,51 @@ export class LotDetailComponent {
     });
   }
 
-  demanderChangementStatut(): void {
-    if (this.nextStatut()) this.confirmStatut.set(true);
-  }
-
-  publier(): void {
-    this.publishing.set(true);
-    this.service.publier(this.id).subscribe({
+  valider(): void {
+    this.validating.set(true);
+    this.service.valider(this.id).subscribe({
       next: (lot) => {
         this.lot.set(lot);
-        this.publishing.set(false);
-        this.confirmPublier.set(false);
-        this.toast.success('Lot publié', 'Le lot est désormais « Déclaré » et visible des agents.');
+        this.validating.set(false);
+        this.confirmValider.set(false);
+        this.toast.success('Lot validé', 'Il est désormais visible dans l’annuaire et vérifiable par son QR code.');
       },
       error: (err) => {
-        this.publishing.set(false);
-        this.confirmPublier.set(false);
+        this.validating.set(false);
+        this.confirmValider.set(false);
         const apiError = toApiError(err);
-        this.toast.error('Publication impossible', Object.values(apiError.fieldErrors ?? {}).flat()[0] ?? apiError.message);
+        this.toast.error('Validation impossible', Object.values(apiError.fieldErrors ?? {}).flat()[0] ?? apiError.message);
+        this.load();
       },
     });
+  }
+
+  commercialiser(motif = ''): void {
+    this.commercialising.set(true);
+    this.service.commercialiser(this.id, motif.trim() || undefined).subscribe({
+      next: (lot) => {
+        this.lot.set(lot);
+        this.commercialising.set(false);
+        this.confirmCommercialiser.set(false);
+        this.toast.success('Lot commercialisé', 'Il est retiré des listes publiques ; son QR code reste vérifiable.');
+      },
+      error: (err) => {
+        this.commercialising.set(false);
+        this.confirmCommercialiser.set(false);
+        const apiError = toApiError(err);
+        this.toast.error('Changement impossible', Object.values(apiError.fieldErrors ?? {}).flat()[0] ?? apiError.message);
+        this.load();
+      },
+    });
+  }
+
+  /** Position d'une étape du cycle par rapport au statut courant (frise des statuts). */
+  etatEtape(etape: StatutLot): 'fait' | 'courant' | 'a-venir' {
+    const courant = this.lot()?.statut;
+    if (!courant) return 'a-venir';
+    const i = STATUT_LOT_ORDRE.indexOf(etape);
+    const j = STATUT_LOT_ORDRE.indexOf(courant);
+    return i < j ? 'fait' : i === j ? 'courant' : 'a-venir';
   }
 
   supprimer(): void {
@@ -225,26 +233,6 @@ export class LotDetailComponent {
         this.deleting.set(false);
         this.confirmSuppression.set(false);
         this.toast.error('Suppression impossible', toApiError(err).message);
-      },
-    });
-  }
-
-  changerStatut(): void {
-    if (!this.nextStatut()) return;
-    this.changingStatus.set(true);
-    this.service.changerStatut(this.id, this.nextStatut()).subscribe({
-      next: (lot) => {
-        this.lot.set(lot);
-        this.changingStatus.set(false);
-        this.confirmStatut.set(false);
-        this.nextStatut.set('');
-        this.toast.success('Statut mis à jour', `Le lot est désormais « ${this.statutLabels[lot.statut]} ».`);
-      },
-      error: (err) => {
-        this.changingStatus.set(false);
-        this.confirmStatut.set(false);
-        const apiError = toApiError(err);
-        this.toast.error('Échec de la mise à jour du statut', apiError.fieldErrors?.['statut']?.[0] ?? apiError.message);
       },
     });
   }

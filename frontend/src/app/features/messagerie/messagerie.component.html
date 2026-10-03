@@ -6,7 +6,7 @@
       @if (supervisionMode()) {
         Supervision : toutes les discussions sont listées ci-contre. Cliquez sur un fil pour le consulter en lecture seule.
       } @else {
-        Vos discussions privées (et groupes de votre coopérative). Seuls les participants voient le fil.
+        Échangez avec tout compte actif de la plateforme (producteurs, collecteurs, coopératives, acheteurs, agents) et avec les groupes de votre coopérative. Seuls les participants voient le fil.
       }
     </p>
   </div>
@@ -41,13 +41,16 @@
 @if (supervisionMode()) {
   <div class="chat-supervision-banner" role="status">
     <pnlf-icon name="shield" [size]="18" />
-    <span>Mode supervision administrateur (lecture seule). Les participants ne sont pas notifiés de votre consultation.</span>
+    <span>
+      Mode supervision administrateur (lecture seule). Les participants ne sont pas notifiés de votre consultation.
+      Chaque impression PDF d’une conversation est inscrite au journal d’audit.
+    </span>
   </div>
 }
 
-<div class="chat-layout" [class.chat-layout--thread-open]="!!activeId()">
+<div class="chat-layout" [class.chat-layout--thread-open]="threadOpen()">
   <aside class="chat-inbox">
-    <div class="chat-inbox__search">
+    <div class="chat-inbox__search" [attr.inert]="showNew() ? '' : null">
       @if (supervisionMode()) {
         <pnlf-icon name="search" [size]="16" />
         <label class="pnlf-visually-hidden" for="chat-search-supervision">Rechercher une discussion à superviser</label>
@@ -71,60 +74,187 @@
       }
     </div>
 
-    @if (loadingList() || supervisionLoading()) {
-      <pnlf-skeleton height="100%" radius="12px" />
-    } @else if (filteredConversations().length === 0) {
-      <pnlf-empty-state
-        icon="message"
-        [title]="supervisionMode() ? 'Aucun résultat' : 'Aucune discussion'"
-        [description]="
-          supervisionMode()
-            ? 'Aucun fil ne correspond à votre recherche.'
-            : 'Ouvrez un fil depuis une fiche, une annonce, ou via « Nouvelle discussion ».'
-        "
-      />
-    } @else {
-      <ul class="chat-inbox__list">
-        @for (c of filteredConversations(); track c.id) {
-          <li>
-            <button
-              type="button"
-              class="chat-inbox__item"
-              [class.is-active]="activeId() === c.id"
-              [class.has-unread]="!supervisionMode() && (c.non_lus || 0) > 0"
-              [attr.aria-current]="activeId() === c.id ? 'true' : null"
-              (click)="select(c.id)"
-            >
-              <span class="chat-avatar" aria-hidden="true">
-                @if (c.interlocuteur_photo_url) {
-                  <img [src]="c.interlocuteur_photo_url" [alt]="''" />
-                } @else {
-                  <span class="chat-avatar__fallback" [class.chat-avatar__fallback--group]="c.est_groupe">
-                    @if (c.est_groupe) {
-                      <pnlf-icon name="users" [size]="16" />
-                    } @else {
-                      {{ initials(c.interlocuteur_nom) }}
-                    }
-                  </span>
-                }
-              </span>
-              <span class="chat-inbox__body">
-                <span class="chat-inbox__top">
-                  <span class="chat-inbox__name">{{ c.interlocuteur_nom }}</span>
-                  @if (c.dernier_at) {
-                    <span class="chat-inbox__date">{{ c.dernier_at | date: 'dd/MM HH:mm' }}</span>
+    <div class="chat-inbox__scroll" [attr.inert]="showNew() ? '' : null">
+      @if (loadingList() || supervisionLoading()) {
+        <pnlf-skeleton height="100%" radius="12px" />
+      } @else if (filteredConversations().length === 0) {
+        <pnlf-empty-state
+          icon="message"
+          [title]="supervisionMode() ? 'Aucun résultat' : 'Aucune discussion'"
+          [description]="
+            supervisionMode()
+              ? 'Aucun fil ne correspond à votre recherche.'
+              : 'Ouvrez un fil depuis une fiche, une annonce, ou via le bouton « Nouvelle discussion ».'
+          "
+        />
+      } @else {
+        <ul class="chat-inbox__list">
+          @for (c of filteredConversations(); track c.id) {
+            <li>
+              <button
+                type="button"
+                class="chat-inbox__item"
+                [class.is-active]="activeId() === c.id"
+                [class.has-unread]="!supervisionMode() && (c.non_lus || 0) > 0"
+                [attr.aria-current]="activeId() === c.id ? 'true' : null"
+                (click)="select(c.id)"
+              >
+                <span class="chat-avatar" aria-hidden="true">
+                  @if (photoVisible('conv-' + c.id, c.interlocuteur_photo_url)) {
+                    <img [src]="c.interlocuteur_photo_url" [alt]="''" (error)="onAvatarError('conv-' + c.id)" />
+                  } @else {
+                    <span class="chat-avatar__fallback" [class]="c.est_groupe ? 'chat-avatar__fallback--group' : couleurAvatar(c.id)">
+                      @if (c.est_groupe) {
+                        <pnlf-icon name="users" [size]="16" />
+                      } @else {
+                        {{ initials(c.interlocuteur_nom) }}
+                      }
+                    </span>
                   }
                 </span>
-                <span class="chat-inbox__preview">{{ c.dernier_message || c.sujet || 'Nouvelle discussion' }}</span>
-              </span>
-              @if (!supervisionMode() && (c.non_lus || 0) > 0) {
-                <span class="chat-inbox__badge" [attr.aria-label]="c.non_lus + (c.non_lus! > 1 ? ' messages non lus' : ' message non lu')">{{ c.non_lus! > 99 ? '99+' : c.non_lus }}</span>
-              }
-            </button>
-          </li>
-        }
-      </ul>
+                <span class="chat-inbox__body">
+                  <span class="chat-inbox__top">
+                    <span class="chat-inbox__name">{{ c.interlocuteur_nom }}</span>
+                    @if (c.dernier_at) {
+                      <span class="chat-inbox__date">{{ c.dernier_at | date: 'dd/MM HH:mm' }}</span>
+                    }
+                  </span>
+                  <span class="chat-inbox__preview">{{ c.dernier_message || c.sujet || 'Nouvelle discussion' }}</span>
+                </span>
+                @if (!supervisionMode() && (c.non_lus || 0) > 0) {
+                  <span class="chat-inbox__badge" [attr.aria-label]="c.non_lus + (c.non_lus! > 1 ? ' messages non lus' : ' message non lu')">{{ c.non_lus! > 99 ? '99+' : c.non_lus }}</span>
+                }
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    @if (!supervisionMode() && canStartAny && !showNew()) {
+      <button type="button" class="chat-fab" title="Nouvelle discussion" aria-label="Nouvelle discussion" (click)="openNew()">
+        <pnlf-icon name="edit" [size]="20" />
+      </button>
     }
+
+    <section
+      class="chat-new"
+      [class.is-open]="showNew()"
+      role="dialog"
+      aria-labelledby="chat-new-title"
+      [attr.aria-hidden]="showNew() ? null : 'true'"
+      [attr.inert]="showNew() ? null : ''"
+      (keydown.escape)="closeNew()"
+    >
+      <header class="chat-new__head">
+        <button type="button" class="chat-new__back" aria-label="Fermer et revenir aux discussions" (click)="closeNew()">
+          <pnlf-icon name="arrow-left" [size]="20" />
+        </button>
+        <h2 id="chat-new-title">Nouvelle discussion</h2>
+      </header>
+
+      <div class="chat-new__search">
+        <pnlf-icon name="search" [size]="16" />
+        <label class="pnlf-visually-hidden" for="chat-contact-search">Rechercher un nom ou une organisation</label>
+        <input
+          #contactSearch
+          id="chat-contact-search"
+          type="search"
+          autocomplete="off"
+          placeholder="Rechercher un nom ou une organisation"
+          [ngModel]="contactQuery()"
+          (ngModelChange)="onContactSearch($event)"
+        />
+      </div>
+
+      <div class="chat-new__filters" role="group" aria-label="Filtrer les contacts par profil">
+        @for (f of contactFiltres; track f.value) {
+          <button
+            type="button"
+            class="chat-new__chip"
+            [class.is-active]="contactRole() === f.value"
+            [attr.aria-pressed]="contactRole() === f.value"
+            (click)="setContactRole(f.value)"
+          >
+            {{ f.label }}
+          </button>
+        }
+      </div>
+
+      <div class="chat-new__list" (scroll)="onContactsScroll($event)">
+        @if (canCreateGroupe && !contactQuery().trim() && !contactRole()) {
+          <button type="button" class="chat-new__item chat-new__item--action" (click)="closeNew(); openGroupe()">
+            <span class="chat-avatar chat-avatar--md" aria-hidden="true">
+              <span class="chat-avatar__fallback chat-avatar__fallback--action"><pnlf-icon name="users" [size]="18" /></span>
+            </span>
+            <span class="chat-new__identity">
+              <strong>Nouveau groupe de coopérative</strong>
+              <small>Discuter avec plusieurs membres de votre coopérative</small>
+            </span>
+          </button>
+        }
+
+        @if (contactsError()) {
+          <div class="chat-new__state" role="alert">
+            <p>{{ contactsError() }}</p>
+            <button pnlfButton variant="outline" size="sm" type="button" (click)="chargerContacts(true)">Réessayer</button>
+          </div>
+        } @else if (!contactsLoading() && contacts().length === 0) {
+          <div class="chat-new__state">
+            <p>
+              @if (contactQuery().trim() || contactRole()) {
+                Aucun compte actif ne correspond à votre recherche.
+              } @else {
+                Aucun autre compte actif pour le moment.
+              }
+            </p>
+          </div>
+        } @else {
+          <p class="chat-new__count" aria-live="polite">
+            {{ contactsTotal() }} contact{{ contactsTotal() > 1 ? 's' : '' }}
+          </p>
+          @for (g of contactGroups(); track g.lettre + $index) {
+            <div class="chat-new__group" role="group" [attr.aria-label]="'Lettre ' + g.lettre">
+              <p class="chat-new__letter" aria-hidden="true">{{ g.lettre }}</p>
+              <ul>
+                @for (c of g.contacts; track c.id) {
+                  <li>
+                    <button type="button" class="chat-new__item" (click)="startWith(c)">
+                      <span class="chat-avatar chat-avatar--md" aria-hidden="true">
+                        @if (photoVisible('contact-' + c.id, c.photo_url)) {
+                          <img [src]="c.photo_url" [alt]="''" loading="lazy" (error)="onAvatarError('contact-' + c.id)" />
+                        } @else {
+                          <span class="chat-avatar__fallback" [class]="couleurAvatar(c.id)">{{ initials(c.libelle) }}</span>
+                        }
+                      </span>
+                      <span class="chat-new__identity">
+                        <strong>{{ c.libelle }}</strong>
+                        <small>
+                          {{ c.role_libelle || roleLabel(c.role) }}
+                          @if (c.organisation) {
+                            · {{ c.organisation }}
+                          }
+                        </small>
+                      </span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        }
+
+        @if (contactsLoading()) {
+          <div class="chat-new__loading" role="status">
+            <pnlf-skeleton height="48px" radius="10px" />
+            <pnlf-skeleton height="48px" radius="10px" />
+            <span class="pnlf-visually-hidden">Chargement des contacts</span>
+          </div>
+        } @else if (contactsHasMore()) {
+          <button type="button" class="chat-new__more" (click)="chargerContacts(false)">Afficher plus de contacts</button>
+        }
+      </div>
+    </section>
   </aside>
 
   <section class="chat-pane">
@@ -150,10 +280,13 @@
             ← Retour
           </button>
           <span class="chat-avatar chat-avatar--lg" aria-hidden="true">
-            @if (activeConversation()?.interlocuteur_photo_url) {
-              <img [src]="activeConversation()!.interlocuteur_photo_url!" [alt]="''" />
+            @if (photoVisible('conv-' + activeId(), activeConversation()?.interlocuteur_photo_url)) {
+              <img [src]="activeConversation()!.interlocuteur_photo_url!" [alt]="''" (error)="onAvatarError('conv-' + activeId())" />
             } @else {
-              <span class="chat-avatar__fallback" [class.chat-avatar__fallback--group]="activeConversation()?.est_groupe">
+              <span
+                class="chat-avatar__fallback"
+                [class]="activeConversation()?.est_groupe ? 'chat-avatar__fallback--group' : couleurAvatar(activeId() || '')"
+              >
                 @if (activeConversation()?.est_groupe) {
                   <pnlf-icon name="users" [size]="18" />
                 } @else {
@@ -162,8 +295,13 @@
               </span>
             }
           </span>
-          <div>
+          <div class="chat-pane__titles">
             <h2>{{ activeConversation()?.interlocuteur_nom }}</h2>
+            @if (supervisionMode()) {
+              <p>Participants : {{ participantsSupervision(activeConversation()) }}</p>
+            } @else if (interlocuteurInfo(activeConversation())) {
+              <p>{{ interlocuteurInfo(activeConversation()) }}</p>
+            }
             <p>
               {{ activeConversation()?.sujet }}
               @if (lectureSeule()) {
@@ -172,7 +310,12 @@
             </p>
           </div>
         </div>
-        @if (!lectureSeule()) {
+        @if (supervisionMode() && isAdmin) {
+          <button pnlfButton variant="outline" size="sm" type="button" (click)="imprimerConversation()">
+            <pnlf-icon name="file-text" [size]="16" />
+            Imprimer la conversation (PDF)
+          </button>
+        } @else if (!lectureSeule()) {
           <button pnlfButton variant="ghost" size="sm" type="button" title="Supprimer la conversation" (click)="askDelete()">
             <pnlf-icon name="trash" [size]="16" />
             Supprimer
@@ -189,10 +332,10 @@
               @if (!isMine(m) || lectureSeule()) {
                 <span class="bubble__meta-row">
                   <span class="chat-avatar chat-avatar--sm" aria-hidden="true">
-                    @if (m.expediteur_photo_url) {
-                      <img [src]="m.expediteur_photo_url" [alt]="''" />
+                    @if (photoVisible('user-' + m.expediteur_id, m.expediteur_photo_url)) {
+                      <img [src]="m.expediteur_photo_url" [alt]="''" (error)="onAvatarError('user-' + m.expediteur_id)" />
                     } @else {
-                      <span class="chat-avatar__fallback">{{ initials(m.expediteur_nom) }}</span>
+                      <span class="chat-avatar__fallback" [class]="couleurAvatar(m.expediteur_id)">{{ initials(m.expediteur_nom) }}</span>
                     }
                   </span>
                   @if (m.expediteur_nom) {
@@ -206,7 +349,25 @@
                 </a>
               }
               @if (m.piece_type === 'AUDIO' && m.piece_url) {
-                <audio [src]="m.piece_url" controls preload="metadata"></audio>
+                @if (audioLisible(m)) {
+                  <audio [src]="m.piece_url" controls preload="metadata" (error)="onAudioError(m.id)">
+                    <a [href]="m.piece_url" target="_blank" rel="noopener">Télécharger le message vocal</a>
+                  </audio>
+                } @else {
+                  <div class="bubble__audio-fallback" role="note">
+                    <pnlf-icon name="mic" [size]="16" />
+                    <span>
+                      Ce navigateur ne sait pas lire ce message vocal (format {{ formatAudio(m) }}, enregistré depuis un autre navigateur).
+                      Téléchargez-le pour l’écouter avec le lecteur de votre appareil.
+                    </span>
+                    <a [href]="m.piece_url" target="_blank" rel="noopener" download>
+                      <pnlf-icon name="download" [size]="14" />
+                      Télécharger
+                    </a>
+                  </div>
+                }
+              } @else if (m.piece_type === 'AUDIO') {
+                <p class="bubble__audio-fallback" role="note">Message vocal indisponible.</p>
               }
               @if (m.contenu) {
                 <p>{{ m.contenu }}</p>
@@ -234,94 +395,79 @@
       @if (lectureSeule()) {
         <p class="chat-composer__readonly">Consultation en lecture seule : vous ne pouvez pas répondre dans ce mode.</p>
       } @else {
-        <form class="chat-composer" (submit)="$event.preventDefault(); envoyer()">
-          <input #fileInput type="file" accept="image/jpeg,image/png,image/webp" hidden (change)="onFile($event)" />
-          <button type="button" class="chat-composer__icon" title="Joindre une photo" aria-label="Joindre une photo" (click)="pickImage()" [disabled]="sending()">
-            <pnlf-icon name="camera" [size]="18" />
-          </button>
-          <button
-            type="button"
-            class="chat-composer__icon"
-            [class.is-recording]="recording()"
-            [title]="recording() ? 'Arrêter l’enregistrement' : 'Message vocal'"
-            [attr.aria-label]="recording() ? 'Arrêter l’enregistrement et envoyer le message vocal' : 'Enregistrer un message vocal'"
-            [attr.aria-pressed]="recording()"
-            (click)="toggleMic()"
-            [disabled]="sending()"
-          >
-            <pnlf-icon name="mic" [size]="18" />
-          </button>
-          <label class="pnlf-visually-hidden" for="chat-draft">Votre message</label>
-          <textarea
-            id="chat-draft"
-            name="draft"
-            rows="2"
-            [ngModel]="draft()"
-            (ngModelChange)="draft.set($event)"
-            placeholder="Votre message…"
-            (keydown.enter)="onEnter($event)"
-          ></textarea>
-          <button pnlfButton type="submit" variant="primary" [loading]="sending()" [disabled]="!draft().trim() && !recording()">
-            Envoyer
-          </button>
-        </form>
-        @if (recording()) {
-          <p class="chat-composer__hint">Enregistrement en cours. Cliquez de nouveau sur le micro pour envoyer.</p>
+        @if (micState() === 'explain' || micState() === 'requesting') {
+          <div class="chat-mic-panel" [class.chat-mic-panel--error]="!!micError()" role="region" aria-labelledby="chat-mic-title">
+            <span class="chat-mic-panel__icon" aria-hidden="true"><pnlf-icon name="mic" [size]="20" /></span>
+            <div class="chat-mic-panel__body">
+              <p id="chat-mic-title" class="chat-mic-panel__title">
+                {{ micError() ? 'Micro indisponible' : 'Envoyer un message vocal' }}
+              </p>
+              @if (micError()) {
+                <p role="alert">{{ micError() }}</p>
+              } @else {
+                <p>
+                  Pour enregistrer votre voix, la plateforme a besoin d’accéder à votre micro. Votre navigateur va vous
+                  demander l’autorisation : l’enregistrement ne démarre qu’après votre accord et vous pourrez l’annuler avant l’envoi.
+                </p>
+              }
+              <div class="chat-mic-panel__actions">
+                <button pnlfButton variant="ghost" size="sm" type="button" (click)="annulerVocal()">Annuler</button>
+                <button pnlfButton variant="primary" size="sm" type="button" [loading]="micState() === 'requesting'" (click)="demarrerVocal()">
+                  {{ micError() ? 'Réessayer' : 'Autoriser le micro et enregistrer' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (micState() === 'recording') {
+          <div class="chat-recorder" role="group" aria-label="Enregistrement d’un message vocal">
+            <button type="button" class="chat-recorder__cancel" title="Annuler l’enregistrement" aria-label="Annuler l’enregistrement" (click)="annulerVocal()">
+              <pnlf-icon name="trash" [size]="18" />
+            </button>
+            <span class="chat-recorder__dot" aria-hidden="true"></span>
+            <span class="chat-recorder__time" role="timer" aria-live="off">{{ dureeVocal() }}</span>
+            <span class="chat-recorder__label">Enregistrement en cours (5 minutes maximum)</span>
+            <button pnlfButton variant="primary" type="button" (click)="envoyerVocal()">
+              <pnlf-icon name="check" [size]="16" />
+              Envoyer le vocal
+            </button>
+          </div>
+        } @else {
+          <form class="chat-composer" (submit)="$event.preventDefault(); envoyer()">
+            <input #fileInput type="file" accept="image/jpeg,image/png,image/webp" hidden (change)="onFile($event)" />
+            <button type="button" class="chat-composer__icon" title="Joindre une photo" aria-label="Joindre une photo" (click)="pickImage()" [disabled]="sending()">
+              <pnlf-icon name="camera" [size]="18" />
+            </button>
+            <button
+              type="button"
+              class="chat-composer__icon"
+              title="Enregistrer un message vocal"
+              aria-label="Enregistrer un message vocal"
+              (click)="onMicClick()"
+              [disabled]="sending() || micState() === 'requesting'"
+            >
+              <pnlf-icon name="mic" [size]="18" />
+            </button>
+            <label class="pnlf-visually-hidden" for="chat-draft">Votre message</label>
+            <textarea
+              id="chat-draft"
+              name="draft"
+              rows="2"
+              [ngModel]="draft()"
+              (ngModelChange)="draft.set($event)"
+              placeholder="Votre message…"
+              (keydown.enter)="onEnter($event)"
+            ></textarea>
+            <button pnlfButton type="submit" variant="primary" [loading]="sending()" [disabled]="!draft().trim()">
+              Envoyer
+            </button>
+          </form>
         }
       }
     }
   </section>
 </div>
-
-@if (showNew()) {
-  <div class="chat-modal" (click)="showNew.set(false)">
-    <pnlf-card
-      title="Nouvelle discussion"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Nouvelle discussion"
-      pnlfModal
-      (pnlfModalClose)="showNew.set(false)"
-      (click)="$event.stopPropagation()"
-    >
-      <label class="pnlf-visually-hidden" for="chat-contact-search">Rechercher un contact</label>
-      <input
-        data-autofocus
-        class="chat-modal__search"
-        type="search"
-        id="chat-contact-search"
-        name="contactQuery"
-        placeholder="Rechercher un contact…"
-        [ngModel]="contactQuery()"
-        (ngModelChange)="contactQuery.set($event)"
-      />
-      @if (filteredContacts().length === 0) {
-        <p class="text-sm text-muted">Aucun contact disponible.</p>
-      } @else {
-        <ul class="chat-modal__list">
-          @for (c of filteredContacts(); track c.id) {
-            <li>
-              <button type="button" (click)="startWith(c)">
-                <span class="chat-modal__contact">
-                  <span class="chat-avatar chat-avatar--sm" aria-hidden="true">
-                    @if (c.photo_url) {
-                      <img [src]="c.photo_url" [alt]="''" />
-                    } @else {
-                      <span class="chat-avatar__fallback">{{ initials(c.libelle) }}</span>
-                    }
-                  </span>
-                  <strong>{{ c.libelle }}</strong>
-                </span>
-                <span>{{ roleLabel(c.role) }}</span>
-              </button>
-            </li>
-          }
-        </ul>
-      }
-      <button pnlfButton variant="ghost" type="button" (click)="showNew.set(false)">Fermer</button>
-    </pnlf-card>
-  </div>
-}
 
 @if (showGroupe()) {
   <div class="chat-modal" (click)="showGroupe.set(false)">

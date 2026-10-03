@@ -1,0 +1,190 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Administration</p>
+    <h1 class="pnlf-page-header__title">Modération des images</h1>
+    <p class="pnlf-page-header__subtitle">
+      Images jugées douteuses par l’analyse automatique : elles restent masquées pour tous les utilisateurs
+      tant que vous ne les avez pas approuvées. Les images explicites sont refusées dès l’envoi.
+    </p>
+  </div>
+  <div class="pnlf-page-header__actions">
+    <button pnlfButton type="button" variant="outline" size="sm" [loading]="loading()" (click)="charger()">
+      <pnlf-icon name="refresh-cw" [size]="16" /> Actualiser
+    </button>
+  </div>
+</div>
+
+<div class="moderation-filtres" role="group" aria-label="Filtrer les images">
+  <button
+    type="button"
+    class="moderation-filtres__bouton"
+    [class.is-active]="filtre() === 'EN_ATTENTE'"
+    [attr.aria-pressed]="filtre() === 'EN_ATTENTE'"
+    (click)="changerFiltre('EN_ATTENTE')"
+  >
+    En attente
+    @if (enAttente() !== null) {
+      <span class="moderation-filtres__compteur">{{ enAttente() }}</span>
+    }
+  </button>
+  <button
+    type="button"
+    class="moderation-filtres__bouton"
+    [class.is-active]="filtre() === 'TRAITEES'"
+    [attr.aria-pressed]="filtre() === 'TRAITEES'"
+    (click)="changerFiltre('TRAITEES')"
+  >
+    Historique
+  </button>
+</div>
+
+@if (loading() && images().length === 0) {
+  <div class="moderation-grille" aria-busy="true" aria-label="Chargement des images">
+    @for (i of squelettes; track i) {
+      <pnlf-skeleton height="360px" radius="16px" />
+    }
+  </div>
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible de charger les images à modérer">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="charger()">Réessayer</button>
+  </pnlf-alert>
+} @else if (images().length === 0) {
+  @if (filtre() === 'EN_ATTENTE') {
+    <pnlf-empty-state
+      icon="shield-check"
+      title="Aucune image en attente"
+      description="Les images jugées douteuses par l’analyse automatique apparaîtront ici pour vérification."
+    />
+  } @else {
+    <pnlf-empty-state
+      icon="clock"
+      title="Aucune décision pour le moment"
+      description="Les images approuvées, rejetées ou remplacées par leur auteur seront listées ici."
+    />
+  }
+} @else {
+  <ul class="moderation-grille" [attr.aria-busy]="loading()">
+    @for (img of images(); track img.id) {
+      <li class="moderation-carte">
+        <div class="moderation-carte__apercu">
+          @if (img.apercu_url) {
+            <img
+              [src]="img.apercu_url"
+              [alt]="'Image soumise : ' + img.type_objet_libelle"
+              [class.is-floue]="!estDefloutee(img.id)"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+            />
+            <button
+              type="button"
+              class="moderation-carte__flou"
+              [attr.aria-pressed]="estDefloutee(img.id)"
+              (click)="basculerFlou(img.id)"
+            >
+              @if (estDefloutee(img.id)) {
+                Flouter l’image
+              } @else {
+                <pnlf-icon name="shield" [size]="16" /> Afficher l’image
+              }
+            </button>
+          } @else {
+            <div class="moderation-carte__sans-apercu">
+              <pnlf-icon name="x" [size]="22" />
+              <span>{{ img.statut === 'REJETEE' ? 'Fichier supprimé' : 'Aperçu indisponible' }}</span>
+            </div>
+          }
+        </div>
+
+        <div class="moderation-carte__corps">
+          <div class="moderation-carte__entete">
+            <span class="moderation-carte__type">{{ img.type_objet_libelle }}</span>
+            <pnlf-status-badge [label]="img.statut_libelle" [tone]="tonStatut(img.statut)" />
+          </div>
+
+          @if (img.objet_libelle) {
+            @if (img.objet_route) {
+              <a class="moderation-carte__objet" [routerLink]="img.objet_route">{{ img.objet_libelle }}</a>
+            } @else {
+              <p class="moderation-carte__objet">{{ img.objet_libelle }}</p>
+            }
+          }
+
+          <dl class="moderation-carte__details">
+            <div>
+              <dt>Envoyée par</dt>
+              <dd>
+                @if (img.envoye_par) {
+                  {{ img.envoye_par.nom }}
+                  <span class="text-muted">· {{ libelleRole(img.envoye_par.role) }}</span>
+                } @else {
+                  <span class="text-muted">Auteur inconnu</span>
+                }
+              </dd>
+            </div>
+            <div>
+              <dt>Reçue le</dt>
+              <dd>{{ img.created_at | pnlfDate: 'datetime' }}</dd>
+            </div>
+            <div>
+              <dt>Analyse</dt>
+              <dd>{{ raisonAnalyse(img) }}</dd>
+            </div>
+            @if (img.statut !== 'EN_ATTENTE') {
+              <div>
+                <dt>Décision</dt>
+                <dd>
+                  {{ img.statut_libelle }}
+                  @if (img.traite_par_nom) { par {{ img.traite_par_nom }} }
+                  @if (img.traite_at) { le {{ img.traite_at | pnlfDate: 'datetime' }} }
+                </dd>
+              </div>
+            }
+            @if (img.motif) {
+              <div>
+                <dt>Motif</dt>
+                <dd>{{ img.motif }}</dd>
+              </div>
+            }
+          </dl>
+
+          @if (img.statut === 'EN_ATTENTE') {
+            <div class="moderation-carte__actions">
+              <button pnlfButton type="button" size="sm" (click)="demander('approuver', img)">
+                <pnlf-icon name="check" [size]="16" /> Approuver
+              </button>
+              <button pnlfButton type="button" size="sm" variant="danger" (click)="demander('rejeter', img)">
+                <pnlf-icon name="trash" [size]="16" /> Rejeter
+              </button>
+            </div>
+          }
+        </div>
+      </li>
+    }
+  </ul>
+
+  @if (total() > pageSize) {
+    <pnlf-pagination
+      [page]="page()"
+      [pageSize]="pageSize"
+      [total]="total()"
+      label="Pagination des images"
+      (pageChange)="changerPage($event)"
+    />
+  }
+}
+
+<pnlf-confirm-dialog
+  [open]="!!action()"
+  [title]="titreAction()"
+  [message]="messageAction()"
+  [confirmLabel]="action()?.type === 'rejeter' ? 'Rejeter et supprimer' : 'Approuver'"
+  [danger]="action()?.type === 'rejeter'"
+  [inputLabel]="action()?.type === 'rejeter' ? 'Motif communiqué à l’auteur' : ''"
+  [inputRequired]="action()?.type === 'rejeter'"
+  inputPlaceholder="Ex. : photo sans rapport avec le produit, tenue inappropriée."
+  inputHint="5 caractères minimum, 500 au maximum."
+  [loading]="actionEnCours()"
+  (confirmed)="confirmer($event)"
+  (cancelled)="annuler()"
+/>

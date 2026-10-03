@@ -8,7 +8,16 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { initialesStructure } from '../../../core/auth/display-name.util';
 import { toApiError } from '../../../core/http/api-error.util';
 import { unwrapList } from '../../../core/models/common.model';
-import { Cooperative, Producteur, STATUT_COOPERATIVE_LABELS, StatutCooperative } from '../../../core/models/producteur.model';
+import {
+  CandidatInvitation,
+  Cooperative,
+  InvitationCooperative,
+  Producteur,
+  STATUT_COOPERATIVE_LABELS,
+  StatutCooperative,
+  StatutInvitation,
+} from '../../../core/models/producteur.model';
+import { BadgeTone } from '../../../design-system/badge/status-badge.component';
 import { RoleUtilisateur } from '../../../core/models/user.model';
 import { CooperativeMembre, CooperativesService } from '../../../core/services/cooperatives.service';
 import { PdfPreviewService } from '../../../core/services/pdf-preview.service';
@@ -24,7 +33,16 @@ import { ToastService } from '../../../design-system/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../design-system/confirm-dialog/confirm-dialog.component';
 import { PnlfDatePipe, PnlfTelephonePipe } from '../../../shared/pipes/format.pipes';
 
-type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer' | 'retirer' | 'adhesion' | 'accepter' | 'refuser';
+type DialogKind = 'valider' | 'rejeter' | 'desactiver' | 'activer' | 'retirer' | 'adhesion' | 'accepter' | 'refuser'
+  | 'inviter' | 'annulerInvitation' | 'accepterInvitation' | 'refuserInvitation';
+
+const TON_INVITATION: Record<StatutInvitation, BadgeTone> = {
+  EN_ATTENTE: 'warning',
+  ACCEPTEE: 'success',
+  REFUSEE: 'danger',
+  ANNULEE: 'neutral',
+  CADUQUE: 'neutral',
+};
 
 @Component({
   selector: 'app-cooperative-detail',
@@ -89,7 +107,20 @@ export class CooperativeDetailComponent {
   readonly addingMembre = signal(false);
   readonly membreError = signal('');
   private readonly membreSearch$ = new Subject<string>();
-  readonly dialog = signal<{ kind: DialogKind; producteur?: string; nom?: string } | null>(null);
+
+  /** Invitations : la coopérative propose l'adhésion à un producteur actif sans coopérative. */
+  readonly invitations = signal<InvitationCooperative[]>([]);
+  readonly invitationsEnAttente = computed(() => this.invitations().filter((i) => i.statut === 'EN_ATTENTE'));
+  readonly invitationsTraitees = computed(() => this.invitations().filter((i) => i.statut !== 'EN_ATTENTE').slice(0, 10));
+  readonly inviteQuery = signal('');
+  readonly inviteResults = signal<CandidatInvitation[]>([]);
+  readonly inviteSearching = signal(false);
+  readonly inviteSearchDone = signal(false);
+  readonly inviteSearchError = signal('');
+  private readonly inviteSearch$ = new Subject<string>();
+  readonly tonInvitation = (s: StatutInvitation): BadgeTone => TON_INVITATION[s] ?? 'neutral';
+
+  readonly dialog = signal<{ kind: DialogKind; producteur?: string; nom?: string; invitation?: string } | null>(null);
   readonly dialogLoading = signal(false);
   readonly coopNom = computed(() => this.coop()?.nom ?? '');
   private readonly pdfPreview = inject(PdfPreviewService);
@@ -128,7 +159,54 @@ export class CooperativeDetailComponent {
         this.membreResults.set(results.filter((p) => !already.has(p.id)));
         this.membreSearchDone.set(true);
       });
+    this.inviteSearch$
+      .pipe(
+        map((q) => q.trim()),
+        debounceTime(250),
+        distinctUntilChanged(),
+        tap((q) => {
+          this.inviteSearchError.set('');
+          this.inviteSearchDone.set(false);
+          this.inviteSearching.set(q.length >= 2);
+          if (q.length < 2) this.inviteResults.set([]);
+        }),
+        switchMap((q) =>
+          q.length < 2
+            ? of(null)
+            : this.service.candidatsInvitation(this.id, q).pipe(
+                catchError((err) => {
+                  this.inviteSearchError.set(toApiError(err).message);
+                  return of([] as CandidatInvitation[]);
+                }),
+              ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((results) => {
+        this.inviteSearching.set(false);
+        if (results === null) return;
+        this.inviteResults.set(results);
+        this.inviteSearchDone.set(true);
+      });
     this.load();
+  }
+
+  onInviteQueryChange(value: string): void {
+    this.inviteQuery.set(value);
+    this.inviteSearch$.next(value);
+  }
+
+  private relancerRechercheInvitation(): void {
+    const q = this.inviteQuery().trim();
+    if (q.length < 2) return;
+    this.service.candidatsInvitation(this.id, q).subscribe({
+      next: (r) => this.inviteResults.set(r),
+      error: () => undefined,
+    });
+  }
+
+  libelleType(type: string): string {
+    return type === 'COLLECTEUR' ? 'Collecteur' : 'Producteur';
   }
 
   load(): void {
@@ -158,6 +236,10 @@ export class CooperativeDetailComponent {
       this.service.demandesAdhesion(this.id).subscribe({
         next: (d) => this.demandes.set(d),
         error: () => this.demandes.set([]),
+      });
+      this.service.invitations(this.id).subscribe({
+        next: (i) => this.invitations.set(i),
+        error: () => this.invitations.set([]),
       });
     }
   }
@@ -218,6 +300,44 @@ export class CooperativeDetailComponent {
           this.service.retirerMembre(this.id, d.producteur).subscribe({
             next: () => done('Membre retiré', false),
             error: fail('Impossible de retirer ce membre'),
+          });
+        }
+        break;
+      case 'inviter':
+        if (d.producteur) {
+          this.service.inviter(this.id, d.producteur, value.trim() || undefined).subscribe({
+            next: () => {
+              done('Invitation envoyée', false);
+              this.relancerRechercheInvitation();
+            },
+            error: fail('Invitation impossible'),
+          });
+        }
+        break;
+      case 'annulerInvitation':
+        if (d.invitation) {
+          this.service.annulerInvitation(this.id, d.invitation).subscribe({
+            next: () => {
+              done('Invitation annulée', false);
+              this.relancerRechercheInvitation();
+            },
+            error: fail('Impossible d’annuler cette invitation'),
+          });
+        }
+        break;
+      case 'accepterInvitation':
+        if (d.invitation) {
+          this.service.accepterInvitation(d.invitation).subscribe({
+            next: (res) => done(res.detail || 'Invitation acceptée'),
+            error: fail('Impossible d’accepter l’invitation'),
+          });
+        }
+        break;
+      case 'refuserInvitation':
+        if (d.invitation) {
+          this.service.refuserInvitation(d.invitation, value.trim() || undefined).subscribe({
+            next: () => done('Invitation refusée'),
+            error: fail('Impossible de refuser l’invitation'),
           });
         }
         break;

@@ -1,0 +1,267 @@
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Offres &amp; demandes</p>
+    <h1 class="pnlf-page-header__title">{{ edition ? 'Modifier l’annonce' : 'Publier une annonce' }}</h1>
+    <p class="pnlf-page-header__subtitle">
+      Chaque annonce est vérifiée par un modérateur avant publication. Une annonce publiée puis modifiée repasse en vérification.
+    </p>
+  </div>
+  <a pnlfButton variant="ghost" [routerLink]="edition ? ['/app/marketplace/offres', id] : ['/app/marketplace/offres']">
+    <pnlf-icon name="arrow-left" [size]="16" /> Retour
+  </a>
+</div>
+
+@if (loading()) {
+  <pnlf-skeleton height="520px" radius="16px" />
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible de charger l’annonce">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="charger()">Réessayer</button>
+  </pnlf-alert>
+} @else if (figee) {
+  <pnlf-alert tone="warning" title="Annonce non modifiable">
+    Une annonce clôturée ou annulée ne peut plus être modifiée. Publiez une nouvelle annonce si besoin.
+  </pnlf-alert>
+} @else {
+  @if (offre()?.statut === 'REJETEE' && offre()?.moderation?.motif) {
+    <pnlf-alert tone="warning" title="Annonce rejetée" class="offre-form__alerte">
+      Motif communiqué par le modérateur : {{ offre()!.moderation!.motif }}. Corrigez l’annonce puis enregistrez pour la soumettre à nouveau.
+    </pnlf-alert>
+  }
+  @if (errorMessage()) {
+    <pnlf-alert tone="error" role="alert" class="offre-form__alerte">{{ errorMessage() }}</pnlf-alert>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="enregistrer()" novalidate class="offre-form-page">
+    <pnlf-card title="L’essentiel" subtitle="Ce que vous proposez ou recherchez.">
+      <div class="offre-form">
+        <fieldset class="offre-form__full offre-type">
+          <legend class="pnlf-field__label">Type d’annonce <span class="pnlf-field__required" aria-hidden="true">*</span></legend>
+          <div class="offre-type__choix">
+            <label class="offre-type__option" [class.is-active]="typeAnnonce() === 'OFFRE'">
+              <input type="radio" formControlName="type_annonce" value="OFFRE" class="pnlf-visually-hidden" />
+              <strong>Offre</strong>
+              <span>Je vends ou je propose un produit</span>
+            </label>
+            <label class="offre-type__option" [class.is-active]="typeAnnonce() === 'DEMANDE'">
+              <input type="radio" formControlName="type_annonce" value="DEMANDE" class="pnlf-visually-hidden" />
+              <strong>Demande</strong>
+              <span>Je recherche un produit</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="offre-form__full">
+          <pnlf-text-field
+            label="Titre de l’annonce"
+            formControlName="titre"
+            [required]="true"
+            [maxlength]="200"
+            hint="Exemple : Miel de forêt certifié, 200 litres disponibles"
+            [errorMessage]="err('titre', 'Donnez un titre à votre annonce.')"
+          />
+        </div>
+        <pnlf-select-field
+          label="Catégorie"
+          formControlName="categorie_id"
+          [options]="categoriesOptions()"
+          placeholder="Toutes les catégories"
+          hint="Facultatif, filtre la liste des produits"
+          [errorMessage]="err('categorie_id')"
+        />
+        <pnlf-select-field
+          label="Produit concerné"
+          formControlName="produit_id"
+          [options]="produitsOptions()"
+          [required]="true"
+          placeholder="Sélectionner un produit"
+          [errorMessage]="err('produit_id', 'Sélectionnez le produit concerné.')"
+        />
+        <div class="offre-form__full pnlf-field" [class.pnlf-field--error]="!!err('description')">
+          <label class="pnlf-field__label" for="offre-description">Description</label>
+          <textarea
+            id="offre-description"
+            class="pnlf-select offre-form__textarea"
+            rows="5"
+            maxlength="4000"
+            formControlName="description"
+            placeholder="Origine, mode de récolte, état du produit, attentes particulières…"
+            [attr.aria-invalid]="!!err('description')"
+          ></textarea>
+          <p class="offre-form__hint">{{ form.controls.description.value.length }} / 4000 caractères</p>
+          @if (err('description')) {
+            <p class="offre-form__error" role="alert">{{ err('description') }}</p>
+          }
+        </div>
+      </div>
+    </pnlf-card>
+
+    <pnlf-card title="Quantité et prix" subtitle="Les montants sont exprimés en francs CFA (FCFA).">
+      <div class="offre-form offre-form--3">
+        <pnlf-text-field
+          label="Quantité"
+          type="number"
+          formControlName="quantite"
+          min="0.001"
+          step="any"
+          inputmode="decimal"
+          hint="Facultatif"
+          [errorMessage]="form.controls.quantite.hasError('min') && form.controls.quantite.touched ? 'La quantité doit être supérieure à 0.' : err('quantite')"
+        />
+        <pnlf-select-field label="Unité" formControlName="unite" [options]="unites" placeholder="Choisir une unité" />
+        <span></span>
+        <pnlf-text-field
+          [label]="'Prix unitaire (FCFA par ' + (form.controls.unite.value | pnlfUnite) + ')'"
+          type="number"
+          formControlName="prix_unitaire"
+          min="0"
+          step="any"
+          inputmode="decimal"
+          hint="Facultatif"
+          [errorMessage]="form.controls.prix_unitaire.hasError('min') ? 'Le prix unitaire ne peut pas être négatif.' : err('prix_unitaire')"
+        />
+        <pnlf-text-field
+          label="Prix total (FCFA)"
+          type="number"
+          formControlName="prix_total"
+          min="0"
+          step="any"
+          inputmode="decimal"
+          hint="Facultatif, pour un lot entier"
+          [errorMessage]="form.controls.prix_total.hasError('min') ? 'Le prix total ne peut pas être négatif.' : err('prix_total')"
+        />
+        <label class="offre-case offre-case--aligne">
+          <input type="checkbox" formControlName="negociable" />
+          <span>Prix négociable</span>
+        </label>
+      </div>
+    </pnlf-card>
+
+    <pnlf-card title="Produit et qualité">
+      <div class="offre-form">
+        <pnlf-text-field
+          label="Conditionnement"
+          formControlName="conditionnement"
+          [maxlength]="150"
+          hint="Exemple : sacs de 50 kg, bidons de 20 litres"
+          [errorMessage]="err('conditionnement')"
+        />
+        <pnlf-text-field
+          label="Qualité, label ou certification"
+          formControlName="qualite"
+          [maxlength]="200"
+          hint="Exemple : bio, séché au soleil, certifié ENEF"
+          [errorMessage]="err('qualite')"
+        />
+        <label class="offre-case offre-form__full">
+          <input type="checkbox" formControlName="certification_requise" />
+          <span>{{ typeAnnonce() === 'DEMANDE' ? 'Une certification est exigée pour le produit recherché' : 'Le produit proposé est certifié' }}</span>
+        </label>
+      </div>
+    </pnlf-card>
+
+    <pnlf-card title="Lieu et disponibilité">
+      <div class="offre-form">
+        <pnlf-select-field label="Province" formControlName="province_id" [options]="provinces()" placeholder="Non précisée" [errorMessage]="err('province_id')" />
+        <pnlf-text-field label="Localité" formControlName="localite" [maxlength]="150" hint="Ville, village ou quartier" [errorMessage]="err('localite')" />
+        <pnlf-text-field label="Disponible à partir du" type="date" formControlName="disponible_du" [errorMessage]="err('disponible_du')" />
+        <pnlf-text-field
+          label="Date limite de l’annonce"
+          type="date"
+          formControlName="expire_at"
+          [min]="dateMin"
+          hint="Après cette date, l’annonce n’est plus visible du public"
+          [errorMessage]="dateError()"
+        />
+      </div>
+    </pnlf-card>
+
+    <pnlf-card title="Livraison et paiement">
+      <div class="offre-form">
+        <pnlf-select-field label="Remise du produit" formControlName="mode_remise" [options]="modesRemise" placeholder="À convenir" [errorMessage]="err('mode_remise')" />
+        <pnlf-text-field label="Modalités de livraison" formControlName="modalites_livraison" [maxlength]="1000" hint="Délais, zone desservie, frais éventuels" [errorMessage]="err('modalites_livraison')" />
+        <fieldset class="offre-form__full offre-moyens">
+          <legend class="pnlf-field__label">Moyens de paiement acceptés</legend>
+          <div class="offre-moyens__liste">
+            @for (m of moyensPaiement; track m.value) {
+              <label class="offre-case">
+                <input type="checkbox" [checked]="moyenCoche(m.value)" (change)="basculerMoyen(m.value, $event)" />
+                <span>{{ m.label }}</span>
+              </label>
+            }
+          </div>
+          @if (err('moyens_paiement')) {
+            <p class="offre-form__error" role="alert">{{ err('moyens_paiement') }}</p>
+          }
+        </fieldset>
+        <div class="offre-form__full">
+          <pnlf-text-field label="Conditions de paiement" formControlName="conditions_paiement" [maxlength]="1000" hint="Exemple : 30 % à la commande, solde à la livraison" [errorMessage]="err('conditions_paiement')" />
+        </div>
+      </div>
+    </pnlf-card>
+
+    <pnlf-card title="Photos" [subtitle]="photosMax() + ' photos maximum, JPEG, PNG ou WEBP, 5 Mo par photo.'">
+      <div class="offre-photos" role="group" aria-label="Photos de l’annonce">
+        @for (p of photosExistantes(); track p.url) {
+          <div class="offre-photos__thumb">
+            <img [src]="p.url" [alt]="'Photo ' + p.numero + ' de l’annonce'" />
+            <button type="button" class="offre-photos__remove" (click)="photoASupprimer.set(p)" [attr.aria-label]="'Retirer la photo ' + p.numero">
+              <pnlf-icon name="x" [size]="14" />
+            </button>
+          </div>
+        }
+        @for (p of nouvellesPhotos(); track p.apercu; let i = $index) {
+          <div class="offre-photos__thumb offre-photos__thumb--nouvelle">
+            <img [src]="p.apercu" [alt]="'Nouvelle photo ' + (i + 1)" />
+            <span class="offre-photos__etiquette">Nouvelle</span>
+            <button type="button" class="offre-photos__remove" (click)="retirerNouvellePhoto(i)" [attr.aria-label]="'Retirer la nouvelle photo ' + (i + 1)">
+              <pnlf-icon name="x" [size]="14" />
+            </button>
+          </div>
+        }
+        @if (placesPhotos() > 0) {
+          <label class="offre-photos__add">
+            <input type="file" accept="image/jpeg,image/png,image/webp" [multiple]="true" (change)="ajouterPhotos($event)" class="pnlf-visually-hidden" />
+            <pnlf-icon name="camera" [size]="20" />
+            <span>Ajouter</span>
+          </label>
+        }
+      </div>
+      @if (photoError()) {
+        <p class="offre-form__error" role="alert">{{ photoError() }}</p>
+      }
+    </pnlf-card>
+
+    <pnlf-card title="Coordonnées affichées" subtitle="Par défaut, les intéressés vous contactent uniquement via la messagerie de la plateforme.">
+      <div class="offre-form">
+        <label class="offre-case">
+          <input type="checkbox" formControlName="afficher_telephone" />
+          <span>Afficher mon numéro de téléphone sur l’annonce</span>
+        </label>
+        <label class="offre-case">
+          <input type="checkbox" formControlName="afficher_email" />
+          <span>Afficher mon adresse e-mail sur l’annonce</span>
+        </label>
+      </div>
+      <p class="offre-form__hint">Les coordonnées affichées sont celles de votre compte (modifiables dans Paramètres).</p>
+    </pnlf-card>
+
+    <div class="offre-form__actions">
+      <a pnlfButton variant="ghost" [routerLink]="edition ? ['/app/marketplace/offres', id] : ['/app/marketplace/offres']">Annuler</a>
+      <button pnlfButton type="submit" variant="primary" [loading]="saving()">
+        {{ edition ? 'Enregistrer les modifications' : 'Soumettre pour validation' }}
+      </button>
+    </div>
+  </form>
+}
+
+<pnlf-confirm-dialog
+  [open]="!!photoASupprimer()"
+  title="Retirer cette photo ?"
+  message="La photo sera définitivement supprimée de l’annonce."
+  confirmLabel="Retirer"
+  [danger]="true"
+  [loading]="suppressionPhoto()"
+  (confirmed)="confirmerSuppressionPhoto()"
+  (cancelled)="photoASupprimer.set(null)"
+/>

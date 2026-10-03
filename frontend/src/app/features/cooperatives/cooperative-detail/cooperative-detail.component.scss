@@ -171,6 +171,84 @@
   margin-bottom: var(--space-4);
 }
 
+.coop-invitation__recherche {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 34rem;
+  margin-bottom: var(--space-3);
+}
+
+.coop-invitation__resultats {
+  margin-bottom: var(--space-4);
+}
+
+.coop-invitation__titre {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.coop-invitation__liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px dashed var(--border-subtle);
+
+    &:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+  }
+}
+
+.coop-invitation__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pnlf-green-100);
+  color: var(--pnlf-green-600);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.coop-invitation__texte {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coop-invitation__message {
+  margin: var(--space-2) 0;
+  font-size: var(--fs-sm);
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
 .coop-membres__ok {
   font-size: var(--fs-xs);
   color: var(--color-success);

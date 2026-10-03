@@ -1,5 +1,6 @@
 import uuid
 
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 
@@ -43,6 +44,65 @@ class OffreDemande(models.Model):
         managed = False
         db_table = 'offres_demandes'
         ordering = ['-created_at']
+
+
+class OffreDetails(models.Model):
+    """Détails complémentaires d'une annonce (public.offres_details, évolution 16)."""
+
+    offre = models.OneToOneField(
+        OffreDemande, on_delete=models.DO_NOTHING, db_column='offre_id',
+        primary_key=True, related_name='details',
+    )
+    categorie_id = models.UUIDField(null=True, blank=True)
+    prix_total = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    negociable = models.BooleanField(default=False)
+    conditionnement = models.CharField(max_length=150, null=True, blank=True)
+    qualite = models.CharField(max_length=200, null=True, blank=True)
+    localite = models.CharField(max_length=150, null=True, blank=True)
+    disponible_du = models.DateField(null=True, blank=True)
+    mode_remise = models.CharField(max_length=30, null=True, blank=True)
+    modalites_livraison = models.TextField(null=True, blank=True)
+    moyens_paiement = ArrayField(models.CharField(max_length=30), default=list, blank=True)
+    conditions_paiement = models.TextField(null=True, blank=True)
+    afficher_telephone = models.BooleanField(default=False)
+    afficher_email = models.BooleanField(default=False)
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'offres_details'
+
+
+class OffreModeration(models.Model):
+    """Dernière décision de modération d'une annonce (public.offres_moderation, évolution 16)."""
+
+    offre = models.OneToOneField(
+        OffreDemande, on_delete=models.DO_NOTHING, db_column='offre_id',
+        primary_key=True, related_name='moderation',
+    )
+    decision = models.CharField(max_length=20)
+    moderateur_id = models.UUIDField(null=True, blank=True)
+    moderateur_nom = models.CharField(max_length=260, null=True, blank=True)
+    motif = models.TextField(null=True, blank=True)
+    decide_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'offres_moderation'
+
+
+class VisitePublique(models.Model):
+    """Compteur anonyme agrégé des visites de pages publiques (public.visites_publiques, évolution 16)."""
+
+    jour = models.DateField()
+    page = models.CharField(max_length=120)
+    appareil = models.CharField(max_length=20)
+    visites = models.IntegerField(default=0)
+    pk = models.CompositePrimaryKey('jour', 'page', 'appareil')
+
+    class Meta:
+        managed = False
+        db_table = 'visites_publiques'
 
 
 class Conversation(models.Model):
@@ -155,4 +215,33 @@ class SyncConflict(models.Model):
     class Meta:
         managed = False
         db_table = 'sync_conflicts'
+        ordering = ['-created_at']
+
+
+class ModerationImage(models.Model):
+    """Image jugée douteuse par l'IA, masquée jusqu'à décision (public.moderation_images, évolution 17)."""
+
+    class Statut(models.TextChoices):
+        EN_ATTENTE = 'EN_ATTENTE', 'En attente'
+        APPROUVEE = 'APPROUVEE', 'Approuvée'
+        REJETEE = 'REJETEE', 'Rejetée'
+        REMPLACEE = 'REMPLACEE', 'Remplacée ou retirée'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    chemin = models.TextField()
+    type_objet = models.CharField(max_length=30)
+    objet_id = models.UUIDField(null=True, blank=True)
+    envoye_par_id = models.UUIDField(null=True, blank=True)
+    verdict = models.CharField(max_length=20, default='DOUTEUX')
+    score_nsfw = models.DecimalField(max_digits=6, decimal_places=5, null=True, blank=True)
+    scores = models.JSONField(default=dict)
+    statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.EN_ATTENTE)
+    motif = models.TextField(null=True, blank=True)
+    traite_par_id = models.UUIDField(null=True, blank=True)
+    traite_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'moderation_images'
         ordering = ['-created_at']

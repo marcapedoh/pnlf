@@ -86,52 +86,38 @@
         <p>Vérification en cours…</p>
       </div>
     } @else if (result(); as r) {
-      <div class="verify-result verify-result--authentic">
-        <div class="verify-result__seal" aria-hidden="true">✓</div>
-        <h2>Produit authentique</h2>
-        <p class="verify-result__code">{{ r.code_lot }}</p>
+      <div class="verify-result verify-result--authentic" role="region" aria-label="Résultat de la vérification" aria-live="polite">
+        <app-lot-public-fiche [lot]="r" />
 
-        <dl class="verify-result__dl">
-          <div><dt>Produit</dt><dd>{{ r.produit_nom }}</dd></div>
-          <div><dt>Producteur / collecteur</dt><dd>{{ r.producteur_nom }}</dd></div>
-          <div><dt>Province d'origine</dt><dd>{{ r.province_nom }}</dd></div>
-          <div><dt>Date de collecte</dt><dd>{{ r.date_collecte | pnlfDate }}</dd></div>
-          <div><dt>Quantité déclarée</dt><dd>{{ r.quantite | pnlfQuantite: r.unite }}</dd></div>
-          <div><dt>Statut actuel</dt><dd><pnlf-status-badge [label]="r.statut_libelle || statutLabels[r.statut]" [tone]="tone(r.statut)" /></dd></div>
-          <div><dt>Étapes de traçabilité</dt><dd>{{ r.mouvements_count }} mouvement(s) enregistré(s)</dd></div>
-        </dl>
-
-        @if (r.photos_urls?.length) {
-          <div class="verify-photos">
-            @for (url of r.photos_urls; track url) {
-              <img [src]="url" [alt]="'Photo du lot ' + r.code_lot" />
-            }
-          </div>
-        }
-
-        @if (r.mouvements?.length) {
-          <ol class="verify-frise">
-            @for (m of r.mouvements; track $index) {
-              <li>
-                <strong>{{ m.type_libelle }}</strong>
-                <span>{{ m.date_mouvement | pnlfDate }}@if (m.lieu_libelle) { · {{ m.lieu_libelle }} }</span>
-              </li>
-            }
-          </ol>
-        }
-
-        <div class="verify-share">
+        <div class="verify-share no-print">
           <button pnlfButton type="button" variant="outline" size="sm" (click)="partager(r)">Partager</button>
-          <button pnlfButton type="button" variant="ghost" size="sm" (click)="imprimer()">Imprimer</button>
+          <button pnlfButton type="button" variant="ghost" size="sm" (click)="imprimer()">Imprimer la fiche</button>
+          <button pnlfButton type="button" variant="ghost" size="sm" (click)="reset()">Vérifier un autre produit</button>
         </div>
-
-        <button pnlfButton type="button" variant="ghost" size="sm" (click)="reset()">Vérifier un autre produit</button>
+        <p class="verify-print-footer">
+          Fiche issue de la plateforme nationale de traçabilité des PFNL du Gabon : {{ r.code_lot }}
+        </p>
       </div>
     } @else if (searched() && errorMessage()) {
-      <div class="verify-result verify-result--invalid">
-        <div class="verify-result__seal verify-result__seal--danger" aria-hidden="true">✕</div>
-        <h2>Produit non vérifiable</h2>
-        <pnlf-alert tone="warning">{{ errorMessage() }}</pnlf-alert>
+      <div class="verify-result verify-result--invalid" role="alert">
+        @if (lotNonValide() !== null) {
+          <div class="verify-result__seal verify-result__seal--attente" aria-hidden="true">
+            <pnlf-icon name="clock" [size]="30" />
+          </div>
+          <h2>Lot en attente de validation</h2>
+          @if (lotNonValide()) {
+            <p class="verify-result__code">{{ lotNonValide() }}</p>
+          }
+          <pnlf-alert tone="info">{{ errorMessage() }}</pnlf-alert>
+          <p class="verify-result__aide">
+            Le producteur doit faire contrôler ce lot par un agent habilité, ou le valider lui-même s’il
+            détient une certification active. Réessayez plus tard ou contactez le vendeur.
+          </p>
+        } @else {
+          <div class="verify-result__seal verify-result__seal--danger" aria-hidden="true">✕</div>
+          <h2>Produit non vérifiable</h2>
+          <pnlf-alert tone="warning">{{ errorMessage() }}</pnlf-alert>
+        }
         <button pnlfButton type="button" variant="ghost" size="sm" (click)="reset()">Réessayer</button>
       </div>
     }

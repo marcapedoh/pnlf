@@ -7,6 +7,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -47,24 +48,22 @@ from pnlf_platform.chat import (
     is_staff_chat,
     nom_utilisateur,
     photos_utilisateurs,
+    profils_utilisateurs,
 )
 from pnlf_platform.services import (
     creer_notification,
     dashboard_stats,
-    export_journal,
-    export_lots_csv,
-    export_lots_pdf,
-    export_lots_xlsx,
     generer_qr_offre,
     journal_detail,
     journal_periodes,
 )
+from pnlf_platform.annonces import PHOTOS_OFFRE_MAX, enregistrer_moderation
 from pnlf_platform.offre_statut import enum_supports, ids_par_statut, published_ids, read_statut, write_statut
 from traceability.db_utils import column_exists
 from traceability.models import Lot, Producteur
 
 ROLES_VALIDATION_OFFRES = (Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE)
-STATUTS_OFFRE_FIGES = ('CLOTUREE', 'REJETEE', 'ANNULEE')
+STATUTS_OFFRE_FIGES = ('CLOTUREE', 'ANNULEE')
 CHAMPS_CONTENU_OFFRE = (
     'type_annonce', 'produit_id', 'province_id', 'quantite', 'unite', 'prix_unitaire',
     'devise', 'titre', 'description', 'certification_requise', 'expire_at',
@@ -161,88 +160,93 @@ class InboxValidationView(APIView):
     permission_classes = [CanViewDashboard]
 
     def get(self, request):
-        from traceability.models import Certification, Cooperative, Producteur
+        from pnlf_platform.tableau_de_bord import file_a_traiter
 
-        producteurs = list(
-            Producteur.objects.filter(deleted_at__isnull=True, statut='EN_VALIDATION')
-            .order_by('-created_at')
-            .values('id', 'nom', 'prenoms', 'code_producteur', 'created_at')[:20]
+        return Response(file_a_traiter(request.user))
+
+
+class DashboardResumeView(APIView):
+    """Indicateurs personnels du tableau de bord, pour tous les profils connectés."""
+
+    def get(self, request):
+        from pnlf_platform.tableau_de_bord import resume
+
+        return Response(resume(request.user))
+
+
+def _lots_filtres(request, src=None):
+    """Lots exportables (périmètre du profil) filtrés par recherche, statut, période, province et produit."""
+    from accounts.permissions import scope_lots_qs
+    from pnlf_platform.statistiques import LIBELLES_STATUT_LOT
+    from traceability.models import Produit, Province
+
+    src = src if src is not None else request.query_params
+    qs = scope_lots_qs(Lot.objects.filter(deleted_at__isnull=True), request.user)
+    filtres: list[tuple[str, str]] = []
+    q = (str(src.get('q') or '')).strip()[:100]
+    if q:
+        qs = qs.filter(
+            Q(code_lot__icontains=q) | Q(produit__nom__icontains=q) | Q(producteur__nom__icontains=q)
+            | Q(producteur__prenoms__icontains=q) | Q(producteur__province__nom__icontains=q)
         )
-        coops = list(
-            Cooperative.objects.filter(statut='EN_VALIDATION')
-            .order_by('-created_at')
-            .values('id', 'nom', 'code', 'created_at')[:20]
+        filtres.append(('Recherche', q))
+    statut = (str(src.get('statut') or '')).strip().upper()
+    if statut:
+        if statut not in LIBELLES_STATUT_LOT:
+            raise ValidationError({'statut': 'Statut de lot inconnu (BROUILLON, VALIDE ou COMMERCIALISE).'})
+        qs = qs.filter(statut=statut)
+        filtres.append(('Statut', LIBELLES_STATUT_LOT[statut]))
+    bornes = {}
+    for nom in ('date_debut', 'date_fin'):
+        texte = (str(src.get(nom) or '')).strip()
+        if texte:
+            valeur = parse_date(texte)
+            if valeur is None:
+                raise ValidationError({nom: 'Date invalide (format attendu : AAAA-MM-JJ).'})
+            bornes[nom] = valeur
+    if bornes.get('date_debut') and bornes.get('date_fin') and bornes['date_fin'] < bornes['date_debut']:
+        raise ValidationError({'date_fin': 'La date de fin doit être postérieure ou égale à la date de début.'})
+    if bornes.get('date_debut'):
+        qs = qs.filter(date_collecte__gte=bornes['date_debut'])
+    if bornes.get('date_fin'):
+        qs = qs.filter(date_collecte__lte=bornes['date_fin'])
+    province = _uuid_filtre(src, 'province')
+    if province:
+        qs = qs.filter(producteur__province_id=province)
+        filtres.append(('Province', Province.objects.filter(pk=province).values_list('nom', flat=True).first() or '-'))
+    produit = _uuid_filtre(src, 'produit')
+    if produit:
+        qs = qs.filter(produit_id=produit)
+        filtres.append(('Produit', Produit.objects.filter(pk=produit).values_list('nom', flat=True).first() or '-'))
+    if bornes:
+        debut = bornes.get('date_debut')
+        fin = bornes.get('date_fin')
+        periode = (
+            f'du {debut:%d/%m/%Y} au {fin:%d/%m/%Y}' if debut and fin
+            else (f'depuis le {debut:%d/%m/%Y}' if debut else f'jusqu’au {fin:%d/%m/%Y}')
         )
-        certifs = list(
-            Certification.objects.filter(statut__in=('DEMANDEE', 'EN_COURS'))
-            .select_related('type_certification', 'producteur')
-            .order_by('-created_at')[:20]
-        )
-        offres_en_attente = OffreDemande.objects.filter(id__in=ids_par_statut('EN_VALIDATION'))
-        offres = [
-            {**o, 'statut': 'EN_VALIDATION'}
-            for o in offres_en_attente.order_by('-created_at').values('id', 'titre', 'type_annonce', 'created_at')[:20]
-        ]
-        items_cert = [
-            {
-                'id': c.id,
-                'type_libelle': c.type_certification.libelle if c.type_certification_id else None,
-                'producteur_nom': f'{c.producteur.prenoms} {c.producteur.nom}'.strip() if c.producteur_id else None,
-                'statut': c.statut,
-                'created_at': c.created_at,
-            }
-            for c in certifs
-        ]
-        acheteurs = list(
-            Utilisateur.objects.filter(
-                deleted_at__isnull=True,
-                statut=Utilisateur.Statut.EN_ATTENTE,
-                role=Utilisateur.Role.ACHETEUR,
-            )
-            .order_by('-created_at')
-            .values('id', 'nom', 'prenoms', 'email', 'created_at')[:20]
-        )
-        return Response({
-            'producteurs': {
-                'count': Producteur.objects.filter(deleted_at__isnull=True, statut='EN_VALIDATION').count(),
-                'results': producteurs,
-            },
-            'cooperatives': {
-                'count': Cooperative.objects.filter(statut='EN_VALIDATION').count(),
-                'results': coops,
-            },
-            'certifications': {
-                'count': Certification.objects.filter(statut__in=('DEMANDEE', 'EN_COURS')).count(),
-                'results': items_cert,
-            },
-            'offres': {'count': offres_en_attente.count(), 'results': offres},
-            'acheteurs': {
-                'count': Utilisateur.objects.filter(
-                    deleted_at__isnull=True,
-                    statut=Utilisateur.Statut.EN_ATTENTE,
-                    role=Utilisateur.Role.ACHETEUR,
-                ).count(),
-                'results': acheteurs,
-            },
-        })
+    else:
+        periode = 'Toutes les dates de collecte'
+    return qs, periode, filtres
+
+
+def _exporter_lots(request, fmt: str, src=None):
+    from pnlf_platform.rapports_export import exporter, tableau_lots
+
+    qs, periode, filtres = _lots_filtres(request, src)
+    ip, ua = request_meta(request)
+    write_audit(
+        utilisateur_id=request.user.id, action='EXPORT', table_cible='lots',
+        ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': fmt, 'filtres': dict(filtres)},
+    )
+    return exporter(tableau_lots(qs, periode=periode, filtres=filtres), fmt, request.user)
 
 
 class ExportLotsView(ExportFileView):
+    permission_classes = [CanExportJournal]
 
     def get(self, request):
-        from accounts.permissions import scope_lots_qs
-        qs = scope_lots_qs(Lot.objects.filter(deleted_at__isnull=True), request.user)
-        fmt = _format_export(request)
-        ip, ua = request_meta(request)
-        write_audit(
-            utilisateur_id=request.user.id, action='EXPORT', table_cible='lots',
-            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': fmt},
-        )
-        if fmt == 'xlsx':
-            return export_lots_xlsx(qs)
-        if fmt == 'pdf':
-            return export_lots_pdf(qs)
-        return export_lots_csv(qs)
+        return _exporter_lots(request, _format_export(request))
 
 
 class JournalPeriodesView(APIView):
@@ -327,14 +331,35 @@ class ExportJournalView(ExportFileView):
             granularite = 'jour'
         date_ref = request.query_params.get('date')
         fmt = _format_export(request)
-        filtres = _journal_filtres(request)
-        ip, ua = request_meta(request)
-        write_audit(
-            utilisateur_id=request.user.id, action='EXPORT', table_cible='audit_logs',
-            ip_adresse=ip, user_agent=ua,
-            nouvelles_valeurs={'format': fmt, 'granularite': granularite, 'date': date_ref, **filtres},
-        )
-        return export_journal(granularite, date_ref, fmt, **filtres)
+        return _exporter_journal(request, granularite, date_ref, fmt)
+
+
+def _exporter_journal(request, granularite: str, date_ref, fmt: str):
+    from pnlf_platform.rapports_export import exporter, tableau_journal
+    from pnlf_platform.services import _audit_rows, _resolve_journal_bornes
+
+    filtres = _journal_filtres(request)
+    debut, fin, libelle = _resolve_journal_bornes(granularite, date_ref, filtres['date_debut'], filtres['date_fin'])
+    rows, total = _audit_rows(
+        debut=timezone.make_aware(dt.datetime.combine(debut, dt.time.min)),
+        fin=timezone.make_aware(dt.datetime.combine(fin, dt.time.min)),
+        limit=5000, offset=0,
+        utilisateur_id=filtres['utilisateur_id'], action=filtres['action'], q=filtres['q'],
+    )
+    from pnlf_platform.pdf_export import libelle_action
+
+    contexte = [
+        ('Recherche', filtres['q'] or ''),
+        ('Action', libelle_action(filtres['action']) if filtres['action'] else ''),
+        ('Utilisateur', next((r['utilisateur'] for r in rows), '') if filtres['utilisateur_id'] else ''),
+    ]
+    ip, ua = request_meta(request)
+    write_audit(
+        utilisateur_id=request.user.id, action='EXPORT', table_cible='audit_logs',
+        ip_adresse=ip, user_agent=ua,
+        nouvelles_valeurs={'format': fmt, 'granularite': granularite, 'date': date_ref, **filtres},
+    )
+    return exporter(tableau_journal(rows, periode=libelle, filtres=contexte, total=total), fmt, request.user)
 
 
 class ExportLotsTicketView(APIView):
@@ -348,28 +373,26 @@ class ExportLotsTicketView(APIView):
     page : robuste sur tous les navigateurs, sans dépendre du blocage anti-pop-up.
     """
 
-    permission_classes = [CanViewDashboard]
+    permission_classes = [CanExportJournal]
 
     def post(self, request):
-        from accounts.permissions import scope_lots_qs
-        from pnlf_platform.pdf_export import lots_pdf_bytes
+        return _pdf_ou_erreur(lambda: _exporter_lots(request, 'pdf', request.data), 'des lots')
 
-        qs = scope_lots_qs(Lot.objects.filter(deleted_at__isnull=True), request.user)
-        try:
-            pdf, filename = lots_pdf_bytes(qs)
-        except Exception:
-            import logging
 
-            logging.getLogger(__name__).exception('Échec génération PDF lots')
-            return Response({'detail': 'Impossible de générer le PDF des lots.'}, status=500)
-        ip, ua = request_meta(request)
-        write_audit(
-            utilisateur_id=request.user.id, action='EXPORT', table_cible='lots',
-            ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'format': 'pdf'},
+def _pdf_ou_erreur(generer, objet: str):
+    try:
+        return generer()
+    except (ValidationError, PermissionDenied):
+        raise
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception('Échec de génération PDF %s', objet)
+        return Response(
+            {'detail': f'Le PDF {objet} n’a pas pu être généré. Réessayez dans un instant ou choisissez '
+                       'l’export Excel.', 'code': 'pdf_indisponible'},
+            status=500,
         )
-        from pnlf_platform.pdf_export import pdf_file_response
-
-        return pdf_file_response(pdf, filename)
 
 
 class ExportJournalTicketView(APIView):
@@ -382,21 +405,7 @@ class ExportJournalTicketView(APIView):
         if granularite not in ('jour', 'semaine', 'mois'):
             granularite = 'jour'
         date_ref = request.data.get('date')
-        filtres = _journal_filtres(request)
-        try:
-            response = export_journal(granularite, date_ref, 'pdf', **filtres)
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception('Échec génération PDF journal')
-            return Response({'detail': 'Impossible de générer le PDF du journal.'}, status=500)
-        ip, ua = request_meta(request)
-        write_audit(
-            utilisateur_id=request.user.id, action='EXPORT', table_cible='audit_logs',
-            ip_adresse=ip, user_agent=ua,
-            nouvelles_valeurs={'format': 'pdf', 'granularite': granularite, 'date': date_ref, **filtres},
-        )
-        return response
+        return _pdf_ou_erreur(lambda: _exporter_journal(request, granularite, date_ref, 'pdf'), 'du journal')
 
 
 class ExportDownloadView(APIView):
@@ -444,6 +453,86 @@ class NotificationViewSet(viewsets.ModelViewSet):
         return Response({'detail': 'OK'})
 
 
+TRIS_ANNONCES = {
+    'recent': ('-created_at',),
+    'ancien': ('created_at',),
+    'prix_asc': (F('prix_unitaire').asc(nulls_last=True), '-created_at'),
+    'prix_desc': (F('prix_unitaire').desc(nulls_last=True), '-created_at'),
+    'expiration': (F('expire_at').asc(nulls_last=True), '-created_at'),
+}
+
+
+def _param_decimal(params, nom: str):
+    from decimal import Decimal, InvalidOperation
+
+    texte = (params.get(nom) or '').strip().replace(',', '.').replace(' ', '')
+    if not texte:
+        return None
+    try:
+        valeur = Decimal(texte)
+    except InvalidOperation as exc:
+        raise ValidationError({nom: 'Montant invalide : saisissez un nombre en FCFA.'}) from exc
+    if valeur < 0:
+        raise ValidationError({nom: 'Le montant ne peut pas être négatif.'})
+    return valeur
+
+
+def _uuid_filtre(params, *noms):
+    for nom in noms:
+        texte = (params.get(nom) or '').strip()
+        if texte:
+            try:
+                return uuid_lib.UUID(texte)
+            except ValueError as exc:
+                raise ValidationError({nom: 'Identifiant invalide.'}) from exc
+    return None
+
+
+def filtrer_annonces(qs, params):
+    """Filtres et tri communs aux listes d'annonces (espace connecté et vitrine publique)."""
+    type_annonce = (params.get('type_annonce') or '').strip().upper()
+    if type_annonce:
+        if type_annonce not in ('OFFRE', 'DEMANDE'):
+            raise ValidationError({'type_annonce': 'Type d’annonce invalide (OFFRE ou DEMANDE).'})
+        qs = qs.filter(type_annonce=type_annonce)
+    recherche = (params.get('q') or '').strip()
+    if recherche:
+        from traceability.models import Produit
+
+        produits = Produit.objects.filter(nom__icontains=recherche).values('id')
+        qs = qs.filter(
+            Q(titre__icontains=recherche) | Q(description__icontains=recherche)
+            | Q(produit_id__in=produits) | Q(details__localite__icontains=recherche)
+        )
+    produit = _uuid_filtre(params, 'produit', 'produit_id')
+    if produit:
+        qs = qs.filter(produit_id=produit)
+    province = _uuid_filtre(params, 'province', 'province_id')
+    if province:
+        qs = qs.filter(province_id=province)
+    categorie = _uuid_filtre(params, 'categorie')
+    if categorie:
+        qs = qs.filter(Q(details__categorie_id=categorie) | Q(produit_id__in=_produits_de_categorie(categorie)))
+    prix_min = _param_decimal(params, 'prix_min')
+    prix_max = _param_decimal(params, 'prix_max')
+    if prix_min is not None and prix_max is not None and prix_max < prix_min:
+        raise ValidationError({'prix_max': 'Le prix maximum doit être supérieur ou égal au prix minimum.'})
+    if prix_min is not None:
+        qs = qs.filter(prix_unitaire__gte=prix_min)
+    if prix_max is not None:
+        qs = qs.filter(prix_unitaire__lte=prix_max)
+    tri = (params.get('tri') or 'recent').strip().lower()
+    if tri not in TRIS_ANNONCES:
+        raise ValidationError({'tri': 'Tri inconnu (recent, ancien, prix_asc, prix_desc ou expiration).'})
+    return qs.order_by(*TRIS_ANNONCES[tri])
+
+
+def _produits_de_categorie(categorie_id):
+    from traceability.models import Produit
+
+    return Produit.objects.filter(Q(categorie_id=categorie_id) | Q(categorie__parent_id=categorie_id)).values('id')
+
+
 def _notifier_moderateurs_offre(offre, *, titre: str, corps: str, sauf=None) -> None:
     moderateurs = Utilisateur.objects.filter(
         role__in=ROLES_VALIDATION_OFFRES, statut=Utilisateur.Statut.ACTIF, deleted_at__isnull=True,
@@ -467,20 +556,20 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = OffreDemande.objects.all().order_by('-created_at')
+        qs = OffreDemande.objects.select_related('details', 'moderation').order_by('-created_at')
         if user.role not in ROLES_VALIDATION_OFFRES:
+            non_expiree = Q(expire_at__isnull=True) | Q(expire_at__gt=timezone.now())
             if enum_supports('EN_VALIDATION'):
-                qs = qs.filter(Q(statut='OUVERTE') | Q(auteur_id=user.id))
+                qs = qs.filter((Q(statut='OUVERTE') & non_expiree) | Q(auteur_id=user.id))
             else:
-                qs = qs.filter(Q(id__in=published_ids()) | Q(auteur_id=user.id))
+                qs = qs.filter((Q(id__in=published_ids()) & non_expiree) | Q(auteur_id=user.id))
         if self.action != 'list':
             return qs
-        type_annonce = (self.request.query_params.get('type_annonce') or '').strip().upper()
-        if type_annonce:
-            if type_annonce not in ('OFFRE', 'DEMANDE'):
-                raise ValidationError({'type_annonce': 'Type d’annonce invalide (OFFRE ou DEMANDE).'})
-            qs = qs.filter(type_annonce=type_annonce)
-        statut = (self.request.query_params.get('statut') or '').strip().upper()
+        params = self.request.query_params
+        qs = filtrer_annonces(qs, params)
+        if (params.get('mine') or '').strip().lower() in ('1', 'true', 'oui'):
+            qs = qs.filter(auteur_id=user.id)
+        statut = (params.get('statut') or '').strip().upper()
         if statut:
             if statut not in ('EN_VALIDATION', 'OUVERTE', 'REJETEE', 'CLOTUREE', 'ANNULEE'):
                 raise ValidationError({'statut': 'Statut d’annonce invalide.'})
@@ -495,7 +584,7 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Vous ne pouvez modifier que vos propres annonces.')
         statut = read_statut(obj)
         if statut in STATUTS_OFFRE_FIGES:
-            raise ValidationError({'detail': 'Une annonce clôturée, rejetée ou annulée ne peut plus être modifiée.'})
+            raise ValidationError({'detail': 'Une annonce clôturée ou annulée ne peut plus être modifiée.'})
         return statut
 
     def _remettre_en_moderation(self, obj) -> None:
@@ -528,12 +617,14 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         obj = serializer.instance
         statut = self._verifier_modifiable(obj)
-        modifies = sorted(
-            champ for champ in CHAMPS_CONTENU_OFFRE
-            if champ in serializer.validated_data and serializer.validated_data[champ] != getattr(obj, champ)
-        )
+        modifies = sorted([
+            *(champ for champ in CHAMPS_CONTENU_OFFRE
+              if champ in serializer.validated_data and serializer.validated_data[champ] != getattr(obj, champ)),
+            *serializer.details_modifies(obj),
+        ])
         obj = serializer.save(updated_at=timezone.now())
-        remoderation = statut == 'OUVERTE' and bool(modifies) and not self._est_moderateur()
+        # Une annonce publiée et modifiée, ou rejetée puis corrigée, repasse en validation.
+        remoderation = statut in ('OUVERTE', 'REJETEE') and bool(modifies) and not self._est_moderateur()
         if remoderation:
             self._remettre_en_moderation(obj)
         ip, ua = request_meta(self.request)
@@ -545,7 +636,7 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='photos')
     def photos(self, request, pk=None):
-        """Ajoute jusqu'à 2 photos illustrant l'annonce (auteur ou modérateur)."""
+        """Ajoute jusqu'à PHOTOS_OFFRE_MAX photos illustrant l'annonce (auteur ou modérateur)."""
         from traceability.services import enregistrer_photo, photo_url
 
         obj = self.get_object()
@@ -556,17 +647,50 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
         if not fichiers:
             raise ValidationError({'photos': 'Aucun fichier reçu.'})
 
-        libres = [i for i in (1, 2) if not photo_url('offres', obj.id, suffixe=f'_{i}')]
+        libres = [i for i in range(1, PHOTOS_OFFRE_MAX + 1) if not photo_url('offres', obj.id, suffixe=f'_{i}')]
         if len(fichiers) > len(libres):
-            deja = 2 - len(libres)
+            deja = PHOTOS_OFFRE_MAX - len(libres)
             raise ValidationError({
-                'photos': f'Deux photos maximum par annonce ({deja} déjà enregistrée{"s" if deja > 1 else ""}).',
+                'photos': f'{PHOTOS_OFFRE_MAX} photos maximum par annonce '
+                          f'({deja} déjà enregistrée{"s" if deja > 1 else ""}).',
             })
         for fichier in fichiers:
             enregistrer_photo(fichier, 'offres', obj.id, suffixe=f'_{libres.pop(0)}')
-        if statut == 'OUVERTE' and not self._est_moderateur():
+        if statut in ('OUVERTE', 'REJETEE') and not self._est_moderateur():
             self._remettre_en_moderation(obj)
 
+        return Response(OffreDemandeSerializer(obj, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'], url_path='photos/supprimer')
+    def supprimer_photo(self, request, pk=None):
+        """Retire une photo de l'annonce (numéro 1 à PHOTOS_OFFRE_MAX) ; les suivantes sont renumérotées."""
+        from config import media_store
+        from traceability.services import chemin_photo
+
+        obj = self.get_object()
+        self._verifier_modifiable(obj)
+        try:
+            numero = int(request.data.get('numero'))
+        except (TypeError, ValueError):
+            numero = 0
+        if not 1 <= numero <= PHOTOS_OFFRE_MAX or not chemin_photo('offres', obj.id, f'_{numero}').exists():
+            raise ValidationError({'numero': 'Cette photo n’existe pas ou a déjà été retirée.'})
+        cible = chemin_photo('offres', obj.id, f'_{numero}')
+        cible.unlink()
+        media_store.supprimer(cible)
+        for suivant in range(numero + 1, PHOTOS_OFFRE_MAX + 1):
+            source = chemin_photo('offres', obj.id, f'_{suivant}')
+            if not source.exists():
+                break
+            destination = chemin_photo('offres', obj.id, f'_{suivant - 1}')
+            source.replace(destination)
+            media_store.pousser(destination)
+            media_store.supprimer(source)
+        ip, ua = request_meta(request)
+        write_audit(
+            utilisateur_id=request.user.id, action='DELETE_PHOTO', table_cible='offres_demandes',
+            enregistrement_id=obj.id, ip_adresse=ip, user_agent=ua, nouvelles_valeurs={'numero': numero},
+        )
         return Response(OffreDemandeSerializer(obj, context={'request': request}).data)
 
     @action(detail=True, methods=['post'], url_path='valider')
@@ -589,6 +713,7 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
             set_optional_column('offres_demandes', 'qr_payload', obj.id, qr_payload)
             set_optional_column('offres_demandes', 'qr_image_path', obj.id, qr_image_path)
         write_statut(obj, 'OUVERTE')
+        enregistrer_moderation(obj, decision='VALIDEE', moderateur=request.user)
 
         creer_notification(
             obj.auteur_id, 'Annonce validée',
@@ -614,6 +739,7 @@ class OffreDemandeViewSet(viewsets.ModelViewSet):
             raise ValidationError({'motif': 'Le motif du rejet est obligatoire : il est communiqué à l’auteur.'})
         motif = motif[:1000]
         write_statut(obj, 'REJETEE')
+        enregistrer_moderation(obj, decision='REJETEE', moderateur=request.user, motif=motif)
 
         corps = f'Votre annonce « {obj.titre} » a été rejetée. Motif : {motif}'
         creer_notification(
@@ -650,25 +776,13 @@ class PublicOffresDemandesListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        qs = OffreDemande.objects.select_related('details')
         if enum_supports('EN_VALIDATION'):
-            qs = OffreDemande.objects.filter(statut='OUVERTE').order_by('-updated_at')
+            qs = qs.filter(statut='OUVERTE')
         else:
-            qs = OffreDemande.objects.filter(id__in=published_ids()).order_by('-updated_at')
+            qs = qs.filter(id__in=published_ids())
         qs = qs.filter(Q(expire_at__isnull=True) | Q(expire_at__gt=timezone.now()))
-        type_annonce = (request.query_params.get('type_annonce') or '').strip().upper()
-        if type_annonce:
-            if type_annonce not in ('OFFRE', 'DEMANDE'):
-                raise ValidationError({'type_annonce': 'Type d’annonce invalide (OFFRE ou DEMANDE).'})
-            qs = qs.filter(type_annonce=type_annonce)
-        recherche = (request.query_params.get('q') or '').strip()
-        if recherche:
-            qs = qs.filter(Q(titre__icontains=recherche) | Q(description__icontains=recherche))
-        province = _param_uuid(request, 'province')
-        if province:
-            qs = qs.filter(province_id=province)
-        produit = _param_uuid(request, 'produit')
-        if produit:
-            qs = qs.filter(produit_id=produit)
+        qs = filtrer_annonces(qs, request.query_params)
 
         try:
             page = max(1, int(request.query_params.get('page') or 1))
@@ -703,11 +817,11 @@ class PublicOffreDemandeDetailView(APIView):
 
     def get(self, request, pk=None):
         try:
-            obj = OffreDemande.objects.filter(pk=uuid_lib.UUID(str(pk))).first()
+            obj = OffreDemande.objects.select_related('details').filter(pk=uuid_lib.UUID(str(pk))).first()
         except ValueError:
             obj = None
-        if not obj or read_statut(obj) != 'OUVERTE':
-            return Response({'detail': 'Annonce introuvable ou non publiée.'}, status=404)
+        if not obj or read_statut(obj) != 'OUVERTE' or (obj.expire_at and obj.expire_at <= timezone.now()):
+            return Response({'detail': 'Cette annonce est introuvable, expirée ou n’est plus publiée.'}, status=404)
         return Response(OffreDemandePubliqueSerializer(obj, context={'request': request}).data)
 
 
@@ -788,7 +902,19 @@ def _uuid_or_none(value, champ: str = 'detail'):
         raise ValidationError({champ: 'Identifiant invalide.'}) from exc
 
 
-ROLES_FILIERE_CHAT = (Utilisateur.Role.PRODUCTEUR, Utilisateur.Role.COOPERATIVE)
+CONTACTS_FILTRES_ROLE = {
+    'PRODUCTEUR': (Utilisateur.Role.PRODUCTEUR,),
+    'COOPERATIVE': (Utilisateur.Role.COOPERATIVE,),
+    'ACHETEUR': (Utilisateur.Role.ACHETEUR,),
+    'AGENT': (Utilisateur.Role.ADMINISTRATEUR, Utilisateur.Role.AGENT_MINISTERE, Utilisateur.Role.AGENT_FORESTIER),
+}
+SUPERVISION_PDF_MESSAGES_MAX = 5000
+
+
+class ContactsPagination(PageNumberPagination):
+    page_size = 30
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 def _messages_recents(qs) -> list:
@@ -799,23 +925,22 @@ def _messages_recents(qs) -> list:
 
 
 def _controler_interlocuteur(user, destinataire_id, champ: str):
-    """Règles de contact communes à tous les points d'entrée (destinataire, fiche, annonce) :
-    destinataire actif ; hors agents, acheteur vers producteur / coopérative et inversement,
-    ou vers un agent institutionnel."""
+    """Tout compte connecté peut écrire à n'importe quel autre compte actif de la plateforme."""
+    if str(destinataire_id) == str(user.id):
+        raise ValidationError({champ: 'Vous ne pouvez pas discuter avec vous-même.'})
     dest = Utilisateur.objects.filter(
         pk=destinataire_id, deleted_at__isnull=True, statut=Utilisateur.Statut.ACTIF,
     ).first()
     if not dest:
-        raise ValidationError({champ: 'Destinataire introuvable ou inactif.'})
-    if is_staff_chat(user) or is_staff_chat(dest):
-        return dest
-    if user.role == Utilisateur.Role.ACHETEUR and dest.role in ROLES_FILIERE_CHAT:
-        return dest
-    if user.role in ROLES_FILIERE_CHAT and dest.role == Utilisateur.Role.ACHETEUR:
-        return dest
-    raise PermissionDenied(
-        'Vous ne pouvez ouvrir une discussion qu’avec un acheteur, un producteur ou une coopérative.'
-    )
+        raise ValidationError({champ: 'Ce compte est introuvable ou n’est pas actif : la discussion ne peut pas être ouverte.'})
+    return dest
+
+
+def _cle_tri_nom(texte: str) -> str:
+    import unicodedata
+
+    decompose = unicodedata.normalize('NFKD', texte or '')
+    return ''.join(c for c in decompose if not unicodedata.combining(c)).casefold().strip()
 
 
 def _conversation_queryset(user):
@@ -868,6 +993,7 @@ def _hydrate_conversation_users(serializer, conversations, request=None):
             ids.add(p.utilisateur_id)
     users = {str(u.id): u for u in Utilisateur.objects.filter(id__in=list(ids))}
     serializer.context['_users_by_id'] = users
+    serializer.context['_profils_by_user'] = profils_utilisateurs(users.values())
     conv_ids = [c.id for c in conversations]
     ctx_rows = ConversationContext.objects.filter(conversation_id__in=conv_ids)
     serializer.context['_ctx_by_conv'] = {str(row.conversation_id): row for row in ctx_rows}
@@ -1171,6 +1297,15 @@ class ConversationViewSet(viewsets.ModelViewSet):
                     'offre_id': 'Vous êtes l’auteur de cette annonce : répondez depuis les échanges reçus.',
                 })
 
+        moi = str(request.user.id)
+        soi_meme = (
+            (destinataire_id and str(destinataire_id) == moi)
+            or (producteur_id and Producteur.objects.filter(pk=producteur_id, utilisateur_id=request.user.id).exists())
+            or (cooperative_id and Cooperative.objects.filter(pk=cooperative_id, utilisateur_id=request.user.id).exists())
+        )
+        if soi_meme:
+            raise ValidationError({'detail': 'Vous ne pouvez pas discuter avec vous-même.'})
+
         existing = _trouver_fil_existant(
             request.user.id,
             offre_id=offre_id,
@@ -1228,8 +1363,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
         else:
             raise ValidationError({'detail': 'Indiquez une offre, un producteur, une coopérative ou un destinataire.'})
 
-        if str(other_id) == str(request.user.id):
-            raise ValidationError({champ: 'Vous ne pouvez pas discuter avec vous-même.'})
         dest = _controler_interlocuteur(request.user, other_id, champ)
         if champ == 'destinataire_id':
             sujet = sujet or f'Discussion avec {nom_utilisateur(dest)}'
@@ -1255,32 +1388,53 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def contacts(self, request):
+        """Comptes actifs joignables, triés alphabétiquement : recherche serveur, filtre par rôle, pagination."""
+        from traceability.models import Cooperative, Producteur
+
         qs = Utilisateur.objects.filter(
             deleted_at__isnull=True, statut=Utilisateur.Statut.ACTIF,
         ).exclude(id=request.user.id)
-        role = request.user.role
-        if is_staff_chat(request.user):
-            pass
-        elif role == Utilisateur.Role.ACHETEUR:
-            qs = qs.filter(role__in=[Utilisateur.Role.PRODUCTEUR, Utilisateur.Role.COOPERATIVE])
-        elif role in (Utilisateur.Role.PRODUCTEUR, Utilisateur.Role.COOPERATIVE):
-            qs = qs.filter(role=Utilisateur.Role.ACHETEUR)
-        else:
-            qs = qs.none()
-        users = list(qs.order_by('nom', 'prenoms')[:120])
-        photos = photos_utilisateurs([u.id for u in users], request)
+        filtre = (request.query_params.get('role') or '').strip().upper()
+        if filtre:
+            if filtre not in CONTACTS_FILTRES_ROLE:
+                raise ValidationError({'role': 'Filtre inconnu (PRODUCTEUR, COOPERATIVE, ACHETEUR ou AGENT).'})
+            qs = qs.filter(role__in=CONTACTS_FILTRES_ROLE[filtre])
+        for mot in (request.query_params.get('q') or '').split()[:6]:
+            via_coop = Cooperative.objects.filter(
+                nom__icontains=mot, utilisateur_id__isnull=False,
+            ).values('utilisateur_id')
+            via_fiche = Producteur.objects.filter(
+                cooperative__nom__icontains=mot, deleted_at__isnull=True, utilisateur_id__isnull=False,
+            ).values('utilisateur_id')
+            qs = qs.filter(
+                Q(nom__icontains=mot) | Q(prenoms__icontains=mot)
+                | Q(id__in=via_coop) | Q(id__in=via_fiche)
+            )
+        lignes = sorted(
+            qs.values_list('id', 'prenoms', 'nom'),
+            key=lambda r: (_cle_tri_nom(f'{r[1]} {r[2]}'), str(r[0])),
+        )
+        paginator = ContactsPagination()
+        page = paginator.paginate_queryset(lignes, request, view=self)
+        ids = [r[0] for r in page]
+        par_id = {u.id: u for u in Utilisateur.objects.filter(id__in=ids)}
+        users = [par_id[i] for i in ids if i in par_id]
+        photos = photos_utilisateurs(ids, request)
+        profils = profils_utilisateurs(users)
         data = [
             {
                 'id': str(u.id),
                 'nom': u.nom,
                 'prenoms': u.prenoms,
                 'role': u.role,
+                'role_libelle': profils[str(u.id)]['role_libelle'],
+                'organisation': profils[str(u.id)]['organisation'],
                 'libelle': nom_utilisateur(u),
                 'photo_url': photos.get(str(u.id)),
             }
             for u in users
         ]
-        return Response(data)
+        return paginator.get_paginated_response(data)
 
     @action(detail=False, methods=['get'], url_path='non-lus')
     def non_lus(self, request):
@@ -1358,6 +1512,33 @@ class ConversationViewSet(viewsets.ModelViewSet):
         ser = MessageSerializer(msgs, many=True, context={'request': request})
         _hydrate_message_users(ser, msgs, conversation=conv, request=request)
         return Response({'conversation_id': str(conv.id), 'lecture_seule': True, 'results': ser.data})
+
+    @action(detail=True, methods=['post'], url_path='supervision-pdf')
+    def supervision_pdf(self, request, pk=None):
+        """Impression PDF de la conversation entière (administrateur, journalisée)."""
+        from pnlf_platform.pdf_conversation import conversation_pdf_bytes
+        from pnlf_platform.pdf_export import pdf_file_response
+
+        if not is_admin_superviseur(request.user):
+            raise PermissionDenied('L’impression des conversations est réservée à l’administrateur.')
+        conv_id = _uuid_or_none(pk)
+        conv = Conversation.objects.filter(pk=conv_id).first() if conv_id else None
+        if not conv:
+            return Response({'detail': 'Conversation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            pdf, filename = conversation_pdf_bytes(conv, imprime_par=request.user)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception('Échec génération PDF conversation')
+            return Response({'detail': 'Impossible de générer le PDF de la conversation.'}, status=500)
+        ip, ua = request_meta(request)
+        write_audit(
+            utilisateur_id=request.user.id, action='EXPORT', table_cible='conversations',
+            enregistrement_id=conv.id, ip_adresse=ip, user_agent=ua,
+            nouvelles_valeurs={'format': 'pdf', 'supervision': True, 'sujet': conv.sujet},
+        )
+        return pdf_file_response(pdf, filename)
 
     @action(detail=True, methods=['post'])
     def intervenir(self, request, pk=None):
@@ -1540,41 +1721,93 @@ class SyncConflictViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(SyncConflictSerializer(c).data)
 
 
+ANNUAIRE_PAGE_DEFAUT = 10
+ANNUAIRE_PAGE_MAX = 50
+
+
+def _param_page(request, nom: str) -> int:
+    texte = (request.query_params.get(nom) or '1').strip()
+    try:
+        valeur = int(texte)
+    except ValueError as exc:
+        raise ValidationError({nom: 'Numéro de page invalide.'}) from exc
+    return max(valeur, 1)
+
+
+def _page_annuaire(qs, page: int, taille: int):
+    """Tranche de la page demandée, ramenée à la dernière page si elle n'existe plus."""
+    total = qs.count()
+    derniere = max((total + taille - 1) // taille, 1)
+    page = min(page, derniere)
+    debut = (page - 1) * taille
+    return list(qs[debut:debut + taille]), total, page
+
+
 class AnnuaireView(APIView):
-    """Annuaire producteurs / coopératives : module 6.9."""
+    """Annuaire producteurs / coopératives : module 6.9, deux listes paginées côté serveur.
+
+    Paramètres : q, province, produit, page_producteurs, page_cooperatives, page_size,
+    liste (producteurs | cooperatives) pour ne recharger qu'une des deux listes."""
     permission_classes = [CanUseMarketplace]
 
     def get(self, request):
-        from django.db.models import Q
-
         from traceability.models import Cooperative
         from traceability.serializers import CooperativeSerializer, ProducteurSerializer
 
-        qs_prod = Producteur.objects.filter(deleted_at__isnull=True, statut='ACTIF')
-        produit = request.query_params.get('produit')
-        province = request.query_params.get('province')
+        produit = _param_uuid(request, 'produit')
+        province = _param_uuid(request, 'province')
         recherche = (request.query_params.get('q') or '').strip()
-        if province:
-            qs_prod = qs_prod.filter(province_id=province)
-        # Filtre produit via lots déclarés (annuaire simplifié)
-        if produit:
-            qs_prod = qs_prod.filter(id__in=Lot.objects.filter(produit_id=produit).values('producteur_id'))
+        liste = (request.query_params.get('liste') or '').strip().lower()
+        if liste and liste not in ('producteurs', 'cooperatives'):
+            raise ValidationError({'liste': 'Liste inconnue (producteurs ou cooperatives).'})
+        try:
+            taille = int(request.query_params.get('page_size') or ANNUAIRE_PAGE_DEFAUT)
+        except ValueError as exc:
+            raise ValidationError({'page_size': 'Taille de page invalide.'}) from exc
+        taille = min(max(taille, 1), ANNUAIRE_PAGE_MAX)
+        context = {'request': request}
+        payload: dict = {'page_size': taille}
 
-        coops = Cooperative.objects.filter(actif=True)
-        if province:
-            coops = coops.filter(province_id=province)
-
-        if recherche:
-            qs_prod = qs_prod.filter(
-                Q(nom__icontains=recherche) | Q(prenoms__icontains=recherche)
-                | Q(code_producteur__icontains=recherche) | Q(telephone__icontains=recherche)
+        if liste != 'cooperatives':
+            qs_prod = Producteur.objects.filter(
+                deleted_at__isnull=True, statut='ACTIF',
+            ).select_related('province', 'cooperative')
+            if province:
+                qs_prod = qs_prod.filter(province_id=province)
+            if produit:
+                qs_prod = qs_prod.filter(id__in=Lot.objects.filter(produit_id=produit).values('producteur_id'))
+            if recherche:
+                qs_prod = qs_prod.filter(
+                    Q(nom__icontains=recherche) | Q(prenoms__icontains=recherche)
+                    | Q(code_producteur__icontains=recherche) | Q(telephone__icontains=recherche)
+                )
+            items, total, page = _page_annuaire(
+                qs_prod.order_by('nom', 'prenoms', 'id'), _param_page(request, 'page_producteurs'), taille,
             )
-            coops = coops.filter(
-                Q(nom__icontains=recherche) | Q(code__icontains=recherche)
-                | Q(telephone__icontains=recherche) | Q(email__icontains=recherche)
-            )
+            payload.update({
+                'producteurs': ProducteurSerializer(items, many=True, context=context).data,
+                'producteurs_count': total,
+                'page_producteurs': page,
+            })
 
-        return Response({
-            'producteurs': ProducteurSerializer(qs_prod[:100], many=True, context={'request': request}).data,
-            'cooperatives': CooperativeSerializer(coops[:50], many=True, context={'request': request}).data,
-        })
+        if liste != 'producteurs':
+            coops = Cooperative.objects.filter(
+                Q(statut='ACTIF') | Q(statut__isnull=True), actif=True,
+            ).select_related('province')
+            if province:
+                coops = coops.filter(province_id=province)
+            if recherche:
+                coops = coops.filter(
+                    Q(nom__icontains=recherche) | Q(code__icontains=recherche)
+                    | Q(telephone__icontains=recherche) | Q(email__icontains=recherche)
+                )
+            items, total, page = _page_annuaire(
+                coops.order_by('nom', 'id'), _param_page(request, 'page_cooperatives'), taille,
+            )
+            payload.update({
+                'cooperatives': CooperativeSerializer(items, many=True, context=context).data,
+                'cooperatives_count': total,
+                'page_cooperatives': page,
+            })
+
+        return Response(payload)

@@ -1,5 +1,16 @@
 from rest_framework import serializers
 
+from pnlf_platform.annonces import (
+    CHAMPS_DETAILS,
+    MODES_REMISE,
+    MOYENS_PAIEMENT,
+    PHOTOS_OFFRE_MAX,
+    contact_auteur,
+    details_de,
+    enregistrer_details,
+    moderation_visible,
+    profil_auteur,
+)
 from pnlf_platform.models import (
     AppareilSync,
     Conversation,
@@ -32,6 +43,55 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
         choices=UNITES_MESURE, required=False, allow_null=True, allow_blank=True,
         error_messages={'invalid_choice': 'Unité de mesure invalide.'},
     )
+    description = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, max_length=4000,
+        error_messages={'max_length': 'La description est trop longue (4000 caractères maximum).'},
+    )
+    categorie_id = serializers.UUIDField(
+        write_only=True, required=False, allow_null=True,
+        error_messages={'invalid': 'Catégorie invalide.'},
+    )
+    prix_total = serializers.DecimalField(
+        write_only=True, required=False, allow_null=True, max_digits=16, decimal_places=2,
+        error_messages={'invalid': 'Saisissez un prix total valide (en FCFA).'},
+    )
+    negociable = serializers.BooleanField(write_only=True, required=False)
+    conditionnement = serializers.CharField(
+        write_only=True, required=False, allow_null=True, allow_blank=True, max_length=150,
+        error_messages={'max_length': 'Le conditionnement est trop long (150 caractères maximum).'},
+    )
+    qualite = serializers.CharField(
+        write_only=True, required=False, allow_null=True, allow_blank=True, max_length=200,
+        error_messages={'max_length': 'La qualité est trop longue (200 caractères maximum).'},
+    )
+    localite = serializers.CharField(
+        write_only=True, required=False, allow_null=True, allow_blank=True, max_length=150,
+        error_messages={'max_length': 'La localité est trop longue (150 caractères maximum).'},
+    )
+    disponible_du = serializers.DateField(
+        write_only=True, required=False, allow_null=True,
+        error_messages={'invalid': 'Date de disponibilité invalide (format attendu : AAAA-MM-JJ).'},
+    )
+    mode_remise = serializers.ChoiceField(
+        write_only=True, required=False, allow_null=True, allow_blank=True, choices=list(MODES_REMISE),
+        error_messages={'invalid_choice': 'Modalité de remise invalide (livraison, retrait ou les deux).'},
+    )
+    modalites_livraison = serializers.CharField(
+        write_only=True, required=False, allow_null=True, allow_blank=True, max_length=1000,
+        error_messages={'max_length': 'Les modalités de livraison sont trop longues (1000 caractères maximum).'},
+    )
+    moyens_paiement = serializers.ListField(
+        write_only=True, required=False, max_length=len(MOYENS_PAIEMENT),
+        child=serializers.ChoiceField(
+            choices=list(MOYENS_PAIEMENT), error_messages={'invalid_choice': 'Moyen de paiement invalide.'},
+        ),
+    )
+    conditions_paiement = serializers.CharField(
+        write_only=True, required=False, allow_null=True, allow_blank=True, max_length=1000,
+        error_messages={'max_length': 'Les conditions de paiement sont trop longues (1000 caractères maximum).'},
+    )
+    afficher_telephone = serializers.BooleanField(write_only=True, required=False)
+    afficher_email = serializers.BooleanField(write_only=True, required=False)
     produit_nom = serializers.SerializerMethodField()
     province_nom = serializers.SerializerMethodField()
     auteur_nom = serializers.SerializerMethodField()
@@ -46,10 +106,84 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
             'province_id', 'province_nom', 'quantite', 'unite', 'prix_unitaire', 'devise',
             'titre', 'description', 'certification_requise', 'statut', 'expire_at',
             'uuid_public', 'photos_urls', 'qr_image_url', 'created_at', 'updated_at',
+            *CHAMPS_DETAILS,
         )
         read_only_fields = (
             'auteur_id', 'statut', 'uuid_public', 'created_at', 'updated_at',
         )
+        extra_kwargs = {
+            'titre': {'error_messages': {'max_length': 'Le titre est trop long (200 caractères maximum).'}},
+        }
+
+    def _cache(self) -> dict:
+        return self.context.setdefault('_cache_offres', {})
+
+    def validate_categorie_id(self, valeur):
+        from traceability.models import CategorieProduit
+        if valeur is not None and not CategorieProduit.objects.filter(pk=valeur, actif=True).exists():
+            raise serializers.ValidationError('Catégorie introuvable.')
+        return valeur
+
+    def validate_prix_total(self, valeur):
+        from config.validators import valider_montant_positif
+        return valider_montant_positif(valeur, 'Le prix total ne peut pas être négatif.')
+
+    def validate_moyens_paiement(self, valeur):
+        return list(dict.fromkeys(valeur or []))
+
+    def validate(self, attrs):
+        from traceability.models import Produit
+
+        produit_id = attrs.get('produit_id', getattr(self.instance, 'produit_id', None))
+        categorie_id = attrs.get('categorie_id')
+        if categorie_id and produit_id:
+            produit = Produit.objects.select_related('categorie').filter(pk=produit_id).first()
+            if produit and categorie_id not in (produit.categorie_id, produit.categorie.parent_id):
+                raise serializers.ValidationError({
+                    'categorie_id': 'Le produit choisi n’appartient pas à cette catégorie.',
+                })
+        expire_at = attrs.get('expire_at', getattr(self.instance, 'expire_at', None))
+        disponible_du = attrs.get('disponible_du')
+        if disponible_du and expire_at and disponible_du > expire_at.date():
+            raise serializers.ValidationError({
+                'disponible_du': 'La date de disponibilité doit précéder la date limite de l’annonce.',
+            })
+        return attrs
+
+    @staticmethod
+    def _extraire_details(validated_data: dict) -> dict:
+        details = {champ: validated_data.pop(champ) for champ in CHAMPS_DETAILS if champ in validated_data}
+        for champ in ('conditionnement', 'qualite', 'localite', 'modalites_livraison', 'conditions_paiement',
+                      'mode_remise'):
+            if champ in details:
+                details[champ] = (details[champ] or '').strip() or None
+        return details
+
+    def details_modifies(self, instance) -> list[str]:
+        """Champs complémentaires dont la valeur soumise diffère de la valeur enregistrée."""
+        actuels = details_de(instance)
+        modifies = []
+        for champ in CHAMPS_DETAILS:
+            if champ not in self.validated_data:
+                continue
+            valeur = self.validated_data[champ]
+            if isinstance(valeur, str):
+                valeur = valeur.strip() or None
+            if valeur != (getattr(actuels, champ, None) if actuels else None):
+                modifies.append(champ)
+        return modifies
+
+    def create(self, validated_data):
+        details = self._extraire_details(validated_data)
+        instance = super().create(validated_data)
+        enregistrer_details(instance, details)
+        return instance
+
+    def update(self, instance, validated_data):
+        details = self._extraire_details(validated_data)
+        instance = super().update(instance, validated_data)
+        enregistrer_details(instance, details)
+        return instance
 
     def validate_quantite(self, valeur):
         from config.validators import valider_quantite_positive
@@ -66,7 +200,12 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
         valeur = (valeur or '').strip()
         if not valeur:
             raise serializers.ValidationError('Donnez un titre à votre annonce.')
+        if len(valeur) < 5:
+            raise serializers.ValidationError('Le titre doit contenir au moins 5 caractères.')
         return valeur
+
+    def validate_description(self, valeur):
+        return (valeur or '').strip() or None
 
     def validate_expire_at(self, valeur):
         from django.utils import timezone
@@ -86,34 +225,71 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Province introuvable.')
         return valeur
 
+    inclure_moderation = True
+
     def to_representation(self, instance):
-        data = super().to_representation(instance)
+        from django.utils import timezone
+
         from pnlf_platform.offre_statut import read_statut
+        from traceability.models import CategorieProduit
+
+        data = super().to_representation(instance)
         data['statut'] = read_statut(instance)
+        details = details_de(instance)
+        for champ in CHAMPS_DETAILS:
+            valeur = getattr(details, champ, None) if details else None
+            if champ == 'prix_total':
+                valeur = str(valeur) if valeur is not None else None
+            elif champ in ('categorie_id', 'disponible_du'):
+                valeur = str(valeur) if valeur else None
+            elif champ in ('negociable', 'afficher_telephone', 'afficher_email'):
+                valeur = bool(valeur)
+            elif champ == 'moyens_paiement':
+                valeur = list(valeur or [])
+            data[champ] = valeur
+        cache = self._cache()
+        categorie_id = data['categorie_id']
+        if categorie_id and f'cat:{categorie_id}' not in cache:
+            cache[f'cat:{categorie_id}'] = (
+                CategorieProduit.objects.filter(pk=categorie_id).values_list('libelle', flat=True).first()
+            )
+        data['categorie_nom'] = cache.get(f'cat:{categorie_id}') if categorie_id else None
+        request = self.context.get('request')
+        data['auteur'] = profil_auteur(instance.auteur_id, request, cache)
+        data['contact'] = contact_auteur(instance, details, cache)
+        data['expiree'] = bool(instance.expire_at and instance.expire_at <= timezone.now())
+        data['photos_max'] = PHOTOS_OFFRE_MAX
+        if self.inclure_moderation:
+            data['moderation'] = moderation_visible(instance, getattr(request, 'user', None))
         return data
 
     def get_produit_nom(self, obj):
         from traceability.models import Produit
-        p = Produit.objects.filter(pk=obj.produit_id).first()
-        return p.nom if p else None
+        cache = self._cache()
+        cle = f'produit:{obj.produit_id}'
+        if cle not in cache:
+            cache[cle] = Produit.objects.filter(pk=obj.produit_id).values_list('nom', flat=True).first()
+        return cache[cle]
 
     def get_province_nom(self, obj):
         if not obj.province_id:
             return None
         from traceability.models import Province
-        p = Province.objects.filter(pk=obj.province_id).first()
-        return p.nom if p else None
+        cache = self._cache()
+        cle = f'province:{obj.province_id}'
+        if cle not in cache:
+            cache[cle] = Province.objects.filter(pk=obj.province_id).values_list('nom', flat=True).first()
+        return cache[cle]
 
     def get_auteur_nom(self, obj):
-        from accounts.models import Utilisateur
-        u = Utilisateur.objects.filter(pk=obj.auteur_id).first()
-        return f'{u.prenoms} {u.nom}'.strip() if u else None
+        profil = profil_auteur(obj.auteur_id, self.context.get('request'), self._cache())
+        return profil['nom'] if profil else None
 
     def get_photos_urls(self, obj):
         from traceability.services import photo_url
         request = self.context.get('request')
         urls = []
-        for i in (1, 2):
+        for i in range(1, PHOTOS_OFFRE_MAX + 1):
             url = photo_url('offres', obj.id, request, suffixe=f'_{i}')
             if url:
                 urls.append(url)
@@ -135,7 +311,9 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
 
 
 class OffreDemandePubliqueSerializer(OffreDemandeSerializer):
-    """Vitrine publique : sans identifiant interne de l'auteur."""
+    """Vitrine publique : sans identifiant interne de l'auteur ni trace de modération."""
+
+    inclure_moderation = False
 
     class Meta(OffreDemandeSerializer.Meta):
         fields = tuple(f for f in OffreDemandeSerializer.Meta.fields if f != 'auteur_id')
@@ -184,16 +362,20 @@ class ConversationSerializer(serializers.ModelSerializer):
     def get_participants(self, obj):
         cache = self.context.setdefault('_users_by_id', {})
         photos = self.context.get('_photos_by_user') or {}
+        profils = self.context.get('_profils_by_user') or {}
         rows = []
         for p in obj.participants.all():
             uid = str(p.utilisateur_id)
             user = cache.get(uid)
             if user is None:
                 continue
+            profil = profils.get(uid) or {}
             rows.append({
                 'id': uid,
                 'nom': f'{user.prenoms} {user.nom}'.strip(),
                 'role': user.role,
+                'role_libelle': profil.get('role_libelle'),
+                'organisation': profil.get('organisation'),
                 'photo_url': photos.get(uid),
             })
         return rows
@@ -238,6 +420,7 @@ class ConversationSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     piece_url = serializers.SerializerMethodField()
     piece_type = serializers.SerializerMethodField()
+    piece_mime = serializers.SerializerMethodField()
     contenu = serializers.SerializerMethodField()
     expediteur_nom = serializers.SerializerMethodField()
     expediteur_photo_url = serializers.SerializerMethodField()
@@ -247,7 +430,7 @@ class MessageSerializer(serializers.ModelSerializer):
         model = Message
         fields = (
             'id', 'conversation', 'expediteur_id', 'expediteur_nom', 'expediteur_photo_url',
-            'contenu', 'piece_type', 'piece_url', 'statut', 'lu_at', 'created_at',
+            'contenu', 'piece_type', 'piece_url', 'piece_mime', 'statut', 'lu_at', 'created_at',
         )
         read_only_fields = ('expediteur_id', 'lu_at', 'created_at', 'piece_type')
 
@@ -263,6 +446,11 @@ class MessageSerializer(serializers.ModelSerializer):
         from pnlf_platform.chat import piece_url
         piece = self._piece(obj)
         return piece_url(piece.piece_path, self.context.get('request')) if piece else None
+
+    def get_piece_mime(self, obj):
+        from pnlf_platform.chat import piece_mime
+        piece = self._piece(obj)
+        return piece_mime(piece.piece_path) if piece else None
 
     def get_contenu(self, obj):
         from pnlf_platform.chat import PLACEHOLDERS

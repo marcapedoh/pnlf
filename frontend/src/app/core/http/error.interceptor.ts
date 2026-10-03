@@ -21,7 +21,15 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       }
       if (error instanceof HttpErrorResponse && (error.status === 0 || error.status >= 500)) {
         const apiError = toApiError(error);
-        toast.error('Problème de connexion', apiError.message);
+        const titre =
+          error.status === 0
+            ? 'Connexion au serveur impossible'
+            : error.status >= 502 && error.status <= 504
+              ? 'Serveur en cours de démarrage'
+              : 'Erreur du serveur';
+        toast.error(titre, apiError.message);
+      } else if (error instanceof HttpErrorResponse && error.status === 429 && !req.url.includes('/auth/')) {
+        toast.warning('Veuillez patienter', toApiError(error).message);
       }
       return throwError(() => error);
     }),

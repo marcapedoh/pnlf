@@ -1,0 +1,124 @@
+<div class="barre" role="search" aria-label="Rechercher et filtrer les annonces">
+  <div class="barre__ligne">
+    <div class="barre__recherche">
+      <label class="pnlf-visually-hidden" for="annonces-q">Rechercher une annonce</label>
+      <pnlf-icon name="search" [size]="16" class="barre__loupe" />
+      <input
+        id="annonces-q"
+        type="search"
+        class="pnlf-select"
+        placeholder="Titre, produit, localité…"
+        maxlength="120"
+        autocomplete="off"
+        [value]="q()"
+        (input)="saisir('q', $event)"
+      />
+    </div>
+
+    <div class="barre__segments" role="group" aria-label="Type d’annonce">
+      @for (t of [{ v: '', l: 'Tout' }, { v: 'OFFRE', l: 'Offres' }, { v: 'DEMANDE', l: 'Demandes' }]; track t.v) {
+        <button type="button" class="barre__segment" [class.is-active]="type() === t.v" [attr.aria-pressed]="type() === t.v" (click)="choisir('type', t.v)">
+          {{ t.l }}
+        </button>
+      }
+    </div>
+
+    <button
+      type="button"
+      class="barre__bouton"
+      [class.is-active]="filtresAvances() || nbFiltresActifs > 0"
+      [attr.aria-expanded]="filtresAvances()"
+      aria-controls="annonces-filtres"
+      (click)="filtresAvances.set(!filtresAvances())"
+    >
+      <pnlf-icon name="filter" [size]="16" />
+      Filtres
+      @if (nbFiltresActifs) {
+        <span class="barre__compteur" aria-label="filtres actifs">{{ nbFiltresActifs }}</span>
+      }
+    </button>
+
+    <label class="pnlf-visually-hidden" for="annonces-tri">Trier les annonces</label>
+    <select id="annonces-tri" class="pnlf-select barre__tri" [value]="tri()" (change)="choisirTri($event)">
+      @for (t of tris; track t.value) {
+        <option [value]="t.value" [selected]="t.value === tri()">{{ t.label }}</option>
+      }
+    </select>
+
+    <div class="barre__vues" role="group" aria-label="Mode d’affichage">
+      @for (v of vues; track v.value) {
+        <button
+          type="button"
+          class="barre__vue"
+          [class.is-active]="vue() === v.value"
+          [attr.aria-pressed]="vue() === v.value"
+          [attr.aria-label]="'Affichage ' + v.label.toLowerCase()"
+          [title]="v.label"
+          (click)="choisirVue(v.value)"
+        >
+          <pnlf-icon [name]="v.icon" [size]="18" />
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (filtresAvances()) {
+    <div id="annonces-filtres" class="barre__filtres">
+      <label class="barre__champ">
+        <span>Produit</span>
+        <select class="pnlf-select" [value]="produit()" (change)="choisir('produit', valeurSelect($event))">
+          <option value="">Tous les produits</option>
+          @for (p of produits(); track p.id) {
+            <option [value]="p.id" [selected]="p.id === produit()">{{ p.nom }}</option>
+          }
+        </select>
+      </label>
+      <label class="barre__champ">
+        <span>Province</span>
+        <select class="pnlf-select" [value]="province()" (change)="choisir('province', valeurSelect($event))">
+          <option value="">Toutes les provinces</option>
+          @for (p of provinces(); track p.id) {
+            <option [value]="p.id" [selected]="p.id === province()">{{ p.nom }}</option>
+          }
+        </select>
+      </label>
+      <label class="barre__champ barre__champ--prix">
+        <span>Prix min. (FCFA)</span>
+        <input class="pnlf-select" type="number" min="0" step="any" inputmode="decimal" [value]="prixMin()" (input)="saisir('prixMin', $event)" />
+      </label>
+      <label class="barre__champ barre__champ--prix">
+        <span>Prix max. (FCFA)</span>
+        <input class="pnlf-select" type="number" min="0" step="any" inputmode="decimal" [value]="prixMax()" (input)="saisir('prixMax', $event)" />
+      </label>
+      @if (afficherStatut()) {
+        <label class="barre__champ">
+          <span>Statut</span>
+          <select class="pnlf-select" [value]="statut()" (change)="choisir('statut', valeurSelect($event))">
+            <option value="">Tous les statuts</option>
+            @for (s of statuts; track s.value) {
+              <option [value]="s.value" [selected]="s.value === statut()">{{ s.label }}</option>
+            }
+          </select>
+        </label>
+      }
+      @if (erreurPrix()) {
+        <p class="barre__erreur" role="alert">{{ erreurPrix() }}</p>
+      }
+    </div>
+  }
+
+  <div class="barre__resume">
+    @if (afficherMine()) {
+      <label class="barre__case">
+        <input type="checkbox" [checked]="mine()" (change)="basculerMine($event)" />
+        Mes annonces uniquement
+      </label>
+    }
+    @if (total() !== null) {
+      <span class="barre__total" aria-live="polite">{{ total() }} {{ total() === 1 ? 'annonce' : 'annonces' }}</span>
+    }
+    @if (filtresModifies) {
+      <button type="button" class="barre__lien" (click)="reinitialiser()">Réinitialiser</button>
+    }
+  </div>
+</div>

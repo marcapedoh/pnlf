@@ -243,6 +243,13 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['pwd'] = password_fingerprint(user)
         return token
 
+    def _tracer_echec(self, motif: str, email: str, user=None) -> None:
+        from .connexions import enregistrer_connexion
+
+        enregistrer_connexion(
+            self.context.get('request'), succes=False, utilisateur=user, email=email, motif_echec=motif,
+        )
+
     def validate(self, attrs):
         email = attrs.get('email')
         password = attrs.get('password')
@@ -251,6 +258,7 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
         if user is None:
             # Même coût de vérification qu'un compte existant (pas d'oracle temporel).
             Utilisateur(mot_de_passe_hash=_hash_factice()).check_password(password)
+            self._tracer_echec('IDENTIFIANTS', email)
             raise serializers.ValidationError(IDENTIFIANTS_INVALIDES)
 
         maintenant = timezone.now()
@@ -264,20 +272,24 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
                     tentatives_echec=tentatives,
                     verrouille_jusquau=fin_verrou,
                 )
+            self._tracer_echec('IDENTIFIANTS', email, user)
             raise serializers.ValidationError(IDENTIFIANTS_INVALIDES)
 
         if verrouille:
+            self._tracer_echec('VERROUILLE', email, user)
             raise serializers.ValidationError(
                 'Compte temporairement verrouillé après plusieurs tentatives infructueuses. '
                 f'Réessayez dans {VERROU_MINUTES} minutes ou réinitialisez votre mot de passe.'
             )
 
         if user.statut == Utilisateur.Statut.EN_ATTENTE:
+            self._tracer_echec('EN_ATTENTE', email, user)
             raise serializers.ValidationError(
                 'Votre compte est en cours de validation (délai indicatif : 5 jours ouvrés). '
                 'Vous recevrez un e-mail et un SMS dès qu’il sera activé.'
             )
         if user.statut != Utilisateur.Statut.ACTIF:
+            self._tracer_echec('INACTIF', email, user)
             raise serializers.ValidationError(
                 'Compte inactif ou suspendu. Contactez l’École Nationale des Eaux et Forêts.'
             )

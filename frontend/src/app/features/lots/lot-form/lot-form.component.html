@@ -3,8 +3,8 @@
     <p class="text-eyebrow">Traçabilité · Lots</p>
     <h1 class="pnlf-page-header__title">Déclarer un nouveau lot</h1>
     <p class="pnlf-page-header__subtitle">
-      Chaque lot déclaré reçoit automatiquement un identifiant unique et un QR code de
-      vérification publique. Vous pouvez aussi enregistrer un brouillon (photos plus tard).
+      Chaque lot reçoit automatiquement un identifiant unique et un QR code. Il est créé en
+      brouillon : son QR devient vérifiable publiquement une fois le lot validé.
     </p>
   </div>
   <a pnlfButton routerLink="/app/lots" variant="ghost">← Retour à la liste</a>
@@ -115,10 +115,12 @@
         formControlName="zone_collecte"
         [options]="zones()"
         [required]="true"
-        hint="Choisissez une zone déjà recensée, ou créez-en une si elle n'existe pas encore."
+        [hint]="peutCreerZone
+          ? 'Choisissez une zone déjà recensée, ou créez-en une si elle n’existe pas encore.'
+          : 'Choisissez une zone déjà recensée. Si votre zone manque, demandez son ajout à l’administrateur de la plateforme.'"
         [errorMessage]="err('zone_collecte', 'Indiquez la zone de collecte.')"
       />
-      @if (nouvelleZone()) {
+      @if (nouvelleZone() && peutCreerZone) {
         <div class="lot-form__new-zone">
           <p class="lot-form__hint">Cette zone sera enregistrée dans le référentiel, puis liée au lot.</p>
           <div class="producteur-form__grid">
@@ -146,17 +148,23 @@
     <div class="lot-form__field" role="group" aria-labelledby="lot-gps-label">
       <div class="lot-form__field-header">
         <span class="pnlf-field__label" id="lot-gps-label">Coordonnées GPS du lieu de production/récolte (WGS84, facultatif)</span>
-        <button type="button" class="lot-form__gps-btn" (click)="useCurrentPosition()" [disabled]="locatingGps()">
+        <button type="button" class="lot-form__gps-btn" (click)="useCurrentPosition()" [disabled]="locatingGps()" aria-describedby="lot-gps-aide">
           <pnlf-icon name="map-pin" [size]="14" />
-          {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position actuelle' }}
+          {{ locatingGps() ? 'Localisation…' : 'Utiliser ma position' }}
         </button>
       </div>
+      <p class="lot-form__hint" id="lot-gps-aide">
+        Sur le lieu de récolte, votre navigateur vous demandera l’autorisation de partager votre position.
+        Elle sert uniquement à remplir ces deux champs ; la page publique du lot n’affiche qu’une position arrondie.
+      </p>
       <div class="producteur-form__grid">
         <pnlf-text-field label="Latitude" formControlName="latitude" placeholder="ex : -0.5546" inputmode="decimal" hint="Entre -4 et 2,5" [errorMessage]="err('latitude')" />
         <pnlf-text-field label="Longitude" formControlName="longitude" placeholder="ex : 11.6642" inputmode="decimal" hint="Entre 8,5 et 14,6" [errorMessage]="err('longitude')" />
       </div>
       @if (gpsError()) {
         <p class="lot-form__error" role="alert">{{ gpsError() }}</p>
+      } @else if (gpsPrecision() !== null) {
+        <p class="lot-form__hint-ok" role="status">✓ Position obtenue (précision d’environ {{ gpsPrecision() }} m)</p>
       }
     </div>
 
@@ -187,8 +195,11 @@
 
     <div class="producteur-form__actions">
       <a pnlfButton routerLink="/app/lots" variant="ghost">Annuler</a>
-      <button pnlfButton type="button" variant="outline" [loading]="loading()" (click)="submit(true)">Enregistrer en brouillon</button>
       <button pnlfButton type="submit" variant="primary" [loading]="loading()">Déclarer le lot</button>
     </div>
+    <p class="lot-form__hint">
+      Après la déclaration, le lot est en brouillon. Il est validé par un agent habilité, ou par vous-même si
+      le producteur détient une certification active.
+    </p>
   </form>
 </pnlf-card>

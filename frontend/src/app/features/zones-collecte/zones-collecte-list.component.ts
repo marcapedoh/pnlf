@@ -74,10 +74,13 @@ export class ZonesCollecteListComponent {
   private importFile: File | null = null;
   readonly importFileName = signal('');
 
-  readonly canManage = this.auth.hasRole(
-    RoleUtilisateur.ADMINISTRATEUR,
+  /** Création, modification, activation et import : administrateur uniquement (lecture pour les autres rôles). */
+  readonly canManage = this.auth.hasRole(RoleUtilisateur.ADMINISTRATEUR);
+  readonly canDeclareLot = this.auth.hasRole(
     RoleUtilisateur.AGENT_MINISTERE,
     RoleUtilisateur.AGENT_FORESTIER,
+    RoleUtilisateur.PRODUCTEUR,
+    RoleUtilisateur.COOPERATIVE,
   );
 
   readonly actifFilter = signal<'' | 'true' | 'false'>('true');

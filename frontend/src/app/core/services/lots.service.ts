@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { ApiListResponse } from '../models/common.model';
-import { Lot, LotVerification, Mouvement } from '../models/lot.model';
+import { Lot, LotPublicComplet, Mouvement } from '../models/lot.model';
 
 export interface LotQueryParams {
   page?: number;
@@ -35,7 +35,8 @@ export class LotsService {
     return this.http.get<Lot>(`${this.base}${id}/`);
   }
 
-  create(payload: Partial<Lot> & { brouillon?: boolean }): Observable<Lot> {
+  /** Tout lot est créé en brouillon : il devient vérifiable publiquement après validation. */
+  create(payload: Partial<Lot>): Observable<Lot> {
     return this.http.post<Lot>(this.base, payload);
   }
 
@@ -43,12 +44,14 @@ export class LotsService {
     return this.http.patch<Lot>(`${this.base}${id}/`, payload);
   }
 
-  changerStatut(id: string, statut: string): Observable<Lot> {
-    return this.http.post<Lot>(`${this.base}${id}/changer-statut/`, { statut });
+  /** Brouillon vers Validé : autorité habilitée, ou titulaire disposant d'une certification active. */
+  valider(id: string): Observable<Lot> {
+    return this.http.post<Lot>(`${this.base}${id}/valider/`, {});
   }
 
-  publier(id: string): Observable<Lot> {
-    return this.http.post<Lot>(`${this.base}${id}/publier/`, {});
+  /** Validé vers Commercialisé : titulaire du lot ou autorité. */
+  commercialiser(id: string, motif?: string): Observable<Lot> {
+    return this.http.post<Lot>(`${this.base}${id}/commercialiser/`, motif ? { motif } : {});
   }
 
   remove(id: string): Observable<void> {
@@ -78,7 +81,8 @@ export class LotsService {
     });
   }
 
-  verifyPublic(uuid: string): Observable<LotVerification> {
-    return this.http.get<LotVerification>(`${environment.apiUrl}/verify/${uuid}/`);
+  /** Vérification publique par QR code (lots validés ou commercialisés). */
+  verifyPublic(uuid: string): Observable<LotPublicComplet> {
+    return this.http.get<LotPublicComplet>(`${environment.apiUrl}/verify/${uuid}/`);
   }
 }

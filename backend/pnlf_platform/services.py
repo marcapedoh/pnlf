@@ -13,8 +13,8 @@ from django.utils import timezone
 
 from traceability.models import Lot, Producteur, Produit
 
-# Lots « actifs » : déclarés et encore en circulation dans la filière.
-STATUTS_LOTS_INACTIFS = ('BROUILLON', 'ARCHIVE', 'ANNULE')
+# Lots « actifs » : validés ou commercialisés (cycle BROUILLON → VALIDE → COMMERCIALISE).
+STATUTS_LOTS_ACTIFS = ('VALIDE', 'COMMERCIALISE')
 
 _PREFIXES_FORMULE = ('=', '+', '-', '@', '\t', '\r')
 
@@ -106,7 +106,7 @@ def dashboard_stats(*, province_id=None, produit_id=None, date_debut=None, date_
         },
         'totaux': {
             'producteurs_actifs': producteurs.values('id').distinct().count(),
-            'lots_actifs': lots.exclude(statut__in=STATUTS_LOTS_INACTIFS).count(),
+            'lots_actifs': lots.filter(statut__in=STATUTS_LOTS_ACTIFS).count(),
             'produits_referentiel': Produit.objects.filter(actif=True).count(),
         },
     }

@@ -29,6 +29,36 @@ export class CertificationsService {
     return this.http.post<Certification>(this.base, payload);
   }
 
+  /** Demande accompagnée de pièces justificatives (multipart : ``pieces`` et ``intitules`` dans le même ordre). */
+  createAvecPieces(
+    payload: Record<string, string>,
+    pieces: { fichier: File; intitule: string }[],
+  ): Observable<Certification> {
+    const form = new FormData();
+    for (const [cle, valeur] of Object.entries(payload)) {
+      if (valeur) form.append(cle, valeur);
+    }
+    this.ajouterAuFormulaire(form, pieces);
+    return this.http.post<Certification>(this.base, form);
+  }
+
+  ajouterPieces(id: string, pieces: { fichier: File; intitule: string }[]): Observable<Certification> {
+    const form = new FormData();
+    this.ajouterAuFormulaire(form, pieces);
+    return this.http.post<Certification>(`${this.base}${id}/pieces/`, form);
+  }
+
+  retirerPiece(id: string, pieceId: string): Observable<Certification> {
+    return this.http.delete<Certification>(`${this.base}${id}/pieces/${pieceId}/`);
+  }
+
+  private ajouterAuFormulaire(form: FormData, pieces: { fichier: File; intitule: string }[]): void {
+    for (const piece of pieces) {
+      form.append('pieces', piece.fichier, piece.fichier.name);
+      form.append('intitules', piece.intitule.trim());
+    }
+  }
+
   valider(id: string, numeroCertificat?: string): Observable<Certification> {
     return this.http.post<Certification>(`${this.base}${id}/valider/`, {
       numero_certificat: numeroCertificat || '',

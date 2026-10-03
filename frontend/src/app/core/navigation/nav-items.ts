@@ -142,6 +142,12 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: 'file-text',
         roles: [R.ADMINISTRATEUR, R.AGENT_MINISTERE, R.AGENT_FORESTIER],
       },
+      {
+        label: 'Modération des images',
+        route: '/app/moderation-images',
+        icon: 'shield',
+        roles: [R.ADMINISTRATEUR],
+      },
     ],
   },
   {

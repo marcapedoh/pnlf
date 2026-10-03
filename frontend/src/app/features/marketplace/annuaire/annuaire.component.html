@@ -37,20 +37,28 @@
   </div>
 </div>
 
-@if (loading()) {
-  <div class="annuaire-grid">
-    <pnlf-skeleton height="280px" radius="12px" />
-    <pnlf-skeleton height="280px" radius="12px" />
-  </div>
+@if (loadError()) {
+  <pnlf-empty-state icon="alert-triangle" title="Impossible de charger l’annuaire" [description]="loadError()">
+    <button pnlfButton variant="outline" type="button" (click)="load()">Réessayer</button>
+  </pnlf-empty-state>
 } @else {
   <div class="annuaire-grid">
-    <pnlf-card title="Coopératives" [subtitle]="cooperatives().length + ' résultat(s)'">
-      @if (cooperatives().length === 0) {
-        <pnlf-empty-state icon="building" title="Aucune coopérative" description="Élargissez votre recherche ou changez de province." />
+    <pnlf-card
+      title="Coopératives"
+      [subtitle]="loadingCoop() ? 'Chargement…' : totalCoop() + ' coopérative' + (totalCoop() > 1 ? 's' : '')"
+    >
+      @if (loadingCoop()) {
+        <pnlf-skeleton height="280px" radius="12px" />
+      } @else if (cooperatives().length === 0) {
+        <pnlf-empty-state icon="building" title="Aucune coopérative" description="Élargissez votre recherche ou changez de province.">
+          @if (recherche().trim() || provinceFilter()) {
+            <button pnlfButton variant="outline" type="button" (click)="resetFilters()">Effacer les filtres</button>
+          }
+        </pnlf-empty-state>
       } @else {
         <ul class="annuaire-list">
           @for (c of cooperatives(); track c.id) {
-            <li>
+            <li class="annuaire-list__row">
               <a
                 [routerLink]="cooperativeRoute(c)"
                 [queryParams]="cooperativeQuery(c)"
@@ -69,19 +77,48 @@
                 </div>
                 <pnlf-icon name="chevron-right" [size]="16" />
               </a>
+              @if (peutEcrire(c.utilisateur_id)) {
+                <a
+                  class="annuaire-list__chat"
+                  routerLink="/app/messagerie"
+                  [queryParams]="{ cooperative: c.id }"
+                  [attr.aria-label]="'Écrire à ' + c.nom + ' dans la messagerie'"
+                  title="Écrire dans la messagerie"
+                >
+                  <pnlf-icon name="message" [size]="18" />
+                </a>
+              }
             </li>
           }
         </ul>
       }
+      @if (totalCoop() > pageSize) {
+        <pnlf-pagination
+          label="Pagination des coopératives"
+          [page]="pageCoop()"
+          [pageSize]="pageSize"
+          [total]="totalCoop()"
+          (pageChange)="goToCoopPage($event)"
+        />
+      }
     </pnlf-card>
 
-    <pnlf-card title="Producteurs &amp; collecteurs" [subtitle]="producteurs().length + ' résultat(s)'">
-      @if (producteurs().length === 0) {
-        <pnlf-empty-state icon="users" title="Aucun producteur ou collecteur" description="Élargissez votre recherche ou changez de province." />
+    <pnlf-card
+      title="Producteurs &amp; collecteurs"
+      [subtitle]="loadingProd() ? 'Chargement…' : totalProd() + ' acteur' + (totalProd() > 1 ? 's' : '')"
+    >
+      @if (loadingProd()) {
+        <pnlf-skeleton height="280px" radius="12px" />
+      } @else if (producteurs().length === 0) {
+        <pnlf-empty-state icon="users" title="Aucun producteur ou collecteur" description="Élargissez votre recherche ou changez de province.">
+          @if (recherche().trim() || provinceFilter()) {
+            <button pnlfButton variant="outline" type="button" (click)="resetFilters()">Effacer les filtres</button>
+          }
+        </pnlf-empty-state>
       } @else {
         <ul class="annuaire-list">
           @for (p of producteurs(); track p.id) {
-            <li>
+            <li class="annuaire-list__row">
               <a [routerLink]="producteurRoute(p)" class="annuaire-list__link">
                 <span class="annuaire-list__avatar">
                   @if (p.photo_url) {
@@ -92,13 +129,33 @@
                 </span>
                 <div class="annuaire-list__info">
                   <p class="annuaire-list__name">{{ p.prenoms }} {{ p.nom }}</p>
-                  <p class="annuaire-list__meta">{{ p.province_nom }} · {{ p.type_acteur === 'COLLECTEUR' ? 'Collecteur' : 'Producteur' }}</p>
+                  <p class="annuaire-list__meta">{{ metaProducteur(p) }}</p>
                 </div>
                 <pnlf-icon name="chevron-right" [size]="16" />
               </a>
+              @if (peutEcrire(p.utilisateur_id)) {
+                <a
+                  class="annuaire-list__chat"
+                  routerLink="/app/messagerie"
+                  [queryParams]="{ producteur: p.id }"
+                  [attr.aria-label]="'Écrire à ' + p.prenoms + ' ' + p.nom + ' dans la messagerie'"
+                  title="Écrire dans la messagerie"
+                >
+                  <pnlf-icon name="message" [size]="18" />
+                </a>
+              }
             </li>
           }
         </ul>
+      }
+      @if (totalProd() > pageSize) {
+        <pnlf-pagination
+          label="Pagination des producteurs et collecteurs"
+          [page]="pageProd()"
+          [pageSize]="pageSize"
+          [total]="totalProd()"
+          (pageChange)="goToProdPage($event)"
+        />
       }
     </pnlf-card>
   </div>

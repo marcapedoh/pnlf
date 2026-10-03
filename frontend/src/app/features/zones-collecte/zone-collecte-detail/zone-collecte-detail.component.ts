@@ -61,11 +61,8 @@ export class ZoneCollecteDetailComponent {
   readonly confirmToggle = signal(false);
   readonly toggling = signal(false);
 
-  readonly canManage = this.auth.hasRole(
-    RoleUtilisateur.ADMINISTRATEUR,
-    RoleUtilisateur.AGENT_MINISTERE,
-    RoleUtilisateur.AGENT_FORESTIER,
-  );
+  /** Modification et activation : administrateur uniquement. */
+  readonly canManage = this.auth.hasRole(RoleUtilisateur.ADMINISTRATEUR);
 
   readonly form = this.fb.nonNullable.group({
     libelle: ['', Validators.required],

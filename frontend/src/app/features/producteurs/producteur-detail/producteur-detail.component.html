@@ -53,42 +53,90 @@
     </div>
   </div>
 
+  @if (estMaFiche(p) && !p.cooperative) {
+    <app-invitations-recues (reponse)="load()" />
+  }
+
   <div class="producteur-detail__grid">
-    <pnlf-card title="Informations personnelles">
+    <pnlf-card title="Identité et contact">
       <dl class="producteur-detail__dl">
+        <div><dt>Nom</dt><dd>{{ p.nom }}</dd></div>
+        <div><dt>Prénoms</dt><dd [class.is-missing]="estManquant(p.prenoms)">{{ p.prenoms || 'Non renseignés' }}</dd></div>
+        <div><dt>Type d'acteur</dt><dd>{{ p.type_acteur === 'COLLECTEUR' ? 'Collecteur' : 'Producteur' }}</dd></div>
+        @if (aLaCle(p, 'date_naissance')) {
+          <div><dt>Date de naissance</dt><dd [class.is-missing]="estManquant(p.date_naissance)">{{ (p.date_naissance | pnlfDate) || 'Non renseignée' }}</dd></div>
+        }
         @if (aLaCle(p, 'telephone')) {
           <div><dt>Téléphone</dt><dd [class.is-missing]="estManquant(p.telephone)">{{ (p.telephone | pnlfTelephone) || 'Non renseigné' }}</dd></div>
         }
         @if (aLaCle(p, 'email')) {
           <div><dt>Adresse e-mail</dt><dd [class.is-missing]="estManquant(p.email)">{{ p.email || 'Non renseignée' }}</dd></div>
         }
-        @if (aLaCle(p, 'date_naissance')) {
-          <div><dt>Date de naissance</dt><dd [class.is-missing]="estManquant(p.date_naissance)">{{ (p.date_naissance | pnlfDate) || 'Non renseignée' }}</dd></div>
-        }
-        <div><dt>Communauté</dt><dd [class.is-missing]="estManquant(p.communaute)">{{ p.communaute || 'Non renseignée' }}</dd></div>
-        @if (aLaCle(p, 'type_piece_identite')) {
-          <div><dt>Type de pièce d'identité</dt><dd [class.is-missing]="estManquant(p.type_piece_identite)">{{ p.type_piece_identite || 'Non renseigné' }}</dd></div>
-        }
-        @if (aLaCle(p, 'numero_piece')) {
-          <div><dt>N° de la pièce</dt><dd [class.is-missing]="estManquant(p.numero_piece)">{{ p.numero_piece || 'Non renseigné' }}</dd></div>
-        }
       </dl>
       @if (!aLaCle(p, 'telephone')) {
-        <p class="text-sm text-muted">Les coordonnées et pièces d'identité ne sont visibles que par l'administration et le titulaire de la fiche.</p>
+        <p class="text-sm text-muted">Les coordonnées et la pièce d'identité ne sont visibles que par l'administration, la coopérative de rattachement et le titulaire de la fiche.</p>
+      }
+    </pnlf-card>
+
+    <pnlf-card title="Activité">
+      <dl class="producteur-detail__dl">
+        <div><dt>Statut de la fiche</dt><dd>{{ statutLabels[p.statut] }}</dd></div>
+        <div><dt>Validée le</dt><dd [class.is-missing]="estManquant(p.valide_at)">{{ (p.valide_at | pnlfDate) || 'Pas encore validée' }}</dd></div>
+        <div><dt>Lots enregistrés</dt><dd>{{ lotsTotal() }}</dd></div>
+        <div><dt>Annuaire public</dt><dd>{{ p.visible_public === false ? 'Fiche non publiée' : 'Fiche visible si active' }}</dd></div>
+        <div><dt>Enregistrée le</dt><dd>{{ p.created_at | pnlfDate }}</dd></div>
+      </dl>
+      <h3 class="producteur-detail__soustitre">Produits exploités</h3>
+      @if (p.produits?.length) {
+        <ul class="producteur-detail__produits">
+          @for (pr of p.produits; track pr.id; let first = $first) {
+            <li [class.is-principal]="first">{{ pr.nom }}@if (first) { <small>(principal)</small> }</li>
+          }
+        </ul>
+      } @else {
+        <p class="text-sm producteur-detail__vide">Aucun produit renseigné.</p>
       }
     </pnlf-card>
 
     <pnlf-card title="Localisation">
       <dl class="producteur-detail__dl">
         <div><dt>Province</dt><dd [class.is-missing]="estManquant(p.province_nom)">{{ p.province_nom || 'Non renseignée' }}</dd></div>
+        <div><dt>Département</dt><dd [class.is-missing]="estManquant(p.departement_nom)">{{ p.departement_nom || 'Non renseigné' }}</dd></div>
+        <div><dt>Village</dt><dd [class.is-missing]="estManquant(p.village_nom)">{{ p.village_nom || 'Non renseigné' }}</dd></div>
+        <div><dt>Communauté / lieu d'usage</dt><dd [class.is-missing]="estManquant(p.communaute)">{{ p.communaute || 'Non renseignée' }}</dd></div>
         <div><dt>Coordonnées GPS</dt>
           <dd [class.is-missing]="estManquant(p.latitude) || estManquant(p.longitude)">
             {{ !estManquant(p.latitude) && !estManquant(p.longitude) ? p.latitude + ', ' + p.longitude : 'Non renseignées (facultatif)' }}
           </dd>
         </div>
-        <div><dt>Coopérative</dt><dd [class.is-missing]="estManquant(p.cooperative_nom)">{{ p.cooperative_nom || 'Aucune' }}</dd></div>
-        <div><dt>Enregistré le</dt><dd>{{ p.created_at | pnlfDate }}</dd></div>
       </dl>
+    </pnlf-card>
+
+    <pnlf-card title="Coopérative et pièce d'identité">
+      <dl class="producteur-detail__dl">
+        <div>
+          <dt>Coopérative</dt>
+          <dd [class.is-missing]="!p.cooperative">
+            @if (p.cooperative) {
+              <a class="pnlf-table__link" [routerLink]="['/app/cooperatives', p.cooperative]">{{ p.cooperative_nom }}</a>
+            } @else {
+              Aucune (acteur indépendant)
+            }
+          </dd>
+        </div>
+        @if (aLaCle(p, 'type_piece_identite')) {
+          <div><dt>Type de pièce</dt><dd [class.is-missing]="estManquant(p.type_piece_identite)">{{ p.type_piece_identite_libelle || p.type_piece_identite || 'Non renseigné' }}</dd></div>
+        }
+        @if (aLaCle(p, 'numero_piece')) {
+          <div><dt>Numéro de la pièce</dt><dd [class.is-missing]="estManquant(p.numero_piece)">{{ p.numero_piece || 'Non renseigné' }}</dd></div>
+        }
+      </dl>
+      @if (!p.cooperative && estMaFiche(p)) {
+        <p class="text-sm text-muted">
+          Pour rejoindre une coopérative, envoyez une demande depuis la page
+          <a class="pnlf-table__link" routerLink="/app/cooperatives">Coopératives</a> ou acceptez une invitation reçue.
+        </p>
+      }
     </pnlf-card>
   </div>
 
@@ -102,17 +150,18 @@
     </pnlf-card>
   }
 
-  @if (canValidate) {
-    <pnlf-card title="Documents administratifs joints" subtitle="Pièces déposées lors de la demande d'inscription">
+  @if (aLaCle(p, 'type_piece_identite')) {
+    <pnlf-card title="Pièces justificatives" subtitle="Documents déposés à l'inscription ou depuis la fiche (PDF, JPG ou PNG)">
       <ul class="producteur-documents">
         @for (attendu of typesDocumentsAttendus; track attendu.type) {
           @if (documentPour(attendu.type); as doc) {
             <li>
               <span class="producteur-documents__label">{{ attendu.label }}</span>
+              <span class="producteur-documents__ok">Fourni{{ doc.format ? ' (' + doc.format + ')' : '' }}</span>
               <a [href]="doc.url ?? ''" target="_blank" rel="noopener" class="pnlf-table__link">
                 {{ doc.nom_original || 'Voir le document' }}
               </a>
-              <span class="text-xs text-muted">{{ doc.created_at | pnlfDate }}</span>
+              <span class="text-xs text-muted">déposé le {{ doc.created_at | pnlfDate }}</span>
             </li>
           } @else {
             <li class="is-missing">
@@ -122,10 +171,16 @@
           }
         }
       </ul>
+      @if (canManage) {
+        <p class="text-sm text-muted producteur-detail__aide">
+          Pour ajouter ou remplacer un document,
+          <a class="pnlf-table__link" [routerLink]="['/app/producteurs', p.id, 'modifier']">modifiez la fiche</a>.
+        </p>
+      }
     </pnlf-card>
   }
 
-  <pnlf-card title="Lots déclarés" subtitle="10 lots les plus récents associés à ce producteur">
+  <pnlf-card title="Lots déclarés" [subtitle]="lotsTotal() > 10 ? '10 lots les plus récents sur ' + lotsTotal() + ' associés à cet acteur' : 'Lots associés à cet acteur'">
     @if (lotsError()) {
       <pnlf-alert tone="error">{{ lotsError() }}</pnlf-alert>
     } @else if (lots().length === 0) {

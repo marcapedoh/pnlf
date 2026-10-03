@@ -3,8 +3,9 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { ApiListResponse } from '../models/common.model';
-import { ChatContact, ChatMessage, Conversation, CoopGroupeOption } from '../models/chat.model';
+import { ApiListResponse, Paginated } from '../models/common.model';
+import { ChatContact, ChatMessage, ContactFiltreRole, Conversation, CoopGroupeOption } from '../models/chat.model';
+import { AJAX_EXPORT_HEADERS } from '../http/download-file.util';
 import { SKIP_GLOBAL_ERROR_TOAST, SKIP_LOADING_BAR } from '../http/http-context-tokens';
 
 @Injectable({ providedIn: 'root' })
@@ -52,8 +53,20 @@ export class ChatService {
     return this.http.delete<void>(`${this.base}/${conversationId}/`);
   }
 
-  contacts(): Observable<ChatContact[]> {
-    return this.http.get<ChatContact[]>(`${this.base}/contacts/`);
+  /** Comptes actifs joignables, triés alphabétiquement, recherche et filtre côté serveur. */
+  contacts(params: { q?: string; role?: ContactFiltreRole; page?: number; page_size?: number } = {}): Observable<Paginated<ChatContact>> {
+    const query: Record<string, string> = { page: String(params.page ?? 1), page_size: String(params.page_size ?? 30) };
+    if (params.q?.trim()) query['q'] = params.q.trim();
+    if (params.role) query['role'] = params.role;
+    return this.http.get<Paginated<ChatContact>>(`${this.base}/contacts/`, { params: query, context: this.quiet });
+  }
+
+  /** PDF de la conversation entière (supervision administrateur), récupéré en Blob authentifié. */
+  supervisionPdfBlob(conversationId: string): Observable<Blob> {
+    return this.http.post(`${this.base}/${conversationId}/supervision-pdf/`, {}, {
+      responseType: 'blob',
+      headers: AJAX_EXPORT_HEADERS,
+    });
   }
 
   membresCoop(): Observable<CoopGroupeOption[]> {

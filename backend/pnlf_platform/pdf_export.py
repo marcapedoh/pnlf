@@ -80,6 +80,10 @@ TABLE_FR = {
     'zones_collecte': 'Zones de collecte',
     'mouvements': 'Mouvements',
     'notifications': 'Notifications',
+    'conversations': 'Conversations',
+    'messages': 'Messages',
+    'invitations_cooperative': 'Invitations de coopérative',
+    'moderation_images': 'Modération des images',
 }
 
 
@@ -520,125 +524,30 @@ def _header_table_portrait(styles, subtitle: str) -> Table:
 CONTACT_MASQUE = 'Réservé aux agents habilités'
 
 
-def export_producteur_fiche_pdf(producteur, request=None, *, masquer_contacts: bool = False) -> HttpResponse:
-    """Fiche individuelle imprimable d'un producteur/collecteur (portrait, 1 page utile)."""
-    from traceability.models import Certification, Lot
-    from traceability.services import photo_url as _prod_photo_url
+def export_producteur_fiche_pdf(
+    producteur, request=None, *, masquer_contacts: bool = False, masquer_piece: bool | None = None,
+    utilisateur=None,
+) -> HttpResponse:
+    """Fiche individuelle imprimable d'un producteur/collecteur (portrait, mise en page institutionnelle)."""
+    from .pdf_fiches import fiche_producteur_pdf
 
-    from traceability.db_utils import get_optional_column
-
-    styles = _styles()
-
-    type_acteur = 'Collecteur' if get_optional_column(
-        'producteurs', 'type_acteur', producteur.id, default='PRODUCTEUR',
-    ) == 'COLLECTEUR' else 'Producteur'
-
-    story: list = [
-        _header_table_portrait(styles, 'Plateforme de traçabilité des PFNL'),
-        Spacer(1, 10),
-        Paragraph(f'Fiche {type_acteur.lower()} : {producteur.prenoms} {producteur.nom}', styles['title']),
-    ]
-
-    photo = None
-    photo_rel_path = None
-    try:
-        photo_rel_path = _prod_photo_url('producteurs', producteur.id)
-    except Exception:
-        photo_rel_path = None
-    if photo_rel_path:
-        try:
-            from django.conf import settings as _settings
-
-            local_path = Path(_settings.MEDIA_ROOT) / photo_rel_path.replace('/media/', '', 1).lstrip('/')
-            if local_path.is_file():
-                photo = Image(str(local_path), width=30 * mm, height=30 * mm, kind='proportional')
-        except Exception:
-            photo = None
-
-    localisation = ' / '.join(
-        filter(None, [
-            getattr(producteur.province, 'nom', None) if producteur.province_id else None,
-            getattr(producteur.departement, 'nom', None) if producteur.departement_id else None,
-            getattr(producteur.village, 'nom', None) if producteur.village_id else None,
-        ])
-    ) or 'Non renseignée'
-
-    identite_rows = [
-        ('Code', producteur.code_producteur or 'Non renseigné'),
-        ('Type', type_acteur),
-        ('Nom complet', f'{producteur.prenoms} {producteur.nom}'.strip()),
-        ('Téléphone', CONTACT_MASQUE if masquer_contacts else (producteur.telephone or 'Non renseigné')),
-        ('E-mail', CONTACT_MASQUE if masquer_contacts else (producteur.email or 'Non renseigné')),
-        ('Localisation', localisation),
-        ('Communauté', producteur.communaute or 'Non renseignée'),
-        ('Statut', STATUT_PRODUCTEUR_FR.get(producteur.statut, producteur.statut or 'Non renseigné')),
-        ('Inscrit le', producteur.created_at.strftime('%d/%m/%Y') if producteur.created_at else 'Non renseigné'),
-    ]
-
-    if photo:
-        story.append(Spacer(1, 8))
-        head_tbl = Table([[_identite_table(styles, identite_rows), photo]], colWidths=[150 * mm, 35 * mm])
-        head_tbl.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
-        story.append(head_tbl)
-    else:
-        story.append(Spacer(1, 8))
-        story.append(_identite_table(styles, identite_rows))
-
-    lots = list(
-        Lot.objects.filter(producteur_id=producteur.id, deleted_at__isnull=True)
-        .select_related('produit')
-        .order_by('-date_collecte')[:15]
+    if utilisateur is None and request is not None:
+        utilisateur = getattr(request, 'user', None)
+    pdf = fiche_producteur_pdf(
+        producteur, masquer_contacts=masquer_contacts,
+        masquer_piece=masquer_contacts if masquer_piece is None else masquer_piece, utilisateur=utilisateur,
     )
-    story.append(Spacer(1, 12))
-    story.append(Paragraph('Lots déclarés (15 plus récents)', styles['title']))
-    if not lots:
-        story.append(Paragraph('Aucun lot déclaré à ce jour.', styles['empty']))
-    else:
-        header = ['Code lot', 'Produit', 'Date collecte', 'Quantité', 'Statut']
-        rows = []
-        for lot in lots:
-            qte = lot.quantite
-            qte_txt = f'{qte:.3f}'.rstrip('0').rstrip('.') if qte is not None else ''
-            rows.append([
-                lot.code_lot or '-',
-                lot.produit.nom if lot.produit_id else '-',
-                lot.date_collecte.strftime('%d/%m/%Y') if lot.date_collecte else '-',
-                f'{qte_txt} {lot.unite or ""}'.strip(),
-                STATUT_LOT_FR.get(lot.statut, lot.statut or '-'),
-            ])
-        story.append(_data_table(header, rows, [30 * mm, 45 * mm, 30 * mm, 35 * mm, 45 * mm], styles, center_cols=(2, 3)))
-
-    certs = list(
-        Certification.objects.filter(producteur_id=producteur.id)
-        .select_related('type_certification')
-        .order_by('-date_demande')[:10]
-    )
-    story.append(Spacer(1, 12))
-    story.append(Paragraph('Certifications', styles['title']))
-    if not certs:
-        story.append(Paragraph('Aucune certification enregistrée.', styles['empty']))
-    else:
-        header = ['Type', 'N° certificat', 'Statut', 'Obtenue le', 'Expire le']
-        rows = [
-            [
-                c.type_certification.libelle if c.type_certification_id else '-',
-                c.numero_certificat or '-',
-                c.statut or '-',
-                c.date_obtention.strftime('%d/%m/%Y') if c.date_obtention else '-',
-                c.date_expiration.strftime('%d/%m/%Y') if c.date_expiration else '-',
-            ]
-            for c in certs
-        ]
-        story.append(_data_table(header, rows, [40 * mm, 35 * mm, 30 * mm, 30 * mm, 30 * mm], styles, center_cols=(2, 3, 4)))
-
     filename = f'PFNL-fiche-{(producteur.code_producteur or str(producteur.id)[:8])}.pdf'
-    return _build_pdf_portrait(
-        story, filename=filename, title=f'Fiche producteur : {producteur.nom}',
-        footer='ENEF · République Gabonaise · Document généré automatiquement',
-    )
+    return pdf_file_response(pdf, filename)
 
 
-def export_producteurs_liste_pdf(queryset, *, masquer_contacts: bool = False) -> HttpResponse:
+def _imprime_par(utilisateur) -> str:
+    from .pdf_fiches import mention_impression
+
+    return mention_impression(utilisateur, feminin=False).removeprefix('Imprimé par ').removeprefix('Imprimé ')
+
+
+def export_producteurs_liste_pdf(queryset, *, masquer_contacts: bool = False, utilisateur=None) -> HttpResponse:
     """Liste imprimable des producteurs/collecteurs (paysage)."""
     styles = _styles()
     now = timezone.localtime()
@@ -652,7 +561,7 @@ def export_producteurs_liste_pdf(queryset, *, masquer_contacts: bool = False) ->
             ('Date d’édition', now.strftime('%d/%m/%Y à %H:%M')),
             ('Nombre d’acteurs', str(len(items))),
             ('Périmètre', 'Selon le profil connecté'),
-            ('Document', 'Export officiel à usage interne'),
+            ('Imprimé par', _imprime_par(utilisateur)),
         ]),
         Spacer(1, 10),
     ]
@@ -695,62 +604,20 @@ def export_producteurs_liste_pdf(queryset, *, masquer_contacts: bool = False) ->
     )
 
 
-def export_cooperative_fiche_pdf(cooperative, request=None, *, masquer_contacts: bool = False) -> HttpResponse:
-    """Fiche individuelle imprimable d'une coopérative (portrait)."""
-    from traceability.models import CooperativeMembre
+def export_cooperative_fiche_pdf(
+    cooperative, request=None, *, masquer_contacts: bool = False, utilisateur=None,
+) -> HttpResponse:
+    """Fiche individuelle imprimable d'une coopérative (portrait, mise en page institutionnelle)."""
+    from .pdf_fiches import fiche_cooperative_pdf
 
-    styles = _styles()
-
-    identite_rows = [
-        ('Code', cooperative.code or 'Non renseigné'),
-        ('Nom', cooperative.nom or 'Non renseigné'),
-        ('N° agrément', cooperative.numero_agrement or 'Non renseigné'),
-        ('Téléphone', cooperative.telephone or 'Non renseigné'),
-        ('E-mail', cooperative.email or 'Non renseigné'),
-        ('Adresse', cooperative.adresse or 'Non renseignée'),
-        ('Province', getattr(cooperative.province, 'nom', None) or 'Non renseignée'),
-        ('Statut', STATUT_COOPERATIVE_FR.get(cooperative.statut, cooperative.statut or 'Non renseigné')),
-        ('Créée le', cooperative.created_at.strftime('%d/%m/%Y') if cooperative.created_at else 'Non renseignée'),
-    ]
-
-    story: list = [
-        _header_table_portrait(styles, 'Plateforme de traçabilité des PFNL'),
-        Spacer(1, 10),
-        Paragraph(f'Fiche coopérative : {cooperative.nom}', styles['title']),
-        Spacer(1, 8),
-        _identite_table(styles, identite_rows),
-    ]
-
-    membres = list(
-        CooperativeMembre.objects.filter(cooperative_id=cooperative.id, actif=True)
-        .select_related('producteur')
-        .order_by('producteur__nom')[:100]
-    )
-    story.append(Spacer(1, 12))
-    story.append(Paragraph(f'Membres actifs ({len(membres)})', styles['title']))
-    if not membres:
-        story.append(Paragraph('Aucun membre actif enregistré.', styles['empty']))
-    else:
-        header = ['Nom complet', 'Téléphone', 'Statut', 'Adhésion']
-        rows = [
-            [
-                str(m.producteur),
-                CONTACT_MASQUE if masquer_contacts else (getattr(m.producteur, 'telephone', None) or '-'),
-                STATUT_PRODUCTEUR_FR.get(getattr(m.producteur, 'statut', None), getattr(m.producteur, 'statut', None) or '-'),
-                m.date_adhesion.strftime('%d/%m/%Y') if m.date_adhesion else '-',
-            ]
-            for m in membres
-        ]
-        story.append(_data_table(header, rows, [70 * mm, 36 * mm, 38 * mm, 30 * mm], styles, center_cols=(2, 3)))
-
+    if utilisateur is None and request is not None:
+        utilisateur = getattr(request, 'user', None)
+    pdf = fiche_cooperative_pdf(cooperative, masquer_contacts=masquer_contacts, utilisateur=utilisateur)
     filename = f'PFNL-fiche-coop-{(cooperative.code or str(cooperative.id)[:8])}.pdf'
-    return _build_pdf_portrait(
-        story, filename=filename, title=f'Fiche coopérative : {cooperative.nom}',
-        footer='ENEF · République Gabonaise · Document généré automatiquement',
-    )
+    return pdf_file_response(pdf, filename)
 
 
-def export_cooperatives_liste_pdf(queryset) -> HttpResponse:
+def export_cooperatives_liste_pdf(queryset, *, utilisateur=None) -> HttpResponse:
     """Liste imprimable des coopératives (paysage)."""
     from traceability.models import CooperativeMembre
     from django.db.models import Count
@@ -771,7 +638,7 @@ def export_cooperatives_liste_pdf(queryset) -> HttpResponse:
             ('Date d’édition', now.strftime('%d/%m/%Y à %H:%M')),
             ('Nombre de coopératives', str(len(items))),
             ('Périmètre', 'Selon le profil connecté'),
-            ('Document', 'Export officiel à usage interne'),
+            ('Imprimé par', _imprime_par(utilisateur)),
         ]),
         Spacer(1, 10),
     ]
@@ -805,8 +672,12 @@ def _build_pdf_portrait(story, *, filename: str, title: str, footer: str) -> Htt
     return pdf_file_response(_render_pdf_portrait(story, title=title, footer=footer), filename)
 
 
-def producteur_fiche_pdf_bytes(producteur, *, masquer_contacts: bool = False) -> tuple[bytes, str]:
-    response = export_producteur_fiche_pdf(producteur, masquer_contacts=masquer_contacts)
+def producteur_fiche_pdf_bytes(
+    producteur, *, masquer_contacts: bool = False, masquer_piece: bool | None = None, utilisateur=None,
+) -> tuple[bytes, str]:
+    response = export_producteur_fiche_pdf(
+        producteur, masquer_contacts=masquer_contacts, masquer_piece=masquer_piece, utilisateur=utilisateur,
+    )
     filename = f'PFNL-fiche-{producteur.code_producteur or str(producteur.id)[:8]}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
@@ -814,8 +685,8 @@ def producteur_fiche_pdf_bytes(producteur, *, masquer_contacts: bool = False) ->
     return bytes(response.content), filename
 
 
-def producteurs_liste_pdf_bytes(queryset, *, masquer_contacts: bool = False) -> tuple[bytes, str]:
-    response = export_producteurs_liste_pdf(queryset, masquer_contacts=masquer_contacts)
+def producteurs_liste_pdf_bytes(queryset, *, masquer_contacts: bool = False, utilisateur=None) -> tuple[bytes, str]:
+    response = export_producteurs_liste_pdf(queryset, masquer_contacts=masquer_contacts, utilisateur=utilisateur)
     filename = f'PFNL-producteurs-{timezone.localtime():%Y%m%d-%H%M}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
@@ -823,8 +694,8 @@ def producteurs_liste_pdf_bytes(queryset, *, masquer_contacts: bool = False) -> 
     return bytes(response.content), filename
 
 
-def cooperative_fiche_pdf_bytes(cooperative, *, masquer_contacts: bool = False) -> tuple[bytes, str]:
-    response = export_cooperative_fiche_pdf(cooperative, masquer_contacts=masquer_contacts)
+def cooperative_fiche_pdf_bytes(cooperative, *, masquer_contacts: bool = False, utilisateur=None) -> tuple[bytes, str]:
+    response = export_cooperative_fiche_pdf(cooperative, masquer_contacts=masquer_contacts, utilisateur=utilisateur)
     filename = f'PFNL-fiche-coop-{cooperative.code or str(cooperative.id)[:8]}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:
@@ -832,8 +703,8 @@ def cooperative_fiche_pdf_bytes(cooperative, *, masquer_contacts: bool = False) 
     return bytes(response.content), filename
 
 
-def cooperatives_liste_pdf_bytes(queryset) -> tuple[bytes, str]:
-    response = export_cooperatives_liste_pdf(queryset)
+def cooperatives_liste_pdf_bytes(queryset, *, utilisateur=None) -> tuple[bytes, str]:
+    response = export_cooperatives_liste_pdf(queryset, utilisateur=utilisateur)
     filename = f'PFNL-cooperatives-{timezone.localtime():%Y%m%d-%H%M}.pdf'
     disposition = response.get('Content-Disposition') or ''
     if 'filename="' in disposition:

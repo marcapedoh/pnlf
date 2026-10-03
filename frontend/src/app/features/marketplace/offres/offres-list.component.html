@@ -1,175 +1,61 @@
-@if (showForm()) {
-  <div class="pnlf-page-header">
-    <div>
-      <p class="text-eyebrow">Filière &amp; partenaires</p>
-      <h1 class="pnlf-page-header__title">Publier une annonce</h1>
-      <p class="pnlf-page-header__subtitle">
-        Chaque annonce est vérifiée par un administrateur avant publication.
-      </p>
-    </div>
-    <button pnlfButton variant="ghost" type="button" (click)="showForm.set(false)">← Retour à la liste</button>
+<div class="pnlf-page-header">
+  <div>
+    <p class="text-eyebrow">Filière &amp; partenaires</p>
+    <h1 class="pnlf-page-header__title">Offres &amp; demandes</h1>
+    <p class="pnlf-page-header__subtitle">
+      Mise en relation entre producteurs, coopératives et acheteurs de produits PFNL. Chaque annonce est
+      vérifiée par un modérateur avant publication.
+    </p>
   </div>
+  @if (canPost) {
+    <a pnlfButton variant="primary" routerLink="/app/marketplace/offres/nouvelle">
+      <pnlf-icon name="plus" [size]="16" /> Publier une annonce
+    </a>
+  }
+</div>
 
-  <pnlf-card title="Nouvelle annonce">
-    @if (errorMessage()) {
-      <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;" role="alert">{{ errorMessage() }}</pnlf-alert>
-    }
-    <form [formGroup]="form" (ngSubmit)="submit()" class="offre-form" novalidate>
-      <pnlf-select-field label="Type d'annonce" formControlName="type_annonce" [options]="typeOptions" [required]="true" />
-      <pnlf-select-field label="Produit concerné" formControlName="produit_id" [options]="produits()" [required]="true" [errorMessage]="err('produit_id', 'Sélectionnez le produit concerné.')" />
-      <pnlf-text-field label="Titre de l'annonce" formControlName="titre" [required]="true" [errorMessage]="err('titre', 'Donnez un titre à votre annonce.')" />
-      <pnlf-select-field label="Unité" formControlName="unite" [options]="unites" />
-      <pnlf-text-field
-        label="Quantité"
-        type="number"
-        formControlName="quantite"
-        min="0.001"
-        step="any"
-        inputmode="decimal"
-        hint="Facultatif"
-        [errorMessage]="quantiteError()"
-      />
-      <pnlf-text-field
-        [label]="'Prix unitaire indicatif (FCFA par ' + (form.controls.unite.value | pnlfUnite) + ')'"
-        type="number"
-        formControlName="prix_unitaire"
-        min="0"
-        step="any"
-        inputmode="decimal"
-        hint="Facultatif"
-        [errorMessage]="prixError()"
-      />
-      <div class="offre-form__full">
-        <pnlf-text-field label="Description" formControlName="description" />
-      </div>
+<app-annonces-barre
+  [initial]="filtresInitiaux"
+  [produits]="produits()"
+  [provinces]="provinces()"
+  [afficherStatut]="canValidate"
+  [afficherMine]="canPost"
+  [total]="loading() ? null : total()"
+  [(vue)]="vue"
+  (changement)="appliquerFiltres($event)"
+/>
 
-      <div class="offre-form__photos">
-        <span class="pnlf-field__label" id="offre-photos-label">Photos (facultatif, {{ photosMax }} maximum)</span>
-        <div class="offre-photos" role="group" aria-labelledby="offre-photos-label">
-          @for (preview of photoPreviews(); track $index) {
-            <div class="offre-photos__thumb">
-              <img [src]="preview" [alt]="'Photo ' + ($index + 1) + ' de l’annonce'" />
-              <button type="button" class="offre-photos__remove" (click)="removePhoto($index)" [attr.aria-label]="'Retirer la photo ' + ($index + 1)">
-                <pnlf-icon name="x" [size]="14" />
-              </button>
-            </div>
-          }
-          @if (photoPreviews().length < photosMax) {
-            <label class="offre-photos__add">
-              <input type="file" accept="image/jpeg,image/png,image/webp" [multiple]="true" (change)="onPhotosSelected($event)" class="pnlf-visually-hidden" />
-              <pnlf-icon name="camera" [size]="20" />
-              <span>Ajouter une photo</span>
-            </label>
-          }
-        </div>
-        <p class="offre-form__hint">JPEG, PNG ou WEBP, 5 Mo maximum par photo.</p>
-        @if (photoError()) {
-          <p class="offre-form__error" role="alert">{{ photoError() }}</p>
-        }
-      </div>
-
-      <div class="offre-form__actions">
-        <button pnlfButton type="button" variant="ghost" (click)="showForm.set(false)">Annuler</button>
-        <button pnlfButton type="submit" variant="primary" [loading]="saving()">Soumettre pour validation</button>
-      </div>
-    </form>
-  </pnlf-card>
-} @else {
-  <div class="pnlf-page-header">
-    <div>
-      <p class="text-eyebrow">Filière &amp; partenaires</p>
-      <h1 class="pnlf-page-header__title">Offres &amp; demandes</h1>
-      <p class="pnlf-page-header__subtitle">
-        Mise en relation entre producteurs, coopératives et acheteurs de produits PFNL. Chaque annonce est
-        vérifiée par un administrateur avant publication.
-      </p>
-    </div>
-    @if (canPost) {
-      <button pnlfButton variant="primary" (click)="ouvrirFormulaire()">
-        + Publier une annonce
-      </button>
+@if (loading()) {
+  <div class="offres-chargement" role="status" aria-label="Chargement des annonces">
+    @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+      <pnlf-skeleton [height]="vue() === 'grille' ? '260px' : '72px'" radius="12px" />
     }
   </div>
-
-  <div class="pnlf-toolbar">
-    <label class="pnlf-visually-hidden" for="offre-search">Rechercher une annonce</label>
-    <input
-      id="offre-search"
-      type="search"
-      class="pnlf-select pnlf-toolbar__search"
-      placeholder="Titre ou description"
-      [ngModel]="search()"
-      (ngModelChange)="onSearchInput($event)"
+} @else if (loadError()) {
+  <pnlf-alert tone="error" title="Impossible de charger les annonces">
+    {{ loadError() }}
+    <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
+  </pnlf-alert>
+} @else if (items().length === 0) {
+  @if (filtresActifs) {
+    <pnlf-empty-state
+      icon="search"
+      title="Aucune annonce ne correspond à votre recherche"
+      description="Modifiez les mots-clés ou retirez certains filtres pour élargir les résultats."
     />
-    <div class="offre-tabs" role="group" aria-label="Filtrer par type d’annonce">
-      <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'TOUS'" [attr.aria-pressed]="typeFiltre() === 'TOUS'" (click)="setTypeFiltre('TOUS')">Tout type</button>
-      <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'OFFRE'" [attr.aria-pressed]="typeFiltre() === 'OFFRE'" (click)="setTypeFiltre('OFFRE')">Offres</button>
-      <button type="button" class="offre-tab" [class.is-active]="typeFiltre() === 'DEMANDE'" [attr.aria-pressed]="typeFiltre() === 'DEMANDE'" (click)="setTypeFiltre('DEMANDE')">Demandes</button>
-    </div>
-    <div class="offre-tabs" role="group" aria-label="Filtrer par statut">
-      <button type="button" class="offre-tab" [class.is-active]="filtre() === 'TOUTES'" [attr.aria-pressed]="filtre() === 'TOUTES'" (click)="setFiltre('TOUTES')">Tous statuts</button>
-      <button type="button" class="offre-tab" [class.is-active]="filtre() === 'OUVERTE'" [attr.aria-pressed]="filtre() === 'OUVERTE'" (click)="setFiltre('OUVERTE')">Publiées</button>
-      @if (canValidate) {
-        <button type="button" class="offre-tab" [class.is-active]="filtre() === 'EN_VALIDATION'" [attr.aria-pressed]="filtre() === 'EN_VALIDATION'" (click)="setFiltre('EN_VALIDATION')">En attente de validation</button>
-      }
-    </div>
-  </div>
-
-  @if (loading()) {
-    <div class="offre-grid" role="status" aria-label="Chargement des annonces">
-      @for (i of [1, 2, 3, 4]; track i) {
-        <pnlf-skeleton height="220px" radius="12px" />
-      }
-    </div>
-  } @else if (loadError()) {
-    <pnlf-alert tone="error" title="Impossible de charger les annonces">
-      {{ loadError() }}
-      <button pnlfButton type="button" variant="outline" size="sm" (click)="load()">Réessayer</button>
-    </pnlf-alert>
-  } @else if (items().length === 0) {
+  } @else {
     <pnlf-empty-state
       icon="shopping-bag"
-      title="Aucune annonce"
-      [description]="canPost ? 'Publiez une offre ou une demande pour entrer en relation avec des partenaires.' : 'Aucune annonce ne correspond à ce filtre pour le moment.'"
+      title="Aucune annonce pour le moment"
+      [description]="canPost ? 'Publiez une offre ou une demande pour entrer en relation avec des partenaires de la filière.' : 'Les annonces publiées par les acteurs de la filière apparaîtront ici.'"
     >
       @if (canPost) {
-        <button pnlfButton variant="primary" type="button" (click)="ouvrirFormulaire()">Publier une annonce</button>
+        <a pnlfButton variant="primary" routerLink="/app/marketplace/offres/nouvelle">Publier une annonce</a>
       }
     </pnlf-empty-state>
-  } @else {
-    <ul class="offre-grid" aria-label="Annonces">
-      @for (o of items(); track o.id) {
-        <li>
-          <pnlf-card class="offre-card">
-            <div class="offre-card__header">
-              <pnlf-status-badge [label]="o.type_annonce === 'OFFRE' ? 'Offre' : 'Demande'" [tone]="o.type_annonce === 'OFFRE' ? 'success' : 'info'" />
-              <time class="offre-card__date" [attr.datetime]="o.created_at">{{ o.created_at | pnlfDate }}</time>
-            </div>
-            @if (o.photos_urls?.length) {
-              <div class="offre-card__photo">
-                <img [src]="o.photos_urls![0]" alt="" loading="lazy" />
-              </div>
-            }
-            <h3 class="offre-card__title">
-              <a class="offre-card__link" [routerLink]="['/app/marketplace/offres', o.id]">{{ o.titre }}</a>
-            </h3>
-            @if (o.description) {
-              <p class="offre-card__desc">{{ o.description }}</p>
-            }
-            <div class="offre-card__footer">
-              @if (o.quantite) {
-                <span>{{ o.quantite | pnlfQuantite: o.unite }}</span>
-              }
-              @if (o.prix_unitaire) {
-                <span>{{ o.prix_unitaire | pnlfMontant: o.devise }} / {{ o.unite | pnlfUnite }}</span>
-              }
-            </div>
-            <pnlf-status-badge [label]="statutLabels[o.statut]" [tone]="tone(o.statut)" style="margin-top: 0.5rem;" />
-          </pnlf-card>
-        </li>
-      }
-    </ul>
-
-    <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" label="Pagination des annonces" (pageChange)="goToPage($event)" />
   }
+} @else {
+  <app-annonces-affichage [items]="items()" [vue]="vue()" lien="/app/marketplace/offres" [afficherStatut]="true" />
+
+  <pnlf-pagination [page]="page()" [pageSize]="pageSize" [total]="total()" label="Pagination des annonces" (pageChange)="goToPage($event)" />
 }

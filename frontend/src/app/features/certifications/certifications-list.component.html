@@ -7,7 +7,7 @@
         Déposez une demande de label ou de certification de qualité pour un producteur ou un lot.
       </p>
     </div>
-    <button pnlfButton variant="ghost" type="button" (click)="showForm.set(false)">← Retour à la liste</button>
+    <button pnlfButton variant="ghost" type="button" (click)="fermerFormulaire()">← Retour à la liste</button>
   </div>
 
   <pnlf-card title="Nouvelle demande de certification">
@@ -20,9 +20,63 @@
         <pnlf-select-field label="Producteur / collecteur" formControlName="producteur" [options]="producteurs()" [required]="true" [errorMessage]="err('producteur', 'Sélectionnez le producteur concerné.')" />
       }
       <pnlf-select-field label="Lot concerné (facultatif)" formControlName="lot" [options]="lots()" [placeholder]="lotPlaceholder" />
-      <pnlf-text-field label="Observations" formControlName="observations" placeholder="Précisez le contexte, un justificatif, etc." />
+      <pnlf-text-field label="Observations" formControlName="observations" placeholder="Précisez le contexte de la demande" />
+
+      <fieldset class="cert-pieces">
+        <legend class="pnlf-field__label">Documents justificatifs (facultatif, {{ piecesMax }} maximum)</legend>
+        <p class="cert-pieces__aide" id="cert-pieces-aide">
+          Attestations, rapports d’analyse, photos de l’exploitation… PDF, JPG ou PNG, 8 Mo maximum par fichier.
+          Donnez un titre clair à chaque document : seuls l’administrateur et vous pourrez les consulter.
+        </p>
+        @if (brouillons().length) {
+          <ul class="cert-pieces__liste">
+            @for (p of brouillons(); track p.cle; let i = $index) {
+              <li class="cert-piece">
+                <button type="button" class="cert-piece__vignette" (click)="apercuBrouillon(p)" [attr.aria-label]="'Aperçu de ' + (p.intitule || p.fichier.name)">
+                  @if (p.apercuUrl) {
+                    <img [src]="p.apercuUrl" alt="" />
+                  } @else {
+                    <pnlf-icon name="file-text" [size]="22" />
+                  }
+                </button>
+                <div class="cert-piece__corps">
+                  <label class="pnlf-visually-hidden" [for]="'piece-titre-' + p.cle">Titre du document {{ i + 1 }}</label>
+                  <input
+                    class="pnlf-select"
+                    type="text"
+                    [id]="'piece-titre-' + p.cle"
+                    [value]="p.intitule"
+                    [attr.maxlength]="intituleMax"
+                    placeholder="Titre du document (obligatoire)"
+                    [attr.aria-invalid]="!p.intitule.trim() ? true : null"
+                    (input)="renommerBrouillon('demande', p.cle, $any($event.target).value)"
+                  />
+                  <span class="cert-piece__meta">{{ p.fichier.name }} · {{ tailleLisible(p.fichier.size) }}</span>
+                </div>
+                <div class="cert-piece__actions">
+                  <button pnlfButton type="button" variant="ghost" size="sm" (click)="apercuBrouillon(p)">Aperçu</button>
+                  <button pnlfButton type="button" variant="ghost" size="sm" (click)="retirerBrouillon('demande', p.cle)" [attr.aria-label]="'Retirer ' + (p.intitule || p.fichier.name)">
+                    <pnlf-icon name="trash" [size]="14" /> Retirer
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+        @if (brouillons().length < piecesMax) {
+          <label class="cert-pieces__ajout">
+            <input type="file" class="pnlf-visually-hidden" [accept]="piecesAccept" [multiple]="true" aria-describedby="cert-pieces-aide" (change)="choisirPieces($event, 'demande')" />
+            <pnlf-icon name="plus" [size]="16" />
+            <span>{{ brouillons().length ? 'Ajouter d’autres documents' : 'Joindre des documents' }}</span>
+          </label>
+        }
+        @if (piecesErreur()) {
+          <p class="cert-pieces__erreur" role="alert">{{ piecesErreur() }}</p>
+        }
+      </fieldset>
+
       <div class="cert-form__actions">
-        <button pnlfButton type="button" variant="ghost" (click)="showForm.set(false)">Annuler</button>
+        <button pnlfButton type="button" variant="ghost" (click)="fermerFormulaire()">Annuler</button>
         <button pnlfButton type="submit" variant="primary" [loading]="saving()">Envoyer la demande</button>
       </div>
     </form>
@@ -179,28 +233,146 @@
         }
       </dl>
 
-      <div class="cert-detail-doc">
-        <p class="cert-detail-doc__label">Document justificatif</p>
+      <section class="cert-detail-doc" aria-labelledby="cert-pieces-titre">
+        <p class="cert-detail-doc__label" id="cert-pieces-titre">Documents justificatifs ({{ d.pieces?.length ?? 0 }})</p>
         @if (d.document_url) {
           <a [href]="d.document_url" target="_blank" rel="noopener" pnlfButton variant="outline" size="sm">
-            Consulter le document<span class="pnlf-visually-hidden"> (nouvel onglet)</span>
+            Document principal<span class="pnlf-visually-hidden"> (nouvel onglet)</span>
           </a>
-        } @else {
+        }
+        @if (d.pieces?.length) {
+          <ul class="cert-pieces__liste">
+            @for (p of d.pieces; track p.id) {
+              <li class="cert-piece">
+                <button type="button" class="cert-piece__vignette" [disabled]="!p.url" (click)="apercuPiece(p)" [attr.aria-label]="'Aperçu de ' + p.intitule">
+                  @if (p.url && estImagePiece(p)) {
+                    <img [src]="p.url" alt="" loading="lazy" />
+                  } @else {
+                    <pnlf-icon name="file-text" [size]="22" />
+                  }
+                </button>
+                <div class="cert-piece__corps">
+                  <strong>{{ p.intitule }}</strong>
+                  <span class="cert-piece__meta">
+                    {{ p.nom_original || 'Document' }}@if (p.taille_octets) { · {{ tailleLisible(p.taille_octets) }} } · ajouté le {{ p.created_at | pnlfDate }}
+                  </span>
+                </div>
+                <div class="cert-piece__actions">
+                  @if (p.url) {
+                    <button pnlfButton type="button" variant="ghost" size="sm" (click)="apercuPiece(p)">Aperçu</button>
+                  }
+                  @if (peutGererPieces(d)) {
+                    <button pnlfButton type="button" variant="ghost" size="sm" (click)="pieceASupprimer.set(p)" [attr.aria-label]="'Retirer ' + p.intitule">
+                      <pnlf-icon name="trash" [size]="14" /> Retirer
+                    </button>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+          @if (isAgent) {
+            <p class="text-sm text-muted">Les documents sont réservés au demandeur et à l’administrateur.</p>
+          }
+        } @else if (!d.document_url) {
           <p class="text-sm text-muted">Aucun document joint pour le moment.</p>
         }
-        @if (canRequest) {
-          <label class="cert-detail-doc__upload">
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" class="pnlf-visually-hidden" [disabled]="uploadingDoc()" (change)="onDocumentSelected($event)" />
-            <span pnlfButton variant="ghost" size="sm">
-              {{ uploadingDoc() ? 'Envoi en cours…' : (d.document_url ? 'Remplacer le document' : 'Joindre un document (PDF, JPG ou PNG)') }}
-            </span>
-          </label>
+
+        @if (peutGererPieces(d)) {
+          @if (ajouts().length) {
+            <ul class="cert-pieces__liste cert-pieces__liste--ajouts" aria-label="Documents à envoyer">
+              @for (p of ajouts(); track p.cle; let i = $index) {
+                <li class="cert-piece cert-piece--nouveau">
+                  <button type="button" class="cert-piece__vignette" (click)="apercuBrouillon(p)" [attr.aria-label]="'Aperçu de ' + (p.intitule || p.fichier.name)">
+                    @if (p.apercuUrl) {
+                      <img [src]="p.apercuUrl" alt="" />
+                    } @else {
+                      <pnlf-icon name="file-text" [size]="22" />
+                    }
+                  </button>
+                  <div class="cert-piece__corps">
+                    <label class="pnlf-visually-hidden" [for]="'ajout-titre-' + p.cle">Titre du nouveau document {{ i + 1 }}</label>
+                    <input
+                      class="pnlf-select"
+                      type="text"
+                      [id]="'ajout-titre-' + p.cle"
+                      [value]="p.intitule"
+                      [attr.maxlength]="intituleMax"
+                      placeholder="Titre du document (obligatoire)"
+                      [attr.aria-invalid]="!p.intitule.trim() ? true : null"
+                      (input)="renommerBrouillon('ajout', p.cle, $any($event.target).value)"
+                    />
+                    <span class="cert-piece__meta">{{ p.fichier.name }} · {{ tailleLisible(p.fichier.size) }}</span>
+                  </div>
+                  <div class="cert-piece__actions">
+                    <button pnlfButton type="button" variant="ghost" size="sm" (click)="retirerBrouillon('ajout', p.cle)" [attr.aria-label]="'Ne pas envoyer ' + (p.intitule || p.fichier.name)">
+                      <pnlf-icon name="x" [size]="14" />
+                    </button>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+          <div class="cert-pieces__barre">
+            @if ((d.pieces?.length ?? 0) + ajouts().length < piecesMax) {
+              <label class="cert-pieces__ajout">
+                <input type="file" class="pnlf-visually-hidden" [accept]="piecesAccept" [multiple]="true" [disabled]="envoiAjouts()" (change)="choisirPieces($event, 'ajout')" />
+                <pnlf-icon name="plus" [size]="16" />
+                <span>Ajouter des documents</span>
+              </label>
+            }
+            @if (ajouts().length) {
+              <button pnlfButton type="button" variant="primary" size="sm" [loading]="envoiAjouts()" (click)="envoyerAjouts()">
+                Envoyer {{ ajouts().length }} document(s)
+              </button>
+            }
+          </div>
+          <p class="text-sm text-muted">PDF, JPG ou PNG, 8 Mo maximum, {{ piecesMax }} documents par demande.</p>
+          @if (ajoutErreur()) {
+            <p class="cert-pieces__erreur" role="alert">{{ ajoutErreur() }}</p>
+          }
         }
-      </div>
+      </section>
 
       <div class="cert-detail-modal__actions">
+        @if (canValidate && (d.statut === StatutCertification.DEMANDEE || d.statut === StatutCertification.EN_COURS)) {
+          <button pnlfButton variant="ghost" type="button" (click)="fermerDetail(); refuser(d)">Rejeter</button>
+          <button pnlfButton variant="outline" type="button" (click)="fermerDetail(); valider(d)">Valider</button>
+        }
         <button pnlfButton variant="ghost" type="button" data-autofocus (click)="fermerDetail()">Fermer</button>
       </div>
+    </div>
+  </div>
+}
+
+<pnlf-confirm-dialog
+  [open]="pieceASupprimer() !== null"
+  title="Retirer ce document ?"
+  [message]="'« ' + (pieceASupprimer()?.intitule ?? '') + ' » sera définitivement retiré du dossier.'"
+  confirmLabel="Retirer"
+  [danger]="true"
+  [loading]="suppressionPiece()"
+  (confirmed)="confirmerRetraitPiece()"
+  (cancelled)="pieceASupprimer.set(null)"
+/>
+
+@if (apercuImage(); as a) {
+  <div class="cert-apercu-backdrop" (click)="apercuImage.set(null)" role="presentation">
+    <div
+      class="cert-apercu"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cert-apercu-titre"
+      pnlfModal
+      (pnlfModalClose)="apercuImage.set(null)"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="cert-apercu__head">
+        <h2 id="cert-apercu-titre">{{ a.titre }}</h2>
+        <button pnlfButton type="button" variant="ghost" size="sm" data-autofocus (click)="apercuImage.set(null)" aria-label="Fermer l’aperçu">
+          <pnlf-icon name="x" [size]="16" />
+        </button>
+      </div>
+      <img [src]="a.url" [alt]="a.titre" />
     </div>
   </div>
 }

@@ -5,8 +5,11 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AJAX_EXPORT_HEADERS } from '../http/download-file.util';
 import { ApiListResponse } from '../models/common.model';
-import { Producteur } from '../models/producteur.model';
+import { DocumentInscription, Producteur, TypeDocumentInscription } from '../models/producteur.model';
 import { MessagePublic } from '../models/public.model';
+
+/** Charge utile d'écriture : les produits exploités s'envoient sous forme d'identifiants. */
+export type ProducteurPayload = Omit<Partial<Producteur>, 'produits'> & { produits?: string[] };
 
 export interface ProducteurQueryParams {
   page?: number;
@@ -40,12 +43,28 @@ export class ProducteursService {
     return this.http.get<Producteur>(`${this.base}${id}/`);
   }
 
-  create(payload: Partial<Producteur>): Observable<Producteur> {
+  create(payload: ProducteurPayload): Observable<Producteur> {
     return this.http.post<Producteur>(this.base, payload);
   }
 
-  update(id: string, payload: Partial<Producteur>): Observable<Producteur> {
+  update(id: string, payload: ProducteurPayload): Observable<Producteur> {
     return this.http.patch<Producteur>(`${this.base}${id}/`, payload);
+  }
+
+  documents(id: string): Observable<DocumentInscription[]> {
+    return this.http.get<DocumentInscription[]>(`${this.base}${id}/documents/`);
+  }
+
+  /** Dépose ou remplace un justificatif (PDF, JPG ou PNG). Renvoie la liste à jour des documents. */
+  uploadDocument(id: string, type: TypeDocumentInscription, file: File): Observable<DocumentInscription[]> {
+    const form = new FormData();
+    form.append('type_document', type);
+    form.append('document', file);
+    return this.http.post<DocumentInscription[]>(`${this.base}${id}/documents/`, form);
+  }
+
+  supprimerDocument(id: string, type: TypeDocumentInscription): Observable<DocumentInscription[]> {
+    return this.http.delete<DocumentInscription[]>(`${this.base}${id}/documents/${type}/`);
   }
 
   remove(id: string): Observable<void> {

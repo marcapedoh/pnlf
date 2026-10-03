@@ -46,6 +46,37 @@
   list-style: none;
 }
 
+.annuaire-list__row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+
+  .annuaire-list__link {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.annuaire-list__chat {
+  flex-shrink: 0;
+  width: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+  color: var(--pnlf-green-700);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+
+  &:hover {
+    background: var(--pnlf-green-100);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
 .annuaire-list__link {
   display: flex;
   align-items: center;

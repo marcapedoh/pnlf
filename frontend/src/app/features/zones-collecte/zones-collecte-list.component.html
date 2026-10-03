@@ -87,8 +87,8 @@
       </div>
     } @else {
       <p class="text-sm text-muted zone-import__hint" style="margin-bottom: 1rem;">
-        Seules les autorités (administration, ministère, agents forestiers) enrichissent le référentiel national.
-        Vous pouvez toutefois créer une zone au moment de déclarer un lot.
+        Le référentiel national des zones est tenu par l’administrateur de la plateforme. Si une zone manque,
+        demandez son ajout à l’administrateur avant de déclarer votre lot.
       </p>
     }
   </div>
@@ -134,11 +134,11 @@
     <pnlf-empty-state
       icon="map-pin"
       [title]="search() ? 'Aucune zone trouvée' : 'Aucune zone de collecte'"
-      [description]="search() ? 'Aucune zone ne correspond à votre recherche.' : 'Les zones recensées serviront au rattachement des lots. Vous pouvez aussi en créer une au moment de déclarer un lot.'"
+      [description]="search() ? 'Aucune zone ne correspond à votre recherche.' : 'Les zones recensées serviront au rattachement des lots. Elles sont ajoutées par l’administrateur de la plateforme.'"
     >
       @if (canManage) {
         <button pnlfButton variant="primary" type="button" (click)="ouvrirFormulaire()">Créer une zone</button>
-      } @else {
+      } @else if (canDeclareLot && !search()) {
         <a pnlfButton routerLink="/app/lots/nouveau" variant="outline">Déclarer un lot</a>
       }
     </pnlf-empty-state>

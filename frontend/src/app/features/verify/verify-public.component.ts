@@ -1,30 +1,27 @@
-
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
-import { LotVerification, STATUT_LOT_LABELS } from '../../core/models/lot.model';
+import { HttpErrorResponse } from '@angular/common/http';
+
+import { LotPublicComplet, LotPublicIndisponible } from '../../core/models/lot.model';
 import { LotsService } from '../../core/services/lots.service';
-import { lotStatusTone } from '../../core/ui/status-tone.util';
 import { AlertBannerComponent } from '../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../design-system/button/button.component';
 import { IconComponent } from '../../design-system/icon/icon.component';
 import { SpinnerComponent } from '../../design-system/spinner/spinner.component';
-import { StatusBadgeComponent } from '../../design-system/badge/status-badge.component';
-import { PnlfDatePipe, PnlfQuantitePipe } from '../../shared/pipes/format.pipes';
+import { LotPublicFicheComponent } from '../lots/lot-public-fiche/lot-public-fiche.component';
 
 @Component({
   selector: 'app-verify-public',
   imports: [
     FormsModule,
-    PnlfDatePipe,
-    PnlfQuantitePipe,
     RouterLink,
     AlertBannerComponent,
     ButtonComponent,
     SpinnerComponent,
-    StatusBadgeComponent,
     IconComponent,
+    LotPublicFicheComponent,
   ],
   templateUrl: './verify-public.component.html',
   styleUrl: './verify-public.component.scss',
@@ -40,14 +37,13 @@ export class VerifyPublicComponent implements OnDestroy {
   readonly code = signal('');
   readonly loading = signal(false);
   readonly searched = signal(false);
-  readonly result = signal<LotVerification | null>(null);
+  readonly result = signal<LotPublicComplet | null>(null);
   readonly errorMessage = signal('');
+  /** Lot connu mais encore en brouillon : non vérifiable publiquement. */
+  readonly lotNonValide = signal<string | null>(null);
   readonly scannerActive = signal(false);
   readonly fileScanning = signal(false);
   readonly dragActive = signal(false);
-
-  readonly statutLabels = STATUT_LOT_LABELS;
-  readonly tone = lotStatusTone;
 
   private scanner: any = null;
 
@@ -79,6 +75,7 @@ export class VerifyPublicComponent implements OnDestroy {
     this.loading.set(true);
     this.searched.set(true);
     this.errorMessage.set('');
+    this.lotNonValide.set(null);
     this.result.set(null);
 
     this.lotsService.verifyPublic(uuid).subscribe({
@@ -86,10 +83,18 @@ export class VerifyPublicComponent implements OnDestroy {
         this.result.set(res);
         this.loading.set(false);
       },
-      error: () => {
-        this.errorMessage.set(
-          "Aucun lot correspondant n'a été trouvé. Vérifiez le code saisi ou l'intégrité du QR scanné.",
-        );
+      error: (err: unknown) => {
+        const corps = err instanceof HttpErrorResponse ? (err.error as LotPublicIndisponible | null) : null;
+        if (corps?.code === 'LOT_NON_VALIDE') {
+          this.lotNonValide.set(corps.code_lot ?? '');
+          this.errorMessage.set(corps.detail);
+        } else if (err instanceof HttpErrorResponse && (err.status === 0 || err.status >= 500)) {
+          this.errorMessage.set('La vérification est momentanément indisponible. Vérifiez votre connexion puis réessayez.');
+        } else {
+          this.errorMessage.set(
+            "Aucun lot correspondant n'a été trouvé. Vérifiez le code saisi ou l'intégrité du QR scanné.",
+          );
+        }
         this.loading.set(false);
       },
     });
@@ -193,9 +198,10 @@ export class VerifyPublicComponent implements OnDestroy {
     this.result.set(null);
     this.searched.set(false);
     this.errorMessage.set('');
+    this.lotNonValide.set(null);
   }
 
-  partager(r: LotVerification): void {
+  partager(r: LotPublicComplet): void {
     const url = `${window.location.origin}/verifier/${r.uuid_public}`;
     if (navigator.share) {
       navigator.share({ title: `Lot ${r.code_lot}`, url }).catch(() => {});

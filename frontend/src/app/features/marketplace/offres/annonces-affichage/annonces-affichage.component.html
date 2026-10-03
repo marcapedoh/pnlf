@@ -1,0 +1,170 @@
+@switch (vue()) {
+  @case ('tableau') {
+    <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+      <table class="pnlf-table annonces-table">
+        <caption class="pnlf-visually-hidden">Annonces</caption>
+        <thead>
+          <tr>
+            <th scope="col">Annonce</th>
+            <th scope="col">Type</th>
+            <th scope="col">Produit</th>
+            <th scope="col">Province</th>
+            <th scope="col">Quantité</th>
+            <th scope="col">Prix unitaire</th>
+            @if (afficherStatut()) {
+              <th scope="col">Statut</th>
+            }
+            <th scope="col">Publiée le</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (a of items(); track a.id) {
+            <tr>
+              <td data-label="Annonce">
+                <a class="pnlf-table__link" [routerLink]="[lien(), a.id]">{{ a.titre }}</a>
+                @if (a.auteur?.nom || a.auteur_nom) {
+                  <span class="annonces-table__auteur">{{ a.auteur?.nom || a.auteur_nom }}</span>
+                }
+              </td>
+              <td data-label="Type">{{ a.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }}</td>
+              <td data-label="Produit">{{ a.produit_nom || 'Non renseigné' }}</td>
+              <td data-label="Province">{{ a.province_nom || 'Non précisée' }}</td>
+              <td data-label="Quantité">{{ a.quantite ? (a.quantite | pnlfQuantite: a.unite) : 'Non précisée' }}</td>
+              <td data-label="Prix unitaire">
+                @if (a.prix_unitaire) {
+                  {{ a.prix_unitaire | pnlfMontant: a.devise }} / {{ a.unite | pnlfUnite }}
+                } @else if (a.prix_total) {
+                  {{ a.prix_total | pnlfMontant: a.devise }} au total
+                } @else {
+                  <span class="pnlf-table__muted">À discuter</span>
+                }
+              </td>
+              @if (afficherStatut()) {
+                <td data-label="Statut"><pnlf-status-badge [label]="statutLibelle(a.statut)" [tone]="tone(a.statut)" /></td>
+              }
+              <td data-label="Publiée le">{{ a.created_at | pnlfDate }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+  @case ('liste') {
+    <ul class="annonces-liste" aria-label="Annonces">
+      @for (a of items(); track a.id) {
+        <li class="annonce-ligne">
+          <div class="annonce-ligne__media" aria-hidden="true">
+            @if (a.photos_urls?.length) {
+              <img [src]="a.photos_urls![0]" alt="" loading="lazy" />
+            } @else {
+              <pnlf-icon name="leaf" [size]="28" />
+            }
+          </div>
+          <div class="annonce-ligne__corps">
+            <div class="annonce-ligne__meta">
+              <pnlf-status-badge [label]="a.type_annonce === 'OFFRE' ? 'Offre' : 'Demande'" [tone]="a.type_annonce === 'OFFRE' ? 'success' : 'info'" />
+              @if (afficherStatut()) {
+                <pnlf-status-badge [label]="statutLibelle(a.statut)" [tone]="tone(a.statut)" />
+              }
+              @if (a.negociable) {
+                <span class="annonce-puce">Prix négociable</span>
+              }
+              @if (expireBientot(a)) {
+                <span class="annonce-puce annonce-puce--alerte">Expire bientôt</span>
+              }
+            </div>
+            <h3 class="annonce-ligne__titre">
+              <a class="annonce-lien" [routerLink]="[lien(), a.id]">{{ a.titre }}</a>
+            </h3>
+            <p class="annonce-ligne__infos">
+              {{ a.produit_nom || 'Produit non renseigné' }}
+              @if (a.province_nom) {
+                · {{ a.province_nom }}{{ a.localite ? ', ' + a.localite : '' }}
+              }
+              @if (a.auteur?.nom || a.auteur_nom) {
+                · {{ a.auteur?.nom || a.auteur_nom }}
+              }
+            </p>
+            @if (a.description) {
+              <p class="annonce-ligne__desc">{{ a.description }}</p>
+            }
+          </div>
+          <div class="annonce-ligne__chiffres">
+            @if (a.prix_unitaire) {
+              <strong>{{ a.prix_unitaire | pnlfMontant: a.devise }}</strong>
+              <span>par {{ a.unite | pnlfUnite }}</span>
+            } @else if (a.prix_total) {
+              <strong>{{ a.prix_total | pnlfMontant: a.devise }}</strong>
+              <span>prix total</span>
+            } @else {
+              <strong>Prix à discuter</strong>
+            }
+            @if (a.quantite) {
+              <span>{{ a.quantite | pnlfQuantite: a.unite }}</span>
+            }
+            <time [attr.datetime]="a.created_at">{{ a.created_at | pnlfDate }}</time>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+  @default {
+    <ul class="annonces-grille" aria-label="Annonces">
+      @for (a of items(); track a.id) {
+        <li class="annonce-carte">
+          <div class="annonce-carte__media" aria-hidden="true">
+            @if (a.photos_urls?.length) {
+              <img [src]="a.photos_urls![0]" alt="" loading="lazy" />
+            } @else {
+              <pnlf-icon name="leaf" [size]="36" />
+            }
+            <span class="annonce-carte__type" [class.is-demande]="a.type_annonce === 'DEMANDE'">
+              {{ a.type_annonce === 'OFFRE' ? 'Offre' : 'Demande' }}
+            </span>
+          </div>
+          <div class="annonce-carte__corps">
+            @if (afficherStatut() || a.negociable || expireBientot(a)) {
+              <div class="annonce-ligne__meta">
+                @if (afficherStatut()) {
+                  <pnlf-status-badge [label]="statutLibelle(a.statut)" [tone]="tone(a.statut)" />
+                }
+                @if (a.negociable) {
+                  <span class="annonce-puce">Négociable</span>
+                }
+                @if (expireBientot(a)) {
+                  <span class="annonce-puce annonce-puce--alerte">Expire bientôt</span>
+                }
+              </div>
+            }
+            <h3 class="annonce-carte__titre">
+              <a class="annonce-lien" [routerLink]="[lien(), a.id]">{{ a.titre }}</a>
+            </h3>
+            <p class="annonce-ligne__infos">
+              {{ a.produit_nom || 'Produit non renseigné' }}{{ a.province_nom ? ' · ' + a.province_nom : '' }}
+            </p>
+            <div class="annonce-carte__pied">
+              <span class="annonce-carte__prix">
+                @if (a.prix_unitaire) {
+                  {{ a.prix_unitaire | pnlfMontant: a.devise }} / {{ a.unite | pnlfUnite }}
+                } @else if (a.prix_total) {
+                  {{ a.prix_total | pnlfMontant: a.devise }} au total
+                } @else {
+                  Prix à discuter
+                }
+              </span>
+              @if (a.quantite) {
+                <span>{{ a.quantite | pnlfQuantite: a.unite }}</span>
+              }
+            </div>
+            <p class="annonce-carte__date">
+              @if (a.auteur?.nom || a.auteur_nom) {
+                {{ a.auteur?.nom || a.auteur_nom }} ·
+              }
+              <time [attr.datetime]="a.created_at">{{ a.created_at | pnlfDate }}</time>
+            </p>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+}

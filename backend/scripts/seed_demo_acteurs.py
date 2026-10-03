@@ -321,17 +321,17 @@ INSCRIPTIONS = [
 ]
 
 ZONES = [
-    # (clé, code, libellé, province, lat, lon, description, créateur)
+    # (clé, code, libellé, province, lat, lon, description, créateur) : référentiel géré par l'administrateur seul.
     ('minkebe', 'DEMO-ZC-MINKEBE', 'Forêt de Minkébé, secteur de Makokou', 'OGO', '0.6100000', '12.7300000',
-     'Massif forestier riche en noisettes (owala), kola et poivre de Guinée.', 'forestier.demo'),
+     'Massif forestier riche en noisettes (owala), kola et poivre de Guinée.', 'admin.demo'),
     ('lope', 'DEMO-ZC-LOPE', 'Lopé, lisière forêt-savane', 'OGO', '-0.2000000', '11.6000000',
-     'Zone sous surveillance : espèces médicinales soumises à permis.', 'forestier.demo'),
+     'Zone sous surveillance : espèces médicinales soumises à permis.', 'admin.demo'),
     ('waka', 'DEMO-ZC-WAKA', 'Massif de Waka, abords de Mouila', 'NGO', '-1.7500000', '11.1500000',
-     'Forêt dense humide : miel, cire et chenilles.', 'forestier.demo'),
+     'Forêt dense humide : miel, cire et chenilles.', 'admin.demo'),
     ('cristal', 'DEMO-ZC-CRISTAL', 'Monts de Cristal, versant de Kango', 'EST', '0.4500000', '10.2700000',
-     'Rotin, raphia et feuilles de Marantacées.', 'ministere.demo'),
+     'Rotin, raphia et feuilles de Marantacées.', 'admin.demo'),
     ('ruchers', 'DEMO-ZC-RUCHERS-FOUGAMOU', 'Ruchers forestiers de Fougamou', 'NGO', '-1.2100000', '10.6000000',
-     'Zone déclarée par le producteur depuis le formulaire de lot.', 'producteur.miel'),
+     'Zone ajoutée par l’administration à la demande du producteur.', 'admin.demo'),
 ]
 
 
@@ -516,11 +516,11 @@ def _aujourdhui():
 
 
 def etape_lots(s: Seed, zones: dict, fiches: dict) -> dict:
-    print('> Lots et traçabilité (tous les statuts)')
+    print('> Lots et traçabilité (brouillon, validé, commercialisé)')
     aujourd_hui = _aujourdhui()
     f = lambda adresse: str(s.fiche(email(adresse)).id)  # noqa: E731
     lots_def = [
-        # clé, acteur, producteur, produit, zone, jours, quantité, unité, qualité, prix, brouillon
+        # clé, acteur, producteur, produit, zone, jours, quantité, unité, qualité, prix, (inutilisé)
         ('L01', 'producteur.miel', f('producteur.miel'), 'PFNL-MIEL-SAUV', 'ruchers', 75, '120', 'KG', 'Premier choix', '6500', False),
         ('L02', 'producteur.miel', f('producteur.miel'), 'PFNL-CIRE', 'waka', 40, '15', 'KG', 'Cire brute filtrée', '4000', False),
         ('L03', 'producteur.miel', f('producteur.miel'), 'PFNL-PROPOLIS', 'ruchers', 3, '2.5', 'KG', None, None, True),
@@ -537,7 +537,7 @@ def etape_lots(s: Seed, zones: dict, fiches: dict) -> dict:
         ('L14', 'collecteur.ogooue', f('collecteur.ogooue'), 'PFNL-POIVRE-G', 'minkebe', 25, '18', 'KG', 'Graines sèches', '6000', False),
     ]
     lots = {}
-    for code, acteur, producteur_id, produit, zone, jours, qte, unite, qualite, prix, brouillon in lots_def:
+    for code, acteur, producteur_id, produit, zone, jours, qte, unite, qualite, prix, _ in lots_def:
         payload = {
             'produit': str(s.produit(produit).id), 'producteur': producteur_id,
             'zone_collecte': zones.get(zone) if zone else None,
@@ -545,8 +545,6 @@ def etape_lots(s: Seed, zones: dict, fiches: dict) -> dict:
             'qualite_indicateur': qualite, 'prix_indicatif': prix, 'devise': 'XAF',
             'observations': f'Lot de démonstration {code}.', 'client_uuid': cle(f'lot-{code}'),
         }
-        if brouillon:
-            payload['brouillon'] = True
         data = s.api(email(acteur), 'post', '/api/lots/', payload)
         lots[code] = {'id': data['id'], 'code_lot': data['code_lot'], 'quantite': qte, 'unite': unite}
 
@@ -558,20 +556,31 @@ def etape_lots(s: Seed, zones: dict, fiches: dict) -> dict:
             'destinataire_libelle': destinataire, 'commentaire': commentaire,
         })
 
+    def valider(acteur, code):
+        s.api(email(acteur), 'post', f'/api/lots/{lots[code]["id"]}/valider/')
+
     mvt('coop.ngounie', 'L01', 'RECEPTION_COOPERATIVE', 'Magasin de la coopérative, Mouila', commentaire='Pesée et contrôle visuel conformes.')
+    valider('ministere.demo', 'L01')
     mvt('coop.ngounie', 'L01', 'TRANSFERT', 'Mouila vers Owendo (RN1)', 'Entrepôt Gabon Export Bio, Owendo')
     mvt('coop.ngounie', 'L01', 'VENTE', 'Owendo', 'Société Gabon Export Bio', 'Facture DEMO-FV-0012.')
     mvt('forestier.demo', 'L02', 'CONTROLE', 'Poste forestier de Mouila', commentaire='Contrôle de conformité : RAS.')
+    valider('forestier.demo', 'L02')
     mvt('coop.ivindo', 'L04', 'RECEPTION_COOPERATIVE', 'Magasin de la coopérative, Makokou')
+    valider('forestier.demo', 'L04')
     mvt('coop.ivindo', 'L04', 'TRANSFORMATION', 'Atelier de séchage, Makokou', commentaire='Séchage, tri et calibrage.')
+    valider('ministere.demo', 'L06')
     mvt('coop.ivindo', 'L06', 'TRANSFERT', 'Makokou vers Libreville', 'Transitaire agréé, Libreville')
     mvt('coop.ivindo', 'L06', 'EXPORT', 'Port d’Owendo', 'Client export, Douala (Cameroun)', 'Certificat phytosanitaire DEMO-PHY-221.')
     mvt('forestier.demo', 'L07', 'CONTROLE', 'Brigade forestière d’Oyem', commentaire='Contrôle qualité et origine validés.')
+    valider('forestier.demo', 'L07')
+    valider('ministere.demo', 'L09')
+    valider('forestier.demo', 'L11')
     mvt('forestier.demo', 'L11', 'TRANSFERT', 'Makokou vers Franceville', 'Huilerie artisanale, Franceville')
     mvt('coop.ivindo', 'L14', 'RECEPTION_COOPERATIVE', 'Magasin de la coopérative, Makokou')
+    valider('admin.demo', 'L14')
 
-    s.api(email('admin.demo'), 'post', f'/api/lots/{lots["L08"]["id"]}/changer-statut/', {'statut': 'ANNULE'})
-    s.api(email('ministere.demo'), 'post', f'/api/lots/{lots["L09"]["id"]}/changer-statut/', {'statut': 'ARCHIVE'})
+    # Lot saisi par erreur : supprimé par son producteur tant qu'il est en brouillon.
+    s.api(email('producteur.independant'), 'delete', f'/api/lots/{lots["L08"]["id"]}/', attendu=(204,))
     return lots
 
 
@@ -591,20 +600,30 @@ def etape_certifs(s: Seed, lots: dict, fiches: dict) -> None:
         'date_demande': str(aujourd_hui),
         'type_certification': str(s.type_certif('BIO').id), 'observations': 'Ruchers situés hors zone agricole.',
     })
-    s.api(ministere, 'post', f'/api/certifications/{c_bio["id"]}/valider/', {'numero_certificat': 'BIO-GA-2026-0142'})
+    s.api(admin, 'post', f'/api/certifications/{c_bio["id"]}/valider/', {'numero_certificat': 'BIO-GA-2026-0142'})
     Certification.objects.filter(pk=c_bio['id']).update(date_expiration=_ajouter_jours(aujourd_hui, 365))
+    # Producteur désormais certifié : il valide lui-même son lot (auto-validation).
+    s.api(email('producteur.miel'), 'post', f'/api/lots/{lots["L13"]["id"]}/valider/')
 
     s.api(email('producteur.kola'), 'post', '/api/certifications/', {
         'date_demande': str(aujourd_hui),
         'type_certification': str(s.type_certif('ORIGINE').id), 'observations': 'Demande d’indication d’origine « Kola de l’Ivindo ».',
     })
 
+    titulaire_qual = 'Collecteur Ogooué-Ivindo'
     c_qual = s.api(email('coop.ivindo'), 'post', '/api/certifications/', {
         'date_demande': str(aujourd_hui),
         'type_certification': str(s.type_certif('QUALITE').id),
         'producteur': str(s.fiche(email('collecteur.ogooue')).id),
         'observations': 'Demande portée par la coopérative pour son collecteur.',
-    })
+        'pieces': [
+            _fichier('fiche-controle-qualite.png',
+                     specimen_document_png('FICHE DE CONTRÔLE QUALITÉ', titulaire_qual, 'DEMO-FCQ-0451'), 'image/png'),
+            _fichier('attestation-cooperative.png',
+                     specimen_document_png('ATTESTATION DE LA COOPÉRATIVE', titulaire_qual, 'DEMO-ATT-0088'), 'image/png'),
+        ],
+        'intitules': ['Fiche de contrôle qualité', 'Attestation de la coopérative'],
+    }, multipart=True)
     Certification.objects.filter(pk=c_qual['id']).update(
         statut='EN_COURS', observations='Demande portée par la coopérative. Instruction en cours : visite terrain programmée.',
     )
@@ -613,7 +632,7 @@ def etape_certifs(s: Seed, lots: dict, fiches: dict) -> None:
         'date_demande': str(aujourd_hui),
         'type_certification': str(s.type_certif('BIO').id),
     })
-    s.api(ministere, 'post', f'/api/certifications/{c_ref["id"]}/refuser/', {
+    s.api(admin, 'post', f'/api/certifications/{c_ref["id"]}/refuser/', {
         'motif': 'Plan de gestion durable de la ressource non fourni.',
     })
 
@@ -633,7 +652,7 @@ def etape_certifs(s: Seed, lots: dict, fiches: dict) -> None:
         statut='EXPIREE', numero_certificat='QUA-GA-2025-0031',
         date_demande=_ajouter_jours(aujourd_hui, -430), date_obtention=_ajouter_jours(aujourd_hui, -420),
         date_expiration=_ajouter_jours(aujourd_hui, -55),
-        valide_par_id=Utilisateur.objects.get(email=ministere).id,
+        valide_par_id=Utilisateur.objects.get(email=admin).id,
         observations='Certificat arrivé à échéance : renouvellement à demander.',
     )
 
@@ -970,9 +989,9 @@ ETATS_FICHES = {
     'producteur.attente': 'EN_VALIDATION', 'collecteur.attente': 'EN_VALIDATION',
 }
 ETATS_LOTS = {
-    'L01': 'COMMERCIALISE', 'L02': 'VALIDE', 'L03': 'BROUILLON', 'L04': 'TRANSFORME', 'L05': 'DECLARE',
-    'L06': 'COMMERCIALISE', 'L07': 'VALIDE', 'L08': 'ANNULE', 'L09': 'ARCHIVE', 'L10': 'DECLARE',
-    'L11': 'EN_TRANSIT', 'L12': 'DECLARE', 'L13': 'DECLARE', 'L14': 'VALIDE',
+    'L01': 'COMMERCIALISE', 'L02': 'VALIDE', 'L03': 'BROUILLON', 'L04': 'VALIDE', 'L05': 'BROUILLON',
+    'L06': 'COMMERCIALISE', 'L07': 'VALIDE', 'L08': 'SUPPRIME', 'L09': 'VALIDE', 'L10': 'BROUILLON',
+    'L11': 'VALIDE', 'L12': 'BROUILLON', 'L13': 'VALIDE', 'L14': 'VALIDE',
 }
 ETATS_OFFRES = {
     'O1': 'OUVERTE', 'O2': 'OUVERTE', 'O3': 'OUVERTE', 'O4': 'EN_VALIDATION',
@@ -1006,7 +1025,8 @@ def verifier_etats(s: Seed, lots: dict, offres: dict) -> None:
     for local, attendu in ETATS_FICHES.items():
         comparer(f'fiche {local}', s.fiche(email(local)).statut, attendu)
     for code, attendu in ETATS_LOTS.items():
-        comparer(f'lot {code}', Lot.objects.get(pk=lots[code]['id']).statut, attendu)
+        lot = Lot.objects.get(pk=lots[code]['id'])
+        comparer(f'lot {code}', 'SUPPRIME' if lot.deleted_at else lot.statut, attendu)
     for code, attendu in ETATS_OFFRES.items():
         comparer(f'annonce {code}', read_statut(OffreDemande.objects.get(pk=offres[code])), attendu)
     if ecarts:

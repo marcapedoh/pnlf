@@ -46,7 +46,9 @@ export type IconName =
   | 'info'
   | 'sun'
   | 'leaf'
-  | 'mic';
+  | 'mic'
+  | 'list'
+  | 'table';
 
 const ICONS: Record<IconName, string> = {
   home: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z M9 22V12h6v10',
@@ -110,6 +112,8 @@ const ICONS: Record<IconName, string> = {
   sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M12 1v2 M12 21v2 M4.22 4.22l1.42 1.42 M18.36 18.36l1.42 1.42 M1 12h2 M21 12h2 M4.22 19.78l1.42-1.42 M18.36 5.64l1.42-1.42',
   leaf: 'M11 20A7 7 0 0 1 4 13H2a9 9 0 0 0 9 9 9 9 0 0 0 9-9c0-5-4-10-9-12-1 3-2 5-2 8a5 5 0 0 0 5 5',
   mic: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z M19 10v2a7 7 0 0 1-14 0v-2 M12 19v4 M8 23h8',
+  list: 'M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01',
+  table: 'M3 3h18v18H3z M3 9h18 M3 15h18 M9 3v18',
 };
 
 @Component({

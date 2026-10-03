@@ -165,7 +165,7 @@ class LotTraceabilityTests(TestCase):
             'date_collecte': str(date.today()),
             'quantite': '25.500',
             'unite': 'KG',
-            'statut': 'DECLARE',
+            'statut': 'BROUILLON',
         }, format='json')
         self.assertEqual(r.status_code, status.HTTP_201_CREATED)
         self.assertTrue(r.data.get('code_lot', '').startswith('PNLF-'))
