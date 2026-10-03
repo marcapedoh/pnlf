@@ -1,4 +1,4 @@
-from django.urls import include, path
+from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 
 from .inscription_views import PublicInscriptionView
@@ -47,6 +47,12 @@ router.register('messages-publics', MessagePublicViewSet, basename='message-publ
 
 urlpatterns = [
     path('verify/<uuid:uuid_public>/', LotVerifyView.as_view(), name='lot-verify'),
+    # Contenu brut du QR (« PNLF:<uuid> ») envoyé tel quel par d'anciennes versions du site.
+    re_path(
+        r'^verify/(?i:pnlf):(?P<uuid_public>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/$',
+        LotVerifyView.as_view(),
+        name='lot-verify-qr-brut',
+    ),
     # Vitrine publique (sans authentification)
     path('public/stats/', PublicStatsView.as_view(), name='public-stats'),
     path('public/provinces/', PublicProvincesListView.as_view(), name='public-provinces'),
