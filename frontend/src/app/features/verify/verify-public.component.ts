@@ -59,8 +59,11 @@ export class VerifyPublicComponent implements OnDestroy {
     this.stopScanner();
   }
 
+  /** Accepte le contenu brut du QR (« PNLF:<uuid> »), un lien de vérification ou l'identifiant seul. */
   extractUuid(raw: string): string {
     const trimmed = raw.trim();
+    const uuid = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (uuid) return uuid[0].toLowerCase();
     const parts = trimmed.split('/').filter(Boolean);
     return parts[parts.length - 1] || trimmed;
   }
