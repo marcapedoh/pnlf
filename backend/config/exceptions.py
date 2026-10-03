@@ -178,6 +178,7 @@ _MESSAGES_GENERIQUES = {
     "Informations d'authentification incorrectes.",
     "Vous n'avez pas la permission d'effectuer cette action.",
     'Pas trouvé.',
+    'Non trouvé.',
     "Le type de jeton fourni n'est pas valide",
     'Le jeton est invalide ou expiré',
     'Le jeton a expiré',
@@ -187,4 +188,5 @@ _MESSAGES_GENERIQUES = {
 
 
 def _est_generique(detail: str) -> bool:
-    return detail in _MESSAGES_GENERIQUES or detail in TRADUCTIONS.values()
+    # Seuls les messages génériques par code sont normalisés : une traduction dédiée (ex. page inexistante) est gardée.
+    return detail in _MESSAGES_GENERIQUES or detail in MESSAGES_PAR_CODE.values()

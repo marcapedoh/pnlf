@@ -1327,7 +1327,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
                     'producteur_id': "Ce producteur n'a pas de compte connecté : utilisez le formulaire de contact.",
                 })
             other_id = fiche.utilisateur_id
-            sujet = sujet or f'Discussion avec {fiche.prenoms} {fiche.nom}'.strip()
+            sujet = sujet or 'Discussion avec ' + ' '.join(filter(None, [fiche.prenoms, fiche.nom]))
         elif cooperative_id:
             champ = 'cooperative_id'
             coop = Cooperative.objects.filter(pk=cooperative_id).first()
@@ -1729,8 +1729,10 @@ class AnnuaireView(APIView):
 
     def get(self, request):
         from traceability.models import Cooperative
-        from traceability.serializers import CooperativeSerializer, ProducteurSerializer
+        from traceability.serializers import ROLES_AGENTS, CooperativeSerializer, ProducteurSerializer
 
+        # Téléphones et e-mails masqués hors agents : ils ne servent pas non plus de critère de recherche.
+        recherche_contacts = getattr(request.user, 'role', None) in ROLES_AGENTS
         produit = _param_uuid(request, 'produit')
         province = _param_uuid(request, 'province')
         recherche = (request.query_params.get('q') or '').strip()
@@ -1754,10 +1756,13 @@ class AnnuaireView(APIView):
             if produit:
                 qs_prod = qs_prod.filter(id__in=Lot.objects.filter(produit_id=produit).values('producteur_id'))
             if recherche:
-                qs_prod = qs_prod.filter(
+                critere = (
                     Q(nom__icontains=recherche) | Q(prenoms__icontains=recherche)
-                    | Q(code_producteur__icontains=recherche) | Q(telephone__icontains=recherche)
+                    | Q(code_producteur__icontains=recherche)
                 )
+                if recherche_contacts:
+                    critere |= Q(telephone__icontains=recherche)
+                qs_prod = qs_prod.filter(critere)
             items, total, page = _page_annuaire(
                 qs_prod.order_by('nom', 'prenoms', 'id'), _param_page(request, 'page_producteurs'), taille,
             )
@@ -1774,10 +1779,10 @@ class AnnuaireView(APIView):
             if province:
                 coops = coops.filter(province_id=province)
             if recherche:
-                coops = coops.filter(
-                    Q(nom__icontains=recherche) | Q(code__icontains=recherche)
-                    | Q(telephone__icontains=recherche) | Q(email__icontains=recherche)
-                )
+                critere = Q(nom__icontains=recherche) | Q(code__icontains=recherche)
+                if recherche_contacts:
+                    critere |= Q(telephone__icontains=recherche) | Q(email__icontains=recherche)
+                coops = coops.filter(critere)
             items, total, page = _page_annuaire(
                 coops.order_by('nom', 'id'), _param_page(request, 'page_cooperatives'), taille,
             )

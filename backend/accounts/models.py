@@ -72,7 +72,7 @@ class Utilisateur(models.Model):
         return self.email
 
     def get_full_name(self):
-        return f'{self.prenoms} {self.nom}'.strip()
+        return ' '.join(filter(None, [self.prenoms, self.nom])).strip()
 
     def check_password(self, raw_password: str) -> bool:
         """Vérifie un mot de passe (hash bcrypt pgcrypto / bcrypt Python)."""

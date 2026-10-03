@@ -159,7 +159,8 @@ def scope_mouvements_qs(qs, user):
     ):
         return qs
     if role == Utilisateur.Role.ACHETEUR:
-        return qs.filter(lot__producteur__statut='ACTIF')
+        # Même périmètre que scope_lots_qs : étapes des seuls lots validés disponibles.
+        return qs.filter(lot__producteur__statut='ACTIF', lot__statut='VALIDE', lot__deleted_at__isnull=True)
     if role == Utilisateur.Role.PRODUCTEUR:
         return qs.filter(lot__producteur__utilisateur_id=user.id)
     if role == Utilisateur.Role.COOPERATIVE:

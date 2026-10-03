@@ -198,6 +198,14 @@ class CooperativeSerializer(serializers.ModelSerializer):
             return []
         return _documents_administratifs('COOPERATIVE', obj.id, self.context.get('request'), self.context)
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Même règle que la fiche PDF : contacts (dont l'e-mail de connexion) réservés aux agents et au titulaire.
+        if not self._lit_documents(instance):
+            data['telephone'] = None
+            data['email'] = None
+        return data
+
     def _situation_producteur(self):
         """Fiche du producteur connecté, ses demandes et invitations en attente (calcul unique par réponse)."""
         request = self.context.get('request')

@@ -54,7 +54,7 @@ MOTIF_MAX = 500
 def _nom(user: Utilisateur | None) -> str | None:
     if not user:
         return None
-    return f'{user.prenoms} {user.nom}'.strip() or user.email
+    return user.get_full_name() or user.email
 
 
 _DOSSIERS_INSCRIPTION = {'producteurs': 'PRODUCTEUR', 'cooperatives': 'COOPERATIVE', 'utilisateurs': 'UTILISATEUR'}

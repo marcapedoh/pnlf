@@ -147,7 +147,7 @@ def piece_url(rel_path: str | None, request=None) -> str | None:
 def nom_utilisateur(user: Utilisateur | None) -> str:
     if not user:
         return 'Utilisateur'
-    return f'{user.prenoms} {user.nom}'.strip() or user.email
+    return ' '.join(filter(None, [user.prenoms, user.nom])).strip() or user.email
 
 
 def _media_url(rel: str, request=None, *, fiche_publique: bool | None = None) -> str:

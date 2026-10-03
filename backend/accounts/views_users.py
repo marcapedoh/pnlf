@@ -67,7 +67,7 @@ def _envoyer_lien_reinitialisation(user_id) -> None:
         destinataire_id=user.id, email=user.email,
         sujet='PFNL : réinitialisation de mot de passe',
         corps_texte=(
-            f'Bonjour {user.prenoms} {user.nom},\n\n'
+            f'Bonjour {user.get_full_name()},\n\n'
             'Une demande de réinitialisation de mot de passe a été faite pour votre compte. '
             f'Ouvrez ce lien (valable 24 h) :\n{lien}\n\n'
             'Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail.'
@@ -306,7 +306,7 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
             destinataire_id=user.id, email=user.email,
             sujet='PFNL : réinitialisation de mot de passe',
             corps_texte=(
-                f'Bonjour {user.prenoms} {user.nom},\n\n'
+                f'Bonjour {user.get_full_name()},\n\n'
                 'Un administrateur a demandé la réinitialisation de votre mot de passe. '
                 f'Ouvrez ce lien (valable 24 h) :\n{lien}\n'
             ),

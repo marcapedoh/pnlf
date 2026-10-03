@@ -266,7 +266,7 @@ def _activer_compte_lie(utilisateur_id, *, type_libelle: str) -> None:
     lien = f'{settings.PNLF_FRONTEND_URL}/connexion'
     sujet = 'PFNL : votre inscription a été validée'
     corps = (
-        f'Bonjour {user.prenoms} {user.nom},\n\n'
+        f'Bonjour {user.get_full_name()},\n\n'
         f'Votre inscription en tant que {type_libelle} sur la plateforme PFNL a été validée '
         'par un administrateur.\n'
         'Vous pouvez désormais vous connecter avec votre adresse e-mail et le mot de passe choisi '
@@ -294,7 +294,7 @@ def _rejeter_compte_lie(utilisateur_id, *, type_libelle: str, motif: str) -> Non
     motif_txt = motif or 'les informations fournies ne permettent pas de valider votre dossier.'
     sujet = "PFNL : votre demande d'inscription n'a pas été retenue"
     corps = (
-        f'Bonjour {user.prenoms} {user.nom},\n\n'
+        f'Bonjour {user.get_full_name()},\n\n'
         f"Votre demande d'inscription en tant que {type_libelle} sur la plateforme PFNL "
         "n'a pas pu être validée.\n"
         f'Motif : {motif_txt}\n\n'
@@ -410,6 +410,16 @@ class ProduitViewSet(viewsets.ModelViewSet):
 
 class CanPrintCooperatives(CanManageCooperatives):
     """L'impression (POST) est une lecture : ouverte à tous les profils autorisés à consulter les coopératives."""
+
+    def has_permission(self, request, view):
+        role = getattr(request.user, 'role', None)
+        return bool(getattr(request.user, 'is_authenticated', False)) and (
+            role in self.read_roles or role in self.write_roles
+        )
+
+
+class CanPrintProducteurs(CanManageProducteurs):
+    """L'impression (POST) est une lecture : ouverte à tous les profils autorisés à consulter les producteurs."""
 
     def has_permission(self, request, view):
         role = getattr(request.user, 'role', None)
@@ -1261,8 +1271,15 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
 class ProducteurViewSet(viewsets.ModelViewSet):
     permission_classes = [CanManageProducteurs]
     serializer_class = ProducteurSerializer
-    search_fields = ('nom', 'prenoms', 'code_producteur', 'telephone')
     filterset_class = ProducteurFilter
+
+    @property
+    def search_fields(self):
+        # Le téléphone est masqué hors agents : il ne doit pas non plus servir de critère de recherche.
+        request = getattr(self, 'request', None)
+        if request is not None and _est_agent(request.user):
+            return ('nom', 'prenoms', 'code_producteur', 'telephone')
+        return ('nom', 'prenoms', 'code_producteur')
 
     def get_queryset(self):
         qs = Producteur.objects.filter(deleted_at__isnull=True).select_related(
@@ -1276,7 +1293,8 @@ class ProducteurViewSet(viewsets.ModelViewSet):
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
-        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not user_can_access_producteur(request.user, obj):
+        en_lecture = request.method in ('GET', 'HEAD', 'OPTIONS') or self.action == 'pdf'
+        if not en_lecture and not user_can_access_producteur(request.user, obj):
             raise PermissionDenied('Accès refusé à ce producteur.')
 
     def perform_create(self, serializer):
@@ -1365,7 +1383,7 @@ class ProducteurViewSet(viewsets.ModelViewSet):
             enregistrement_id=instance.id, ip_adresse=ip, user_agent=ua,
         )
 
-    @action(detail=True, methods=['post'], url_path='pdf')
+    @action(detail=True, methods=['post'], url_path='pdf', permission_classes=[CanPrintProducteurs])
     def pdf(self, request, pk=None):
         """Génère et renvoie directement la fiche PDF de ce producteur/collecteur (octets bruts).
 
@@ -1398,7 +1416,7 @@ class ProducteurViewSet(viewsets.ModelViewSet):
 
         return pdf_file_response(pdf, filename)
 
-    @action(detail=False, methods=['post'], url_path='pdf-liste')
+    @action(detail=False, methods=['post'], url_path='pdf-liste', permission_classes=[CanPrintProducteurs])
     def pdf_liste(self, request):
         """Génère et renvoie directement la liste PDF des producteurs/collecteurs visibles."""
         from pnlf_platform.pdf_export import producteurs_liste_pdf_bytes

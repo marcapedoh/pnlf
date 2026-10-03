@@ -8,6 +8,7 @@ import {
   inject,
 } from '@angular/core';
 import {
+  RouteReuseStrategy,
   provideRouter,
   withComponentInputBinding,
   withInMemoryScrolling,
@@ -23,6 +24,7 @@ import { errorInterceptor } from './core/http/error.interceptor';
 import { loadingInterceptor } from './core/http/loading.interceptor';
 import { moderationInterceptor } from './core/http/moderation.interceptor';
 import { registerLocaleFr } from './core/i18n/register-locale-fr';
+import { ParamsRouteReuseStrategy } from './core/navigation/route-reuse.strategy';
 
 registerLocaleFr();
 
@@ -39,6 +41,7 @@ export const appConfig: ApplicationConfig = {
       // voir RouterLink + [fragment] dans confidentialite/conditions-utilisation.
       withInMemoryScrolling({ anchorScrolling: 'enabled', scrollPositionRestoration: 'enabled' }),
     ),
+    { provide: RouteReuseStrategy, useClass: ParamsRouteReuseStrategy },
     provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor, errorInterceptor, moderationInterceptor])),
     provideAppInitializer(() => {
       const auth = inject(AuthService);

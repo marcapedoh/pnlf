@@ -272,9 +272,17 @@ export class MessagerieComponent implements OnDestroy {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }
 
+  /** La recherche remplace la liste : la conversation ouverte peut ne plus y figurer. */
+  private derniereActive?: Conversation;
+
   activeConversation(): Conversation | undefined {
     const id = this.activeId();
-    return this.conversations().find((c) => c.id === id);
+    const conv = this.conversations().find((c) => c.id === id);
+    if (conv) {
+      this.derniereActive = conv;
+      return conv;
+    }
+    return id && this.derniereActive?.id === id ? this.derniereActive : undefined;
   }
 
   isMine(m: ChatMessage): boolean {

@@ -420,7 +420,7 @@ class ConversationSerializer(serializers.ModelSerializer):
             profil = profils.get(uid) or {}
             rows.append({
                 'id': uid,
-                'nom': f'{user.prenoms} {user.nom}'.strip(),
+                'nom': ' '.join(filter(None, [user.prenoms, user.nom])).strip() or user.email,
                 'role': user.role,
                 'role_libelle': profil.get('role_libelle'),
                 'organisation': profil.get('organisation'),
@@ -511,7 +511,7 @@ class MessageSerializer(serializers.ModelSerializer):
         user = cache.get(str(obj.expediteur_id))
         if not user:
             return None
-        return f'{user.prenoms} {user.nom}'.strip()
+        return user.get_full_name() or user.email
 
     def get_expediteur_photo_url(self, obj):
         photos = self.context.get('_photos_by_user') or {}

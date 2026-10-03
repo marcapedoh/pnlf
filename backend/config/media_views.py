@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 import re
 from pathlib import Path
@@ -17,6 +18,8 @@ from accounts.models import Utilisateur
 from accounts.permissions import user_can_access_lot, user_can_access_producteur
 
 from . import media_store, moderation_images
+
+logger = logging.getLogger(__name__)
 
 MEDIA_SIGN_SALT = 'pfnl-media-v1'
 MEDIA_SIGN_MAX_AGE = 60 * 60  # 1 h
@@ -161,12 +164,53 @@ def _image_masquee(user, rel: str) -> bool:
     return moderation_images.est_masquee(rel)
 
 
+_QR_LOT = re.compile(r'^qr/(?P<uuid>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.png$')
+_QR_OFFRE = re.compile(r'^qr/od-(?P<uuid>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.png$')
+
+
+def _regenerer_qr(rel: str) -> bool:
+    """Recrée un QR effacé du disque (redéploiement) : il se déduit entièrement des données en base."""
+    try:
+        if m := _QR_LOT.match(rel):
+            from traceability.models import Lot
+            from traceability.services import generer_qr_image
+
+            lot = Lot.objects.filter(uuid_public=m['uuid'], deleted_at__isnull=True).first()
+            if lot is None:
+                return False
+            generer_qr_image(lot)
+            return True
+        if m := _QR_OFFRE.match(rel):
+            from types import SimpleNamespace
+
+            from django.db import connection
+
+            from pnlf_platform.services import generer_qr_offre
+            from traceability.db_utils import column_exists
+
+            if not column_exists('offres_demandes', 'uuid_public'):
+                return False
+            with connection.cursor() as cur:
+                cur.execute('SELECT qr_payload FROM offres_demandes WHERE uuid_public = %s', [m['uuid']])
+                ligne = cur.fetchone()
+            if ligne is None:
+                return False
+            generer_qr_offre(SimpleNamespace(uuid_public=m['uuid'], qr_payload=ligne[0]))
+            return True
+    except Exception:
+        logger.exception('Régénération du QR %s impossible', rel)
+    return False
+
+
 def _absolute_file(rel: str) -> Path:
     root = Path(settings.MEDIA_ROOT).resolve()
     full = (root / rel).resolve()
     if not str(full).startswith(str(root)):
         raise Http404('Fichier introuvable.')
-    if not full.is_file() and not media_store.assurer_local(full.relative_to(root).as_posix()):
+    if full.is_file():
+        return full
+    rel_norm = full.relative_to(root).as_posix()
+    if not media_store.assurer_local(rel_norm) and not (_regenerer_qr(rel_norm) and full.is_file()):
         raise Http404('Fichier introuvable.')
     return full
 
