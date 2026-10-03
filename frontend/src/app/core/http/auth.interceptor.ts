@@ -20,7 +20,6 @@ const PUBLIC_PATHS = [
   '/verify/',
   '/public/',
   '/accounts/password-reset',
-  '/inscription',
 ];
 
 /** Code renvoyé par l'API tant que le mot de passe provisoire n'a pas été changé. */
@@ -29,8 +28,10 @@ const PASSWORD_CHANGE_REQUIRED = 'password_change_required';
 let isRefreshing = false;
 const refreshedToken$ = new BehaviorSubject<string | null>(null);
 
+/** Comparaison sur le début du chemin : « /rapports/inscriptions/ » n'est pas public. */
 function isPublicPath(url: string): boolean {
-  return PUBLIC_PATHS.some((p) => url.includes(p));
+  const chemin = url.startsWith(environment.apiUrl) ? url.slice(environment.apiUrl.length) : url;
+  return PUBLIC_PATHS.some((p) => chemin.startsWith(p));
 }
 
 function isApiRequest(url: string): boolean {
