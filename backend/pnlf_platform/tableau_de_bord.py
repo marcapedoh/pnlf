@@ -100,33 +100,24 @@ def certifications_par_statut(qs) -> dict:
 
 def messages_non_lus(user) -> dict:
     """Même calcul que le badge de la messagerie (messages reçus après la dernière lecture)."""
-    from pnlf_platform.models import ConversationParticipantMeta, Message
+    from pnlf_platform.chat import non_lus_par_conversation
     from pnlf_platform.views import _conversation_queryset
 
     conv_ids = list(_conversation_queryset(user).values_list('id', flat=True))
-    lectures = dict(
-        ConversationParticipantMeta.objects.filter(conversation_id__in=conv_ids, utilisateur_id=user.id)
-        .values_list('conversation_id', 'last_read_at')
-    )
-    total = 0
-    fils = 0
-    for conv_id in conv_ids:
-        qs = Message.objects.filter(conversation_id=conv_id).exclude(expediteur_id=user.id)
-        if lectures.get(conv_id):
-            qs = qs.filter(created_at__gt=lectures[conv_id])
-        n = qs.count()
-        total += n
-        fils += 1 if n else 0
-    return {'non_lus': total, 'conversations_non_lues': fils, 'conversations': len(conv_ids)}
+    non_lus = non_lus_par_conversation(user.id, conv_ids)
+    return {
+        'non_lus': sum(non_lus.values()),
+        'conversations_non_lues': sum(1 for n in non_lus.values() if n),
+        'conversations': len(conv_ids),
+    }
 
 
 def annonces_de(user) -> dict:
-    from pnlf_platform.models import OffreDemande
-    from pnlf_platform.offre_statut import ids_par_statut
+    from pnlf_platform.offre_statut import statuts_par_offre_auteur
 
-    mes_ids = set(str(i) for i in OffreDemande.objects.filter(auteur_id=user.id).values_list('id', flat=True))
-    compteurs = {s: len(mes_ids.intersection(ids_par_statut(s))) for s in STATUTS_ANNONCE} if mes_ids else {}
-    return {'total': len(mes_ids), 'par_statut': _repartition(compteurs, STATUTS_ANNONCE, LIBELLES_ANNONCE)}
+    statuts = list(statuts_par_offre_auteur(user.id).values())
+    compteurs = {s: statuts.count(s) for s in STATUTS_ANNONCE}
+    return {'total': len(statuts), 'par_statut': _repartition(compteurs, STATUTS_ANNONCE, LIBELLES_ANNONCE)}
 
 
 def annonces_marche() -> dict:

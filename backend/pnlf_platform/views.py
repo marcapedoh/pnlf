@@ -47,6 +47,7 @@ from pnlf_platform.chat import (
     is_admin_superviseur,
     is_staff_chat,
     nom_utilisateur,
+    non_lus_par_conversation,
     photos_utilisateurs,
     profils_utilisateurs,
 )
@@ -1001,22 +1002,7 @@ def _hydrate_conversation_users(serializer, conversations, request=None):
     serializer.context['_photos_by_user'] = photos_utilisateurs(ids, req)
 
     me = getattr(getattr(req, 'user', None), 'id', None)
-    unread = {}
-    if me and conv_ids:
-        metas = {
-            str(m.conversation_id): m
-            for m in ConversationParticipantMeta.objects.filter(
-                conversation_id__in=conv_ids, utilisateur_id=me,
-            )
-        }
-        for conv in conversations:
-            meta = metas.get(str(conv.id))
-            since = meta.last_read_at if meta and meta.last_read_at else None
-            qs = Message.objects.filter(conversation_id=conv.id).exclude(expediteur_id=me)
-            if since:
-                qs = qs.filter(created_at__gt=since)
-            unread[str(conv.id)] = qs.count()
-    serializer.context['_unread_by_conv'] = unread
+    serializer.context['_unread_by_conv'] = non_lus_par_conversation(me, conv_ids) if me else {}
 
 
 def _hydrate_message_users(serializer, messages, conversation=None, request=None):
@@ -1438,17 +1424,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='non-lus')
     def non_lus(self, request):
-        total = 0
-        for conv in _conversation_queryset(request.user):
-            meta = ConversationParticipantMeta.objects.filter(
-                conversation_id=conv.id, utilisateur_id=request.user.id,
-            ).first()
-            since = meta.last_read_at if meta and meta.last_read_at else None
-            qs = Message.objects.filter(conversation_id=conv.id).exclude(expediteur_id=request.user.id)
-            if since:
-                qs = qs.filter(created_at__gt=since)
-            total += qs.count()
-        return Response({'count': total})
+        conv_ids = _conversation_queryset(request.user).values_list('id', flat=True)
+        return Response({'count': sum(non_lus_par_conversation(request.user.id, conv_ids).values())})
 
     @action(detail=False, methods=['get'], url_path='membres-coop')
     def membres_coop(self, request):
@@ -1771,7 +1748,7 @@ class AnnuaireView(APIView):
         if liste != 'cooperatives':
             qs_prod = Producteur.objects.filter(
                 deleted_at__isnull=True, statut='ACTIF',
-            ).select_related('province', 'cooperative')
+            ).select_related('province', 'departement', 'village', 'cooperative')
             if province:
                 qs_prod = qs_prod.filter(province_id=province)
             if produit:

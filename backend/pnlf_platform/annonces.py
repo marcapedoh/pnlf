@@ -99,6 +99,43 @@ def _producteur_certifie(producteur_id) -> bool:
     ).exists()
 
 
+def _profil(user, request, *, coop=None, fiche=None, colonnes: dict | None = None, certifie: bool = False):
+    from config.media_views import fiche_publiable
+    from traceability.services import photo_url
+
+    if user is None:
+        return None
+    profil = {
+        'nom': user.get_full_name() or 'Membre de la plateforme',
+        'type_acteur': LIBELLES_ROLE_PUBLIC.get(user.role, 'Membre'),
+        'province': None,
+        'photo_url': photo_url('utilisateurs', user.id, request),
+        'membre_depuis': user.created_at.date().isoformat() if user.created_at else None,
+        'certifie': False,
+        'fiche_publique_id': None,
+    }
+    if user.role == Utilisateur.Role.COOPERATIVE:
+        if coop is not None:
+            profil['nom'] = coop.nom
+            profil['province'] = coop.province.nom if coop.province_id else None
+            profil['photo_url'] = profil['photo_url'] or photo_url(
+                'cooperatives', coop.id, request, fiche_publique=fiche_publiable('cooperative', coop),
+            )
+    elif user.role == Utilisateur.Role.PRODUCTEUR:
+        if fiche is not None:
+            colonnes = colonnes or {}
+            type_acteur = colonnes.get('type_acteur') or 'PRODUCTEUR'
+            profil['type_acteur'] = LIBELLES_TYPE_ACTEUR.get(str(type_acteur), 'Producteur')
+            profil['province'] = fiche.province.nom if fiche.province_id else None
+            profil['photo_url'] = profil['photo_url'] or photo_url(
+                'producteurs', fiche.id, request, fiche_publique=fiche_publiable('producteur', fiche),
+            )
+            profil['certifie'] = certifie
+            if fiche.statut == 'ACTIF' and colonnes.get('visible_public') is not False:
+                profil['fiche_publique_id'] = str(fiche.id)
+    return profil
+
+
 def profil_auteur(auteur_id, request=None, cache: dict | None = None) -> dict | None:
     """Informations PUBLIQUES de l'auteur d'une annonce (aucune coordonnée, aucun identifiant interne)."""
     cle = str(auteur_id)
@@ -106,44 +143,68 @@ def profil_auteur(auteur_id, request=None, cache: dict | None = None) -> dict | 
         return cache[cle]
     from traceability.db_utils import get_optional_column
     from traceability.models import Cooperative, Producteur
-    from traceability.services import photo_url
 
     user = Utilisateur.objects.filter(pk=auteur_id).first()
-    if user is None:
-        profil = None
-    else:
-        profil = {
-            'nom': user.get_full_name() or 'Membre de la plateforme',
-            'type_acteur': LIBELLES_ROLE_PUBLIC.get(user.role, 'Membre'),
-            'province': None,
-            'photo_url': photo_url('utilisateurs', user.id, request),
-            'membre_depuis': user.created_at.date().isoformat() if user.created_at else None,
-            'certifie': False,
-            'fiche_publique_id': None,
-        }
-        if user.role == Utilisateur.Role.COOPERATIVE:
-            coop = Cooperative.objects.select_related('province').filter(utilisateur_id=user.id).first()
-            if coop is not None:
-                profil['nom'] = coop.nom
-                profil['province'] = coop.province.nom if coop.province_id else None
-                profil['photo_url'] = profil['photo_url'] or photo_url('cooperatives', coop.id, request)
-        elif user.role == Utilisateur.Role.PRODUCTEUR:
-            fiche = (
-                Producteur.objects.select_related('province')
-                .filter(utilisateur_id=user.id, deleted_at__isnull=True).first()
-            )
-            if fiche is not None:
-                type_acteur = get_optional_column('producteurs', 'type_acteur', fiche.id) or 'PRODUCTEUR'
-                profil['type_acteur'] = LIBELLES_TYPE_ACTEUR.get(str(type_acteur), 'Producteur')
-                profil['province'] = fiche.province.nom if fiche.province_id else None
-                profil['photo_url'] = profil['photo_url'] or photo_url('producteurs', fiche.id, request)
-                profil['certifie'] = _producteur_certifie(fiche.id)
-                visible = get_optional_column('producteurs', 'visible_public', fiche.id)
-                if fiche.statut == 'ACTIF' and visible is not False:
-                    profil['fiche_publique_id'] = str(fiche.id)
+    coop = fiche = None
+    colonnes, certifie = {}, False
+    if user is not None and user.role == Utilisateur.Role.COOPERATIVE:
+        coop = Cooperative.objects.select_related('province').filter(utilisateur_id=user.id).first()
+    elif user is not None and user.role == Utilisateur.Role.PRODUCTEUR:
+        fiche = (
+            Producteur.objects.select_related('province')
+            .filter(utilisateur_id=user.id, deleted_at__isnull=True).first()
+        )
+        if fiche is not None:
+            colonnes = {
+                colonne: get_optional_column('producteurs', colonne, fiche.id)
+                for colonne in ('type_acteur', 'visible_public')
+            }
+            certifie = _producteur_certifie(fiche.id)
+    profil = _profil(user, request, coop=coop, fiche=fiche, colonnes=colonnes, certifie=certifie)
     if cache is not None:
         cache[cle] = profil
     return profil
+
+
+def precharger_profils_auteurs(auteur_ids, request=None, cache: dict | None = None) -> dict:
+    """Profils publics (et comptes pour ``contact_auteur``) de plusieurs auteurs en quelques requêtes."""
+    from django.db.models import Q
+
+    from traceability.db_utils import get_optional_columns
+    from traceability.models import Certification, Cooperative, Producteur
+
+    cache = {} if cache is None else cache
+    manquants = list(dict.fromkeys(str(a) for a in auteur_ids if str(a) not in cache))
+    if not manquants:
+        return cache
+    users = {str(u.id): u for u in Utilisateur.objects.filter(pk__in=manquants)}
+    coops, fiches = {}, {}
+    comptes_coop = [u.id for u in users.values() if u.role == Utilisateur.Role.COOPERATIVE]
+    if comptes_coop:
+        for coop in Cooperative.objects.select_related('province').filter(utilisateur_id__in=comptes_coop):
+            coops.setdefault(str(coop.utilisateur_id), coop)
+    comptes_producteur = [u.id for u in users.values() if u.role == Utilisateur.Role.PRODUCTEUR]
+    if comptes_producteur:
+        for fiche in Producteur.objects.select_related('province').filter(
+            utilisateur_id__in=comptes_producteur, deleted_at__isnull=True,
+        ):
+            fiches.setdefault(str(fiche.utilisateur_id), fiche)
+    fiche_ids = [f.id for f in fiches.values()]
+    colonnes = get_optional_columns('producteurs', ('type_acteur', 'visible_public'), fiche_ids)
+    certifiees = set(Certification.objects.filter(
+        Q(date_expiration__isnull=True) | Q(date_expiration__gte=timezone.localdate()),
+        producteur_id__in=fiche_ids, statut='OBTENUE',
+    ).values_list('producteur_id', flat=True)) if fiche_ids else set()
+    for cle in manquants:
+        user = users.get(cle)
+        fiche = fiches.get(cle)
+        cache[cle] = _profil(
+            user, request, coop=coops.get(cle), fiche=fiche,
+            colonnes=colonnes.get(str(fiche.id)) if fiche else None,
+            certifie=bool(fiche and fiche.id in certifiees),
+        )
+        cache.setdefault(f'contact:{cle}', user)
+    return cache
 
 
 def contact_auteur(offre, details, cache: dict | None = None) -> dict:

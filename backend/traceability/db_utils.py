@@ -42,6 +42,26 @@ def get_optional_column(table: str, column: str, pk, default=None):
         return row[0] if row and row[0] is not None else default
 
 
+def get_optional_columns(table: str, columns, pks) -> dict[str, dict]:
+    """Lecture groupée de colonnes optionnelles : ``{str(id): {colonne: valeur}}`` pour chaque id demandé.
+
+    Les colonnes non déployées sont absentes des dictionnaires (même repli que ``get_optional_column``).
+    """
+    ids = list(dict.fromkeys(str(pk) for pk in pks))
+    resultat: dict[str, dict] = {pk: {} for pk in ids}
+    presentes = [c for c in columns if column_exists(table, c)]
+    if not ids or not presentes:
+        return resultat
+    with connection.cursor() as cur:
+        cur.execute(
+            f'SELECT id::text, {", ".join(presentes)} FROM {table} WHERE id = ANY(%s::uuid[])',  # noqa: S608
+            [ids],
+        )
+        for row in cur.fetchall():
+            resultat[row[0]] = dict(zip(presentes, row[1:]))
+    return resultat
+
+
 def set_optional_column(table: str, column: str, pk, value) -> bool:
     """Écrit une colonne pas forcément déployée. Retourne False si la migration n'est pas encore appliquée."""
     if not column_exists(table, column):

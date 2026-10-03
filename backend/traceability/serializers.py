@@ -1,6 +1,8 @@
 import re
 from datetime import timedelta
 
+from django.db import models
+from django.db.models.expressions import RawSQL
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
@@ -13,7 +15,7 @@ from config.validators import (
     valider_quantite_positive,
 )
 
-from .db_utils import get_optional_column, set_optional_column
+from .db_utils import get_optional_column, get_optional_columns, set_optional_column
 from .models import (
     CategorieProduit,
     Certification,
@@ -41,9 +43,11 @@ from .services import photos_urls_lot as _photos_urls_lot
 UNITE_MESSAGE = 'Unité inconnue : « {input} ». Unités acceptées : ' + ', '.join(UNITES_MESURE) + '.'
 
 
-def _documents_administratifs(entite_type: str, entite_id, request=None) -> list[dict]:
+def _documents_administratifs(entite_type: str, entite_id, request=None, context: dict | None = None) -> list[dict]:
     """Documents administratifs joints (CNI, fiche circuit, agrément Nagoya…), le plus récent par type."""
-    qs = DocumentInscription.objects.filter(entite_type=entite_type, entite_id=entite_id)
+    qs = (context or {}).get('_documents_precharges', {}).get((entite_type, entite_id))
+    if qs is None:
+        qs = DocumentInscription.objects.filter(entite_type=entite_type, entite_id=entite_id)
     documents, vus = [], set()
     for doc in qs:
         if doc.type_document in vus:
@@ -60,6 +64,30 @@ def _documents_administratifs(entite_type: str, entite_id, request=None) -> list
             'created_at': doc.created_at,
         })
     return documents
+
+
+def _precharger_documents(entite_type: str, entite_ids, context: dict) -> None:
+    """Documents administratifs de toute une page de fiches en une requête (ordre conservé)."""
+    precharges = context.setdefault('_documents_precharges', {})
+    manquants = [i for i in entite_ids if (entite_type, i) not in precharges]
+    if not manquants:
+        return
+    for entite_id in manquants:
+        precharges[(entite_type, entite_id)] = []
+    # À date égale, l'ordre physique (ctid) reproduit celui de la lecture fiche par fiche.
+    for doc in DocumentInscription.objects.filter(
+        entite_type=entite_type, entite_id__in=manquants,
+    ).order_by('-created_at', RawSQL('ctid', ()).asc()):
+        precharges[(entite_type, doc.entite_id)].append(doc)
+
+
+class ListePrechargeeSerializer(serializers.ListSerializer):
+    """Liste dont l'enfant précharge en lot (``precharger``) ce qu'il lirait sinon objet par objet."""
+
+    def to_representation(self, data):
+        items = list(data.all() if isinstance(data, models.manager.BaseManager) else data)
+        self.child.precharger(items)
+        return [self.child.to_representation(item) for item in items]
 
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -124,6 +152,7 @@ class CooperativeSerializer(serializers.ModelSerializer):
             'mon_adhesion', 'mon_invitation', 'created_at', 'updated_at',
         )
         read_only_fields = ('created_at', 'updated_at', 'statut', 'utilisateur_id', 'actif')
+        list_serializer_class = ListePrechargeeSerializer
         extra_kwargs = {
             'code': {
                 'required': False,
@@ -148,17 +177,26 @@ class CooperativeSerializer(serializers.ModelSerializer):
             attrs.pop('code', None)
         return attrs
 
+    def precharger(self, cooperatives) -> None:
+        _precharger_documents('COOPERATIVE', [c.id for c in cooperatives if self._lit_documents(c)], self.context)
+
     def get_photo_url(self, obj):
-        return _photo_url('cooperatives', obj.id, self.context.get('request'))
+        from config.media_views import fiche_publiable
+
+        return _photo_url(
+            'cooperatives', obj.id, self.context.get('request'),
+            fiche_publique=fiche_publiable('cooperative', obj),
+        )
+
+    def _lit_documents(self, obj) -> bool:
+        user = getattr(self.context.get('request'), 'user', None)
+        titulaire = bool(obj.utilisateur_id and obj.utilisateur_id == getattr(user, 'id', None))
+        return getattr(user, 'role', None) in ('ADMINISTRATEUR', 'AGENT_MINISTERE', 'AGENT_FORESTIER') or titulaire
 
     def get_documents(self, obj):
-        request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        role = getattr(user, 'role', None)
-        titulaire = bool(obj.utilisateur_id and obj.utilisateur_id == getattr(user, 'id', None))
-        if role not in ('ADMINISTRATEUR', 'AGENT_MINISTERE', 'AGENT_FORESTIER') and not titulaire:
+        if not self._lit_documents(obj):
             return []
-        return _documents_administratifs('COOPERATIVE', obj.id, request)
+        return _documents_administratifs('COOPERATIVE', obj.id, self.context.get('request'), self.context)
 
     def _situation_producteur(self):
         """Fiche du producteur connecté, ses demandes et invitations en attente (calcul unique par réponse)."""
@@ -391,6 +429,24 @@ class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
         read_only_fields = (
             'created_at', 'updated_at', 'utilisateur_id', 'valide_par_id', 'valide_at', 'statut',
         )
+        list_serializer_class = ListePrechargeeSerializer
+
+    def precharger(self, producteurs) -> None:
+        """Colonnes optionnelles, produits exploités et documents de toute la page en quelques requêtes."""
+        precharges = self.context.setdefault('_producteurs_precharges', {})
+        nouveaux = [p for p in producteurs if p.id not in precharges]
+        if not nouveaux:
+            return
+        ids = [p.id for p in nouveaux]
+        colonnes = get_optional_columns('producteurs', ('type_acteur', 'visible_public'), ids)
+        for pid in ids:
+            precharges[pid] = {'colonnes': colonnes.get(str(pid), {}), 'produits': []}
+        for producteur_id, pid, nom in (
+            ProducteurProduit.objects.filter(producteur_id__in=ids)
+            .order_by('-principal', 'produit__nom').values_list('producteur_id', 'produit_id', 'produit__nom')
+        ):
+            precharges[producteur_id]['produits'].append({'id': str(pid), 'nom': nom})
+        _precharger_documents('PRODUCTEUR', [p.id for p in nouveaux if self._peut_lire_prives(p)], self.context)
 
     def _demandeur(self):
         request = self.context.get('request')
@@ -525,26 +581,34 @@ class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data['type_acteur'] = (
-            get_optional_column('producteurs', 'type_acteur', instance.id, default='PRODUCTEUR')
-        )
-        data['visible_public'] = bool(
-            get_optional_column('producteurs', 'visible_public', instance.id, default=True)
-        )
+        precharge = self.context.get('_producteurs_precharges', {}).get(instance.id)
+        if precharge is not None:
+            colonnes = precharge['colonnes']
+            type_acteur = colonnes.get('type_acteur')
+            visible_public = colonnes.get('visible_public')
+            data['type_acteur'] = 'PRODUCTEUR' if type_acteur is None else type_acteur
+            data['visible_public'] = bool(True if visible_public is None else visible_public)
+            data['produits'] = list(precharge['produits'])
+        else:
+            data['type_acteur'] = (
+                get_optional_column('producteurs', 'type_acteur', instance.id, default='PRODUCTEUR')
+            )
+            data['visible_public'] = bool(
+                get_optional_column('producteurs', 'visible_public', instance.id, default=True)
+            )
+            data['produits'] = [
+                {'id': str(pid), 'nom': nom}
+                for pid, nom in ProducteurProduit.objects.filter(producteur_id=instance.id)
+                .order_by('-principal', 'produit__nom').values_list('produit_id', 'produit__nom')
+            ]
         request = self.context.get('request')
-        data['photo_url'] = _photo_url('producteurs', instance.id, request)
-        data['produits'] = [
-            {'id': str(pid), 'nom': nom}
-            for pid, nom in ProducteurProduit.objects.filter(producteur_id=instance.id)
-            .order_by('-principal', 'produit__nom').values_list('produit_id', 'produit__nom')
-        ]
         if self._peut_lire_prives(instance):
             data['type_piece_identite_libelle'] = LIBELLES_PIECE_IDENTITE.get(
                 instance.type_piece_identite, instance.type_piece_identite,
             )
             # Documents administratifs (CNI, fiche circuit, agrément Nagoya…) : agents,
             # titulaire de la fiche et coopérative de rattachement.
-            data['documents'] = _documents_administratifs('PRODUCTEUR', instance.id, request)
+            data['documents'] = _documents_administratifs('PRODUCTEUR', instance.id, request, self.context)
         else:
             for key in CHAMPS_PRIVES_PRODUCTEUR:
                 data.pop(key, None)
@@ -552,9 +616,12 @@ class ProducteurSerializer(CoordonneesGabonMixin, serializers.ModelSerializer):
         return data
 
     def get_photo_url(self, obj):
-        # Valeur définitive calculée dans to_representation ; requis car photo_url est
-        # déclaré comme SerializerMethodField (aucune colonne modèle correspondante).
-        return _photo_url('producteurs', obj.id, self.context.get('request'))
+        from config.media_views import fiche_publiable
+
+        return _photo_url(
+            'producteurs', obj.id, self.context.get('request'),
+            fiche_publique=fiche_publiable('producteur', obj),
+        )
 
     def get_documents(self, obj):
         # Valeur définitive calculée dans to_representation (nécessite le contexte de rôle).

@@ -79,8 +79,24 @@ def get_workflow(offre_id) -> str | None:
         return row[0] if row else None
 
 
-def read_statut(offre) -> str:
-    workflow = get_workflow(offre.id)
+def get_workflows(offre_ids) -> dict[str, str | None]:
+    """Statut workflow de plusieurs annonces en une requête (``None`` si aucune ligne)."""
+    ids = list(dict.fromkeys(str(i) for i in offre_ids))
+    resultat: dict[str, str | None] = dict.fromkeys(ids)
+    if ids:
+        with connection.cursor() as cur:
+            cur.execute(
+                'SELECT offre_id::text, statut FROM offres_statut_workflow WHERE offre_id = ANY(%s::uuid[])',
+                [ids],
+            )
+            resultat.update(cur.fetchall())
+    return resultat
+
+
+def read_statut(offre, workflows: dict | None = None) -> str:
+    """``workflows`` : résultat préchargé de ``get_workflows`` (listes), sinon lecture unitaire."""
+    cle = str(offre.id)
+    workflow = workflows[cle] if workflows is not None and cle in workflows else get_workflow(offre.id)
     if workflow:
         return workflow
     return offre.statut
@@ -98,12 +114,41 @@ def write_statut(offre, statut: str) -> None:
             raise
 
 
+_WORKFLOW_PRESENT = False
+
+
+def _workflow_present() -> bool:
+    """Table workflow créée ? (seule la présence est mémorisée : elle peut apparaître en cours de vie)."""
+    global _WORKFLOW_PRESENT
+    if not _WORKFLOW_PRESENT:
+        with connection.cursor() as cur:
+            cur.execute("SELECT to_regclass('offres_statut_workflow') IS NOT NULL")
+            _WORKFLOW_PRESENT = bool(cur.fetchone()[0])
+    return _WORKFLOW_PRESENT
+
+
+def statuts_par_offre_auteur(auteur_id) -> dict[str, str]:
+    """Statut métier (workflow prioritaire) de chaque annonce de l'auteur, en une requête."""
+    with connection.cursor() as cur:
+        if _workflow_present():
+            cur.execute(
+                """
+                SELECT o.id::text, COALESCE(w.statut, o.statut::text)
+                FROM offres_demandes o
+                LEFT JOIN offres_statut_workflow w ON w.offre_id = o.id
+                WHERE o.auteur_id = %s
+                """,
+                [str(auteur_id)],
+            )
+        else:
+            cur.execute('SELECT id::text, statut::text FROM offres_demandes WHERE auteur_id = %s', [str(auteur_id)])
+        return dict(cur.fetchall())
+
+
 def ids_par_statut(statut: str) -> list[str]:
     """Identifiants des annonces dont le statut métier (workflow prioritaire) vaut ``statut``."""
     with connection.cursor() as cur:
-        cur.execute("SELECT to_regclass('offres_statut_workflow') IS NOT NULL")
-        workflow = cur.fetchone()[0]
-        if workflow:
+        if _workflow_present():
             cur.execute(
                 """
                 SELECT o.id::text

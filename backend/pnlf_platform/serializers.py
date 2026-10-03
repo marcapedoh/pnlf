@@ -9,6 +9,7 @@ from pnlf_platform.annonces import (
     details_de,
     enregistrer_details,
     moderation_visible,
+    precharger_profils_auteurs,
     profil_auteur,
 )
 from pnlf_platform.models import (
@@ -32,6 +33,17 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 UNITES_MESURE = ('KG', 'G', 'LITRE', 'ML', 'UNITE', 'BOTTE', 'SAC', 'M3', 'METRE')
+
+
+class OffreDemandeListSerializer(serializers.ListSerializer):
+    """Précharge en lot ce que chaque annonce lirait sinon une par une (statut, colonnes, auteurs, libellés)."""
+
+    def to_representation(self, data):
+        from django.db import models
+
+        offres = list(data.all() if isinstance(data, models.manager.BaseManager) else data)
+        self.child.precharger(offres)
+        return [self.child.to_representation(offre) for offre in offres]
 
 
 class OffreDemandeSerializer(serializers.ModelSerializer):
@@ -111,12 +123,50 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
         read_only_fields = (
             'auteur_id', 'statut', 'uuid_public', 'created_at', 'updated_at',
         )
+        list_serializer_class = OffreDemandeListSerializer
         extra_kwargs = {
             'titre': {'error_messages': {'max_length': 'Le titre est trop long (200 caractères maximum).'}},
         }
 
     def _cache(self) -> dict:
         return self.context.setdefault('_cache_offres', {})
+
+    def precharger(self, offres) -> None:
+        from pnlf_platform.offre_statut import get_workflows
+        from traceability.db_utils import get_optional_columns
+        from traceability.models import CategorieProduit, Produit, Province
+
+        if not offres:
+            return
+        cache = self._cache()
+        ids = [o.id for o in offres]
+        self.context.setdefault('_workflows_offres', {}).update(get_workflows(ids))
+        self.context.setdefault('_colonnes_offres', {}).update(
+            get_optional_columns('offres_demandes', ('uuid_public', 'qr_image_path'), ids),
+        )
+        libelles = (
+            ('produit', Produit, 'nom', {o.produit_id for o in offres}),
+            ('province', Province, 'nom', {o.province_id for o in offres if o.province_id}),
+            ('cat', CategorieProduit, 'libelle', {
+                d.categorie_id for d in map(details_de, offres) if d is not None and d.categorie_id
+            }),
+        )
+        for prefixe, modele, champ, valeurs in libelles:
+            manquants = [v for v in valeurs if f'{prefixe}:{v}' not in cache]
+            if manquants:
+                trouves = dict(modele.objects.filter(pk__in=manquants).values_list('pk', champ))
+                for valeur in manquants:
+                    cache[f'{prefixe}:{valeur}'] = trouves.get(valeur)
+        precharger_profils_auteurs({o.auteur_id for o in offres}, self.context.get('request'), cache)
+
+    def _colonne(self, obj, colonne: str):
+        from traceability.db_utils import get_optional_column
+
+        precharges = self.context.get('_colonnes_offres', {})
+        cle = str(obj.id)
+        if cle in precharges:
+            return precharges[cle].get(colonne)
+        return get_optional_column('offres_demandes', colonne, obj.id)
 
     def validate_categorie_id(self, valeur):
         from traceability.models import CategorieProduit
@@ -234,7 +284,7 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
         from traceability.models import CategorieProduit
 
         data = super().to_representation(instance)
-        data['statut'] = read_statut(instance)
+        data['statut'] = read_statut(instance, self.context.get('_workflows_offres'))
         details = details_de(instance)
         for champ in CHAMPS_DETAILS:
             valeur = getattr(details, champ, None) if details else None
@@ -296,17 +346,15 @@ class OffreDemandeSerializer(serializers.ModelSerializer):
         return urls
 
     def get_qr_image_url(self, obj):
-        from traceability.db_utils import get_optional_column
         from config.media_views import build_media_url
 
-        path = get_optional_column('offres_demandes', 'qr_image_path', obj.id)
+        path = self._colonne(obj, 'qr_image_path')
         if not path:
             return None
         return build_media_url(path, self.context.get('request'))
 
     def get_uuid_public(self, obj):
-        from traceability.db_utils import get_optional_column
-        value = get_optional_column('offres_demandes', 'uuid_public', obj.id)
+        value = self._colonne(obj, 'uuid_public')
         return str(value) if value else None
 
 

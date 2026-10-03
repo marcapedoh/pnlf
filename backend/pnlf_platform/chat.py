@@ -150,32 +150,43 @@ def nom_utilisateur(user: Utilisateur | None) -> str:
     return f'{user.prenoms} {user.nom}'.strip() or user.email
 
 
-def _media_url(rel: str, request=None) -> str:
+def _media_url(rel: str, request=None, *, fiche_publique: bool | None = None) -> str:
     from config.media_views import build_media_url
-    return build_media_url(rel, request) or ''
+    return build_media_url(rel, request, fiche_publique=fiche_publique) or ''
 
 
-def photo_url_utilisateur(utilisateur_id, request=None) -> str | None:
-    """Résout la photo de profil liée à un compte (producteur, coop ou acheteur)."""
+def photo_url_utilisateur(utilisateur_id, request=None, *, fiches: dict | None = None,
+                          coops: dict | None = None) -> str | None:
+    """Résout la photo de profil liée à un compte (producteur, coop ou acheteur).
+
+    ``fiches`` / ``coops`` : fiches préchargées par identifiant de compte (voir ``photos_utilisateurs``).
+    """
     from pathlib import Path as _Path
 
     from django.conf import settings as _settings
+    from config.media_views import fiche_publiable
     from traceability.models import Cooperative, Producteur
 
     uid = str(utilisateur_id)
     root = _Path(_settings.MEDIA_ROOT)
 
-    prod = Producteur.objects.filter(utilisateur_id=utilisateur_id, deleted_at__isnull=True).first()
+    if fiches is not None:
+        prod = fiches.get(uid)
+    else:
+        prod = Producteur.objects.filter(utilisateur_id=utilisateur_id, deleted_at__isnull=True).first()
     if prod:
         rel = f'photos/producteurs/{prod.id}.jpg'
         if (root / rel).exists():
-            return _media_url(rel, request)
+            return _media_url(rel, request, fiche_publique=fiche_publiable('producteur', prod))
 
-    coop = Cooperative.objects.filter(utilisateur_id=utilisateur_id).first()
+    if coops is not None:
+        coop = coops.get(uid)
+    else:
+        coop = Cooperative.objects.filter(utilisateur_id=utilisateur_id).first()
     if coop:
         rel = f'photos/cooperatives/{coop.id}.jpg'
         if (root / rel).exists():
-            return _media_url(rel, request)
+            return _media_url(rel, request, fiche_publique=fiche_publiable('cooperative', coop))
 
     for folder in ('acheteurs', 'utilisateurs'):
         rel = f'photos/{folder}/{uid}.jpg'
@@ -185,7 +196,39 @@ def photo_url_utilisateur(utilisateur_id, request=None) -> str | None:
 
 
 def photos_utilisateurs(utilisateur_ids, request=None) -> dict[str, str | None]:
-    return {str(uid): photo_url_utilisateur(uid, request) for uid in utilisateur_ids}
+    from traceability.models import Cooperative, Producteur
+
+    ids = list(dict.fromkeys(utilisateur_ids))
+    if not ids:
+        return {}
+    fiches: dict = {}
+    for prod in Producteur.objects.filter(utilisateur_id__in=ids, deleted_at__isnull=True):
+        fiches.setdefault(str(prod.utilisateur_id), prod)
+    coops: dict = {}
+    for coop in Cooperative.objects.filter(utilisateur_id__in=ids):
+        coops.setdefault(str(coop.utilisateur_id), coop)
+    return {str(uid): photo_url_utilisateur(uid, request, fiches=fiches, coops=coops) for uid in ids}
+
+
+def non_lus_par_conversation(utilisateur_id, conversation_ids) -> dict[str, int]:
+    """Messages reçus après la dernière lecture, par fil, en une requête (fils sans non-lu absents)."""
+    from django.db.models import Count, F, OuterRef, Q, Subquery
+
+    from pnlf_platform.models import ConversationParticipantMeta, Message
+
+    ids = list(conversation_ids)
+    if not ids:
+        return {}
+    lecture = ConversationParticipantMeta.objects.filter(
+        conversation_id=OuterRef('conversation_id'), utilisateur_id=utilisateur_id,
+    ).values('last_read_at')[:1]
+    lignes = (
+        Message.objects.filter(conversation_id__in=ids).exclude(expediteur_id=utilisateur_id)
+        .annotate(derniere_lecture=Subquery(lecture))
+        .filter(Q(derniere_lecture__isnull=True) | Q(created_at__gt=F('derniere_lecture')))
+        .order_by().values('conversation_id').annotate(n=Count('id'))
+    )
+    return {str(ligne['conversation_id']): ligne['n'] for ligne in lignes}
 
 
 def profils_utilisateurs(users) -> dict[str, dict]:

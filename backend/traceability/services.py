@@ -443,13 +443,14 @@ def chemin_photo(sous_dossier: str, entite_id, suffixe: str = '') -> Path:
     return Path(settings.MEDIA_ROOT) / 'photos' / sous_dossier / f'{entite_id}{suffixe}.jpg'
 
 
-def photo_url(sous_dossier: str, entite_id, request=None, suffixe: str = '') -> str | None:
+def photo_url(sous_dossier: str, entite_id, request=None, suffixe: str = '', *,
+              fiche_publique: bool | None = None) -> str | None:
     """Résout l'URL d'une photo par convention de nommage (aucune colonne BDD requise)."""
     if not chemin_photo(sous_dossier, entite_id, suffixe).exists():
         return None
     rel = f'photos/{sous_dossier}/{entite_id}{suffixe}.jpg'
     from config.media_views import build_media_url
-    return build_media_url(rel, request)
+    return build_media_url(rel, request, fiche_publique=fiche_publique)
 
 
 DOCUMENT_MAX_SIZE_BYTES = 8 * 1024 * 1024

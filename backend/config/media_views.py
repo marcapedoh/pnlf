@@ -84,17 +84,21 @@ def _fiche_photo(rel: str):
     return 'cooperative', Cooperative.objects.filter(pk=m.group(2)).first()
 
 
-def photo_fiche_publique(rel: str) -> bool:
-    """Vrai si ``rel`` n'est pas une photo de fiche, ou si la fiche est publiable."""
-    trouve = _fiche_photo(rel)
-    if trouve is None:
-        return True
-    genre, fiche = trouve
+def fiche_publiable(genre: str, fiche) -> bool:
+    """Fiche producteur / coopérative validée (ACTIF) et non retirée : sa photo est publique."""
     if fiche is None:
         return False
     if genre == 'producteur':
         return fiche.statut == 'ACTIF' and fiche.deleted_at is None
     return fiche.statut == 'ACTIF' and fiche.actif
+
+
+def photo_fiche_publique(rel: str) -> bool:
+    """Vrai si ``rel`` n'est pas une photo de fiche, ou si la fiche est publiable."""
+    trouve = _fiche_photo(rel)
+    if trouve is None:
+        return True
+    return fiche_publiable(*trouve)
 
 
 def _peut_voir_photo_fiche(user, rel: str) -> bool:
@@ -114,14 +118,18 @@ def _peut_voir_photo_fiche(user, rel: str) -> bool:
     return fiche.utilisateur_id == user.id
 
 
-def build_media_url(rel: str | None, request=None) -> str | None:
-    """URL absolue : publique ou signée selon le préfixe."""
+def build_media_url(rel: str | None, request=None, *, fiche_publique: bool | None = None) -> str | None:
+    """URL absolue : publique ou signée selon le préfixe.
+
+    ``fiche_publique`` : statut de publication déjà connu de la fiche dont ``rel`` est la photo
+    (évite de relire la fiche en base) ; ``None`` pour le déterminer.
+    """
     if not rel:
         return None
     if rel.startswith('http://') or rel.startswith('https://'):
         return rel
     rel = _safe_rel(rel.removeprefix('media/').lstrip('/'))
-    if is_public_media(rel) and photo_fiche_publique(rel):
+    if is_public_media(rel) and (photo_fiche_publique(rel) if fiche_publique is None else fiche_publique):
         path = f'/api/media/public/{rel}'
         if request:
             return request.build_absolute_uri(path)
