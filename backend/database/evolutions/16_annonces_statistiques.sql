@@ -80,6 +80,15 @@ CREATE TABLE IF NOT EXISTS public.visites_publiques (
     PRIMARY KEY (jour, page, appareil)
 );
 
+-- audit_logs.ip_adresse est INET ou TEXT selon les bases : conversion tolérante (NULL si invalide).
+CREATE OR REPLACE FUNCTION pg_temp.inet_sur(valeur TEXT) RETURNS INET LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN NULLIF(TRIM(valeur), '')::INET;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END
+$$;
+
 -- Historique : les connexions réussies déjà tracées dans le journal d'audit alimentent les statistiques.
 -- L'analyse du navigateur reprend les règles de accounts/appareils.py.
 INSERT INTO public.connexions (
@@ -90,7 +99,7 @@ SELECT u.id,
        LEFT(COALESCE(a.nouvelles_valeurs->>'email', u.email), 254),
        LEFT(COALESCE(a.nouvelles_valeurs->>'role', u.role::text), 30),
        TRUE,
-       a.ip_adresse,
+       pg_temp.inet_sur(a.ip_adresse::TEXT),
        CASE
            WHEN COALESCE(a.user_agent, '') = '' THEN 'INCONNU'
            WHEN a.user_agent ~* '(bot|crawler|spider|curl|wget|python-requests|httpclient)' THEN 'ROBOT'
