@@ -13,3 +13,4 @@ logo*.jpg
 **/media
 **/staticfiles
 backend/.purge_non_admins_v1.done
+backend/modeles

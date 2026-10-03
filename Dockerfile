@@ -14,6 +14,11 @@ COPY backend/requirements.txt .
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Modèle IA de modération des images (URL figée + empreinte SHA-256 vérifiée), couche mise en cache.
+# Non bloquant : sans modèle, les images envoyées passent toutes en vérification administrateur.
+COPY backend/scripts/telecharger_modele_nsfw.py scripts/
+RUN python scripts/telecharger_modele_nsfw.py || echo "WARN: modele NSFW non installe, moderation en mode verification"
+
 COPY backend/ .
 
 RUN chmod +x entrypoint.sh
