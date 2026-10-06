@@ -41,8 +41,8 @@ _CHAMPS_ACTIONS_DEDIEES = {
 }
 
 IDENTIFIANTS_INVALIDES = 'Identifiants invalides.'
-VERROU_TENTATIVES = 5
-VERROU_MINUTES = 15
+VERROU_TENTATIVES = 3
+VERROU_MINUTES = 5
 
 _HASH_FACTICE: str | None = None
 
@@ -250,37 +250,63 @@ class PnlfTokenObtainPairSerializer(TokenObtainPairSerializer):
             self.context.get('request'), succes=False, utilisateur=user, email=email, motif_echec=motif,
         )
 
+    def _ip(self) -> str | None:
+        from .audit import client_ip
+
+        return client_ip(self.context.get('request'))
+
+    def _refuser_identifiants(self, motif: str, email: str, user=None):
+        """Trace l'échec puis indique les essais restants, ou impose l'attente au dernier essai permis."""
+        from config.exceptions import ConnexionsBloquees
+
+        from .connexions import etat_tentatives_ip
+
+        self._tracer_echec(motif, email, user)
+        attente, restantes = etat_tentatives_ip(self._ip())
+        if attente:
+            raise ConnexionsBloquees(attente)
+        raise serializers.ValidationError(
+            f'{IDENTIFIANTS_INVALIDES} Encore {restantes} tentative{"s" if restantes > 1 else ""} '
+            f'avant un blocage de {VERROU_MINUTES} minutes.'
+        )
+
     def validate(self, attrs):
+        from config.exceptions import ConnexionsBloquees
+
+        from .connexions import etat_tentatives_ip
+
         email = attrs.get('email')
         password = attrs.get('password')
+
+        attente, _restantes = etat_tentatives_ip(self._ip())
+        if attente:
+            self._tracer_echec('BLOQUE_IP', email)
+            raise ConnexionsBloquees(attente)
 
         user = Utilisateur.objects.filter(email__iexact=email, deleted_at__isnull=True).first()
         if user is None:
             # Même coût de vérification qu'un compte existant (pas d'oracle temporel).
             Utilisateur(mot_de_passe_hash=_hash_factice()).check_password(password)
-            self._tracer_echec('IDENTIFIANTS', email)
-            raise serializers.ValidationError(IDENTIFIANTS_INVALIDES)
+            self._refuser_identifiants('IDENTIFIANTS', email)
 
         maintenant = timezone.now()
         verrouille = bool(user.verrouille_jusquau and user.verrouille_jusquau > maintenant)
 
         if not user.check_password(password):
             if not verrouille:
-                tentatives = (user.tentatives_echec or 0) + 1
+                # Un verrou écoulé repart de zéro : sinon un seul échec suffirait à reverrouiller le compte.
+                tentatives = (0 if user.verrouille_jusquau else (user.tentatives_echec or 0)) + 1
                 fin_verrou = maintenant + timedelta(minutes=VERROU_MINUTES) if tentatives >= VERROU_TENTATIVES else None
                 Utilisateur.objects.filter(pk=user.pk).update(
                     tentatives_echec=tentatives,
                     verrouille_jusquau=fin_verrou,
                 )
-            self._tracer_echec('IDENTIFIANTS', email, user)
-            raise serializers.ValidationError(IDENTIFIANTS_INVALIDES)
+            self._refuser_identifiants('IDENTIFIANTS', email, user)
 
         if verrouille:
+            # Compte attaqué depuis d'autres adresses : même attente, même message que le blocage par IP.
             self._tracer_echec('VERROUILLE', email, user)
-            raise serializers.ValidationError(
-                'Compte temporairement verrouillé après plusieurs tentatives infructueuses. '
-                f'Réessayez dans {VERROU_MINUTES} minutes ou réinitialisez votre mot de passe.'
-            )
+            raise ConnexionsBloquees(int((user.verrouille_jusquau - maintenant).total_seconds()) + 1)
 
         if user.statut == Utilisateur.Statut.EN_ATTENTE:
             self._tracer_echec('EN_ATTENTE', email, user)

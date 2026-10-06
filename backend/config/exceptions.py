@@ -91,6 +91,23 @@ _MOTIFS = (
 )
 
 
+class ConnexionsBloquees(exceptions.Throttled):
+    """Trop d'échecs de connexion : le message explique l'attente, il n'est pas remplacé par le texte générique."""
+
+    default_code = 'connexion_bloquee'
+
+    def __init__(self, attente: int):
+        # APIException directement : Throttled ajouterait « Disponible à nouveau dans N secondes » au message.
+        exceptions.APIException.__init__(
+            self,
+            detail=(
+                'Trop de tentatives de connexion infructueuses. Par sécurité, patientez '
+                f'{_duree(attente)} avant de réessayer, ou réinitialisez votre mot de passe.'
+            ),
+        )
+        self.wait = attente
+
+
 def _duree(secondes: int) -> str:
     if secondes < 60:
         return f'{secondes} seconde{"s" if secondes > 1 else ""}'
@@ -151,7 +168,9 @@ def gestionnaire_exceptions(exc, context):
     donnees = _traduire_donnees(response.data)
     code = _code_principal(exc)
 
-    if isinstance(exc, exceptions.Throttled):
+    if isinstance(exc, ConnexionsBloquees):
+        donnees = {'detail': str(exc.detail), 'code': 'connexion_bloquee', 'attente_secondes': int(exc.wait or 0)}
+    elif isinstance(exc, exceptions.Throttled):
         attente = int(exc.wait or 0)
         detail = 'Trop de requêtes en peu de temps : par sécurité, cette action est momentanément bloquée.'
         if attente > 0:

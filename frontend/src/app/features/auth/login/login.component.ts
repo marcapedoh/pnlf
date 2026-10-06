@@ -1,10 +1,10 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/auth/auth.service';
 import { revealFormErrors } from '../../../core/forms/form-errors.util';
-import { toApiError } from '../../../core/http/api-error.util';
+import { delaiAttenteSecondes, toApiError } from '../../../core/http/api-error.util';
 import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { TextFieldComponent } from '../../../design-system/text-field/text-field.component';
@@ -45,6 +45,18 @@ export class LoginComponent {
   readonly loading = signal(false);
   readonly errorMessage = signal('');
   readonly submitted = signal(false);
+  readonly deconnecteInactivite = this.route.snapshot.queryParamMap.get('raison') === 'inactivite';
+  /** Secondes restantes avant de pouvoir réessayer après trop d'échecs. */
+  readonly attente = signal(0);
+  readonly attenteLibelle = computed(() => {
+    const s = this.attente();
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  });
+  private minuteur: ReturnType<typeof setInterval> | undefined;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => clearInterval(this.minuteur));
+  }
 
   readonly form = this.fb.nonNullable.group({
     email: [localStorage.getItem(REMEMBER_KEY) ?? '', [Validators.required, Validators.email]],
@@ -68,6 +80,7 @@ export class LoginComponent {
   }
 
   submit(): void {
+    if (this.attente() > 0) return;
     this.submitted.set(true);
     this.errorMessage.set('');
 
@@ -99,7 +112,24 @@ export class LoginComponent {
         this.loading.set(false);
         const apiError = toApiError(err);
         this.errorMessage.set(apiError.message || 'Adresse e-mail ou mot de passe incorrect.');
+        const delai = apiError.status === 429 ? delaiAttenteSecondes(err) : null;
+        if (delai) this.demarrerAttente(delai);
       },
     });
+  }
+
+  private demarrerAttente(secondes: number): void {
+    clearInterval(this.minuteur);
+    const fin = Date.now() + secondes * 1000;
+    const maj = () => {
+      const restant = Math.max(0, Math.ceil((fin - Date.now()) / 1000));
+      this.attente.set(restant);
+      if (!restant) {
+        clearInterval(this.minuteur);
+        this.errorMessage.set('');
+      }
+    };
+    maj();
+    this.minuteur = setInterval(maj, 1000);
   }
 }

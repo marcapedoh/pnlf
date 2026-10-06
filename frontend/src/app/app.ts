@@ -5,10 +5,11 @@ import { filter } from 'rxjs';
 
 import { CookieConsentComponent } from './design-system/cookie-consent/cookie-consent.component';
 import { PdfPreviewModalComponent } from './design-system/pdf-preview/pdf-preview-modal.component';
+import { SessionInactiviteComponent } from './layout/session-inactivite/session-inactivite.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, CookieConsentComponent, PdfPreviewModalComponent],
+  imports: [RouterOutlet, CookieConsentComponent, PdfPreviewModalComponent, SessionInactiviteComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })

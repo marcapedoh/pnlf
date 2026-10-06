@@ -1,0 +1,44 @@
+.session-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-toast);
+  background: var(--surface-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.session-dialog {
+  width: min(460px, 100%);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.session-dialog__titre {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  margin: 0 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.session-dialog__message {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-5);
+  line-height: 1.5;
+}
+
+.session-dialog__compteur {
+  color: var(--color-danger);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}

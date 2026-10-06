@@ -9,6 +9,10 @@
 
     @if (errorMessage()) {
       <pnlf-alert tone="error" class="login-card__alert">{{ errorMessage() }}</pnlf-alert>
+    } @else if (deconnecteInactivite) {
+      <pnlf-alert tone="info" class="login-card__alert">
+        Vous avez été déconnecté après 8 minutes d’inactivité. Reconnectez-vous pour reprendre là où vous en étiez.
+      </pnlf-alert>
     }
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="login-card__form" novalidate>
@@ -40,8 +44,20 @@
         <a routerLink="/mot-de-passe-oublie" class="login-card__forgot">Mot de passe oublié ?</a>
       </div>
 
-      <button pnlfButton type="submit" variant="primary" size="lg" [fullWidth]="true" [loading]="loading()">
-        Se connecter
+      <button
+        pnlfButton
+        type="submit"
+        variant="primary"
+        size="lg"
+        [fullWidth]="true"
+        [loading]="loading()"
+        [disabled]="attente() > 0"
+      >
+        @if (attente() > 0) {
+          Patientez {{ attenteLibelle() }} avant de réessayer
+        } @else {
+          Se connecter
+        }
       </button>
     </form>
 

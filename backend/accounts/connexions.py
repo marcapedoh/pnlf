@@ -23,7 +23,58 @@ MOTIFS_ECHEC = {
     'VERROUILLE': 'Compte verrouillé',
     'EN_ATTENTE': 'Compte en attente de validation',
     'INACTIF': 'Compte inactif ou suspendu',
+    'BLOQUE_IP': 'Trop de tentatives, attente imposée',
 }
+
+# Après LIMITE_ECHECS_IP échecs rapprochés depuis une même adresse IP, toute tentative de connexion
+# est refusée pendant DUREE_BLOCAGE_IP, quel que soit le compte visé.
+LIMITE_ECHECS_IP = 3
+DUREE_BLOCAGE_IP = timedelta(minutes=5)
+# Les tentatives refusées pendant l'attente ne prolongent pas le blocage.
+_MOTIFS_COMPTES_IP = ('IDENTIFIANTS', 'VERROUILLE')
+
+
+def etat_tentatives_ip(ip: str | None) -> tuple[int, int]:
+    """(secondes d'attente restantes, tentatives encore permises) pour une adresse IP.
+
+    Une série d'échecs s'arrête à la dernière connexion réussie de l'adresse ou dès que deux échecs
+    consécutifs sont espacés de plus de DUREE_BLOCAGE_IP : un blocage écoulé rend donc 3 essais."""
+    if not ip:
+        return 0, LIMITE_ECHECS_IP
+    maintenant = timezone.now()
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT c.created_at
+                FROM connexions c
+                WHERE c.ip_adresse = %s::inet
+                  AND NOT c.succes
+                  AND c.motif_echec = ANY(%s)
+                  AND c.created_at > %s
+                  AND c.created_at > COALESCE(
+                      (SELECT MAX(s.created_at) FROM connexions s WHERE s.ip_adresse = %s::inet AND s.succes),
+                      '-infinity'::timestamptz
+                  )
+                ORDER BY c.created_at DESC
+                LIMIT %s
+                """,
+                [ip, list(_MOTIFS_COMPTES_IP), maintenant - 2 * DUREE_BLOCAGE_IP, ip, LIMITE_ECHECS_IP],
+            )
+            dates = [ligne[0] for ligne in cur.fetchall()]
+    except Exception:
+        logger.exception('Lecture des tentatives de connexion impossible')
+        return 0, LIMITE_ECHECS_IP
+
+    if not dates or maintenant - dates[0] > DUREE_BLOCAGE_IP:
+        return 0, LIMITE_ECHECS_IP
+    serie = 1
+    while serie < len(dates) and dates[serie - 1] - dates[serie] <= DUREE_BLOCAGE_IP:
+        serie += 1
+    if serie >= LIMITE_ECHECS_IP:
+        attente = (dates[0] + DUREE_BLOCAGE_IP - maintenant).total_seconds()
+        return max(1, int(attente + 0.999)), 0
+    return 0, LIMITE_ECHECS_IP - serie
 
 
 def enregistrer_connexion(request, *, succes: bool, utilisateur=None, email: str | None = None,

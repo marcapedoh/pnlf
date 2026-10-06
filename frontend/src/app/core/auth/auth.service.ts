@@ -1,11 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { LoginRequest, LoginResponse, RefreshResponse } from '../models/auth.model';
 import { RoleUtilisateur, Utilisateur } from '../models/user.model';
 import { displayInitials, displayName } from './display-name.util';
+import { InactiviteService } from './inactivite.service';
 import { PresenceService } from './presence.service';
 import { TokenStorageService } from './token-storage.service';
 
@@ -21,12 +23,27 @@ export class AuthService {
   readonly fullName = computed(() => displayName(this._currentUser()));
   readonly initials = computed(() => displayInitials(this._currentUser()));
 
+  private readonly inactivite = inject(InactiviteService);
+  private readonly router = inject(Router);
+
   constructor(
     private readonly http: HttpClient,
     private readonly tokens: TokenStorageService,
   ) {
     const presence = inject(PresenceService);
     effect(() => (this.isAuthenticated() ? presence.demarrer() : presence.arreter()));
+    effect(() =>
+      this.isAuthenticated() ? this.inactivite.demarrer(() => this.expirerSession()) : this.inactivite.arreter(),
+    );
+  }
+
+  /** Déconnexion pour inactivité : retour à la connexion avec la page en cours à rouvrir. */
+  private expirerSession(): void {
+    const url = this.router.url;
+    this.logout();
+    void this.router.navigate(['/connexion'], {
+      queryParams: { raison: 'inactivite', returnUrl: url.startsWith('/app') ? url : null },
+    });
   }
 
   login(payload: LoginRequest): Observable<LoginResponse> {
@@ -81,6 +98,11 @@ export class AuthService {
 
   /** Réhydrate la session au démarrage (access en sessionStorage ou refresh cookie). */
   bootstrap(): Observable<boolean> {
+    if ((this.tokens.getAccessToken() || this.tokens.hasSessionHint()) && this.inactivite.sessionExpiree()) {
+      this.logout();
+      this._bootstrapped.set(true);
+      return of(false);
+    }
     if (this.tokens.getAccessToken()) {
       return this.fetchMe().pipe(
         map((user) => {

@@ -1,0 +1,23 @@
+@if (inactivite.secondesRestantes(); as secondes) {
+  <div class="session-backdrop" role="presentation">
+    <div
+      class="session-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="session-inactivite-titre"
+      aria-describedby="session-inactivite-message"
+      pnlfModal
+      (pnlfModalClose)="rester()"
+    >
+      <h2 id="session-inactivite-titre" class="session-dialog__titre">Votre session va expirer</h2>
+      <p id="session-inactivite-message" class="session-dialog__message">
+        Aucune activité depuis 7 minutes. Par sécurité, vous serez déconnecté dans
+        <strong class="session-dialog__compteur" aria-live="polite">{{ secondes }} seconde{{ secondes > 1 ? 's' : '' }}</strong>.
+      </p>
+      <div class="session-dialog__actions">
+        <button pnlfButton type="button" variant="ghost" (click)="deconnecter()">Se déconnecter</button>
+        <button pnlfButton type="button" variant="primary" data-autofocus (click)="rester()">Rester connecté</button>
+      </div>
+    </div>
+  </div>
+}
