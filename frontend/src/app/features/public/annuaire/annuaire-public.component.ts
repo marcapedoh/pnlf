@@ -18,6 +18,17 @@ import { IconComponent } from '../../../design-system/icon/icon.component';
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { PaginationComponent } from '../../../design-system/pagination/pagination.component';
+import {
+  ViewSwitcherComponent,
+  VueAffichage,
+  lireTailleMemorisee,
+  lireVueMemorisee,
+  memoriser,
+} from '../../../design-system/view-switcher/view-switcher.component';
+
+const CLE_VUE = 'pfnl.annuaire-public.vue';
+const CLE_TAILLE = 'pfnl.annuaire-public.taille';
+const TAILLES = [6, 12, 24, 48];
 
 @Component({
   selector: 'app-annuaire-public',
@@ -29,6 +40,7 @@ import { PaginationComponent } from '../../../design-system/pagination/paginatio
     IconComponent,
     ButtonComponent,
     PaginationComponent,
+    ViewSwitcherComponent,
   ],
   templateUrl: './annuaire-public.component.html',
   styleUrl: './annuaire-public.component.scss',
@@ -46,7 +58,9 @@ export class AnnuairePublicComponent {
   readonly loadError = signal('');
   readonly page = signal(1);
   readonly total = signal(0);
-  readonly pageSize = 12;
+  readonly tailles = TAILLES;
+  readonly pageSize = signal(lireTailleMemorisee(CLE_TAILLE, TAILLES, 12));
+  readonly vue = signal<VueAffichage>(lireVueMemorisee(CLE_VUE, 'grille'));
   readonly typeLabels = TYPE_ACTEUR_PUBLIC_LABELS;
   readonly TypeActeur = TypeActeur;
 
@@ -86,7 +100,7 @@ export class AnnuairePublicComponent {
         produit: this.produit.trim() || undefined,
         q: this.recherche.trim() || undefined,
         page: this.page(),
-        page_size: this.pageSize,
+        page_size: this.pageSize(),
       })
       .subscribe({
         next: (res) => {
@@ -116,6 +130,18 @@ export class AnnuairePublicComponent {
     this.page.set(page);
     this.load();
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  changerTaille(taille: number): void {
+    this.pageSize.set(taille);
+    memoriser(CLE_TAILLE, taille);
+    this.page.set(1);
+    this.load();
+  }
+
+  changerVue(vue: VueAffichage): void {
+    this.vue.set(vue);
+    memoriser(CLE_VUE, vue);
   }
 
   private syncUrl(): void {

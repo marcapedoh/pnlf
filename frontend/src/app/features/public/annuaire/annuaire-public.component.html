@@ -57,9 +57,9 @@
     </form>
 
     @if (loading()) {
-      <div class="annuaire-grid">
+      <div [class]="vue() === 'grille' ? 'annuaire-grid' : 'annuaire-stack'" role="status" aria-label="Chargement de l’annuaire">
         @for (i of [1, 2, 3, 4, 5, 6]; track i) {
-          <pnlf-skeleton height="380px" />
+          <pnlf-skeleton [height]="vue() === 'grille' ? '380px' : vue() === 'liste' ? '112px' : '52px'" />
         }
       </div>
     } @else if (loadError()) {
@@ -80,7 +80,99 @@
           <strong>{{ total() }}</strong>
           acteur{{ total() > 1 ? 's' : '' }} validé{{ total() > 1 ? 's' : '' }}
         </p>
+        <pnlf-view-switcher [vue]="vue()" (vueChange)="changerVue($event)" label="Mode d’affichage de l’annuaire" />
       </div>
+      @switch (vue()) {
+      @case ('tableau') {
+      <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+        <table class="pnlf-table annuaire-table">
+          <caption class="pnlf-visually-hidden">Acteurs de l’annuaire</caption>
+          <thead>
+            <tr>
+              <th scope="col">Acteur</th>
+              <th scope="col">Profil</th>
+              <th scope="col">Localisation</th>
+              <th scope="col">Coopérative</th>
+              <th scope="col">Produits</th>
+              <th scope="col">Lots</th>
+              <th scope="col">Certifications</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of producteurs(); track p.id) {
+              <tr>
+                <td data-label="Acteur">
+                  <a class="pnlf-table__link" [routerLink]="['/annuaire', p.id]">{{ p.prenoms }} {{ p.nom }}</a>
+                </td>
+                <td data-label="Profil">{{ typeLabels[p.type_acteur] }}</td>
+                <td data-label="Localisation">{{ localisation(p) }}</td>
+                <td data-label="Coopérative">
+                  @if (p.cooperative_nom) {
+                    {{ p.cooperative_nom }}
+                  } @else {
+                    <span class="pnlf-table__muted">Aucune</span>
+                  }
+                </td>
+                <td data-label="Produits">
+                  @if (p.produits.length) {
+                    {{ p.produits.slice(0, 3).join(', ') }}{{ p.produits.length > 3 ? ' +' + (p.produits.length - 3) : '' }}
+                  } @else {
+                    <span class="pnlf-table__muted">Non renseignés</span>
+                  }
+                </td>
+                <td data-label="Lots">{{ p.nb_lots }}</td>
+                <td data-label="Certifications">{{ p.certifications?.length || 0 }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      }
+      @case ('liste') {
+      <ul class="annuaire-liste" aria-label="Acteurs de l’annuaire">
+        @for (p of producteurs(); track p.id) {
+          <li class="actor-row" [class.is-collecteur]="p.type_acteur === TypeActeur.COLLECTEUR">
+            <a [routerLink]="['/annuaire', p.id]" class="actor-row__link">
+              <span class="actor-row__media" aria-hidden="true">
+                @if (p.photo_url) {
+                  <img [src]="p.photo_url" alt="" loading="lazy" />
+                } @else {
+                  <span>{{ initials(p) }}</span>
+                }
+              </span>
+              <span class="actor-row__body">
+                <span class="actor-row__meta">
+                  <span class="actor-row__role">{{ typeLabels[p.type_acteur] }}</span>
+                  @if (p.certifications?.length) {
+                    <span class="actor-row__verified">
+                      <pnlf-icon name="shield-check" [size]="12" />
+                      {{ p.certifications!.length }} certification{{ p.certifications!.length > 1 ? 's' : '' }}
+                    </span>
+                  }
+                </span>
+                <strong class="actor-row__name">{{ p.prenoms }} {{ p.nom }}</strong>
+                <span class="actor-row__infos">
+                  {{ localisation(p) }}{{ p.cooperative_nom ? ' · ' + p.cooperative_nom : '' }}
+                </span>
+                @if (p.produits.length) {
+                  <span class="actor-row__produits">
+                    {{ p.produits.slice(0, 4).join(', ') }}{{ p.produits.length > 4 ? ' +' + (p.produits.length - 4) : '' }}
+                  </span>
+                }
+              </span>
+              <span class="actor-row__aside">
+                <span class="actor-card__stat">
+                  <pnlf-icon name="package" [size]="14" />
+                  {{ p.nb_lots }} lot{{ p.nb_lots > 1 ? 's' : '' }}
+                </span>
+                <span class="actor-card__cta">Voir la fiche <pnlf-icon name="chevron-right" [size]="14" /></span>
+              </span>
+            </a>
+          </li>
+        }
+      </ul>
+      }
+      @default {
       <div class="annuaire-grid">
         @for (p of producteurs(); track p.id) {
           <article class="actor-card" [class.is-collecteur]="p.type_acteur === TypeActeur.COLLECTEUR">
@@ -133,10 +225,20 @@
           </article>
         }
       </div>
+      }
+      }
     }
 
-    @if (!loading() && total() > pageSize) {
-      <pnlf-pagination label="Pagination de l’annuaire" [page]="page()" [pageSize]="pageSize" [total]="total()" (pageChange)="goToPage($event)" />
+    @if (!loading() && !loadError() && total() > 0) {
+      <pnlf-pagination
+        label="Pagination de l’annuaire"
+        [page]="page()"
+        [pageSize]="pageSize()"
+        [total]="total()"
+        [pageSizeOptions]="tailles"
+        (pageChange)="goToPage($event)"
+        (pageSizeChange)="changerTaille($event)"
+      />
     }
   </div>
 </div>

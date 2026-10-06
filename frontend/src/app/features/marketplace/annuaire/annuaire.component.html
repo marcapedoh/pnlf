@@ -34,6 +34,7 @@
         <option [value]="p.value">{{ p.label }}</option>
       }
     </select>
+    <pnlf-view-switcher [vue]="vue()" (vueChange)="changerVue($event)" label="Mode d’affichage de l’annuaire" />
   </div>
 </div>
 
@@ -42,13 +43,13 @@
     <button pnlfButton variant="outline" type="button" (click)="load()">Réessayer</button>
   </pnlf-empty-state>
 } @else {
-  <div class="annuaire-grid">
+  <div [class]="vue() === 'liste' ? 'annuaire-grid' : 'annuaire-sections'">
     <pnlf-card
       title="Coopératives"
       [subtitle]="loadingCoop() ? 'Chargement…' : totalCoop() + ' coopérative' + (totalCoop() > 1 ? 's' : '')"
     >
       @if (loadingCoop()) {
-        <pnlf-skeleton height="280px" radius="12px" />
+        <pnlf-skeleton [height]="vue() === 'liste' ? '280px' : '200px'" radius="12px" />
       } @else if (cooperatives().length === 0) {
         <pnlf-empty-state icon="building" title="Aucune coopérative" description="Élargissez votre recherche ou changez de province.">
           @if (recherche().trim() || provinceFilter()) {
@@ -56,49 +57,130 @@
           }
         </pnlf-empty-state>
       } @else {
-        <ul class="annuaire-list">
-          @for (c of cooperatives(); track c.id) {
-            <li class="annuaire-list__row">
-              <a
-                [routerLink]="cooperativeRoute(c)"
-                [queryParams]="cooperativeQuery(c)"
-                class="annuaire-list__link"
-              >
-                <span class="annuaire-list__avatar">
-                  @if (c.photo_url) {
-                    <img [src]="c.photo_url" [alt]="" />
-                  } @else {
-                    {{ initials(c.nom) }}
+        @switch (vue()) {
+          @case ('tableau') {
+            <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+              <table class="pnlf-table annuaire-table">
+                <caption class="pnlf-visually-hidden">Coopératives</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Coopérative</th>
+                    <th scope="col">Code</th>
+                    <th scope="col">Province</th>
+                    <th scope="col">Agrément</th>
+                    <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (c of cooperatives(); track c.id) {
+                    <tr>
+                      <td data-label="Coopérative">
+                        <a class="pnlf-table__link" [routerLink]="cooperativeRoute(c)" [queryParams]="cooperativeQuery(c)">{{ c.nom }}</a>
+                      </td>
+                      <td data-label="Code">{{ c.code || '—' }}</td>
+                      <td data-label="Province">{{ c.province_nom || 'Non renseignée' }}</td>
+                      <td data-label="Agrément">
+                        @if (c.numero_agrement) {
+                          {{ c.numero_agrement }}
+                        } @else {
+                          <span class="pnlf-table__muted">Non renseigné</span>
+                        }
+                      </td>
+                      <td data-label="Messagerie" class="annuaire-table__actions">
+                        @if (peutEcrire(c.utilisateur_id)) {
+                          <a
+                            class="annuaire-list__chat annuaire-list__chat--compact"
+                            routerLink="/app/messagerie"
+                            [queryParams]="{ cooperative: c.id }"
+                            [attr.aria-label]="'Écrire à ' + c.nom + ' dans la messagerie'"
+                            title="Écrire dans la messagerie"
+                          >
+                            <pnlf-icon name="message" [size]="16" />
+                          </a>
+                        }
+                      </td>
+                    </tr>
                   }
-                </span>
-                <div class="annuaire-list__info">
-                  <p class="annuaire-list__name">{{ c.nom }}</p>
-                  <p class="annuaire-list__meta">{{ c.province_nom || 'Province non renseignée' }}</p>
-                </div>
-                <pnlf-icon name="chevron-right" [size]="16" />
-              </a>
-              @if (peutEcrire(c.utilisateur_id)) {
-                <a
-                  class="annuaire-list__chat"
-                  routerLink="/app/messagerie"
-                  [queryParams]="{ cooperative: c.id }"
-                  [attr.aria-label]="'Écrire à ' + c.nom + ' dans la messagerie'"
-                  title="Écrire dans la messagerie"
-                >
-                  <pnlf-icon name="message" [size]="18" />
-                </a>
-              }
-            </li>
+                </tbody>
+              </table>
+            </div>
           }
-        </ul>
+          @case ('grille') {
+            <ul class="annuaire-tuiles">
+              @for (c of cooperatives(); track c.id) {
+                <li class="annuaire-tuile">
+                  <a [routerLink]="cooperativeRoute(c)" [queryParams]="cooperativeQuery(c)" class="annuaire-tuile__link">
+                    <span class="annuaire-tuile__avatar">
+                      @if (c.photo_url) {
+                        <img [src]="c.photo_url" alt="" loading="lazy" />
+                      } @else {
+                        {{ initials(c.nom) }}
+                      }
+                    </span>
+                    <span class="annuaire-tuile__name">{{ c.nom }}</span>
+                    <span class="annuaire-tuile__meta">{{ c.province_nom || 'Province non renseignée' }}</span>
+                    @if (c.code) {
+                      <span class="annuaire-tuile__extra">{{ c.code }}</span>
+                    }
+                  </a>
+                  @if (peutEcrire(c.utilisateur_id)) {
+                    <a
+                      class="annuaire-tuile__chat"
+                      routerLink="/app/messagerie"
+                      [queryParams]="{ cooperative: c.id }"
+                      [attr.aria-label]="'Écrire à ' + c.nom + ' dans la messagerie'"
+                    >
+                      <pnlf-icon name="message" [size]="16" /> Écrire
+                    </a>
+                  }
+                </li>
+              }
+            </ul>
+          }
+          @default {
+            <ul class="annuaire-list">
+              @for (c of cooperatives(); track c.id) {
+                <li class="annuaire-list__row">
+                  <a [routerLink]="cooperativeRoute(c)" [queryParams]="cooperativeQuery(c)" class="annuaire-list__link">
+                    <span class="annuaire-list__avatar">
+                      @if (c.photo_url) {
+                        <img [src]="c.photo_url" alt="" />
+                      } @else {
+                        {{ initials(c.nom) }}
+                      }
+                    </span>
+                    <div class="annuaire-list__info">
+                      <p class="annuaire-list__name">{{ c.nom }}</p>
+                      <p class="annuaire-list__meta">{{ c.province_nom || 'Province non renseignée' }}</p>
+                    </div>
+                    <pnlf-icon name="chevron-right" [size]="16" />
+                  </a>
+                  @if (peutEcrire(c.utilisateur_id)) {
+                    <a
+                      class="annuaire-list__chat"
+                      routerLink="/app/messagerie"
+                      [queryParams]="{ cooperative: c.id }"
+                      [attr.aria-label]="'Écrire à ' + c.nom + ' dans la messagerie'"
+                      title="Écrire dans la messagerie"
+                    >
+                      <pnlf-icon name="message" [size]="18" />
+                    </a>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        }
       }
-      @if (totalCoop() > pageSize) {
+      @if (!loadingCoop() && totalCoop() > 0) {
         <pnlf-pagination
           label="Pagination des coopératives"
           [page]="pageCoop()"
-          [pageSize]="pageSize"
+          [pageSize]="pageSize()"
           [total]="totalCoop()"
+          [pageSizeOptions]="tailles"
           (pageChange)="goToCoopPage($event)"
+          (pageSizeChange)="changerTaille($event)"
         />
       }
     </pnlf-card>
@@ -108,7 +190,7 @@
       [subtitle]="loadingProd() ? 'Chargement…' : totalProd() + ' acteur' + (totalProd() > 1 ? 's' : '')"
     >
       @if (loadingProd()) {
-        <pnlf-skeleton height="280px" radius="12px" />
+        <pnlf-skeleton [height]="vue() === 'liste' ? '280px' : '200px'" radius="12px" />
       } @else if (producteurs().length === 0) {
         <pnlf-empty-state icon="users" title="Aucun producteur ou collecteur" description="Élargissez votre recherche ou changez de province.">
           @if (recherche().trim() || provinceFilter()) {
@@ -116,45 +198,138 @@
           }
         </pnlf-empty-state>
       } @else {
-        <ul class="annuaire-list">
-          @for (p of producteurs(); track p.id) {
-            <li class="annuaire-list__row">
-              <a [routerLink]="producteurRoute(p)" class="annuaire-list__link">
-                <span class="annuaire-list__avatar">
-                  @if (p.photo_url) {
-                    <img [src]="p.photo_url" [alt]="" />
-                  } @else {
-                    {{ initials(p.nom, p.prenoms) }}
+        @switch (vue()) {
+          @case ('tableau') {
+            <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
+              <table class="pnlf-table annuaire-table">
+                <caption class="pnlf-visually-hidden">Producteurs et collecteurs</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Acteur</th>
+                    <th scope="col">Profil</th>
+                    <th scope="col">Province</th>
+                    <th scope="col">Coopérative</th>
+                    <th scope="col">Produits</th>
+                    <th scope="col"><span class="pnlf-visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (p of producteurs(); track p.id) {
+                    <tr>
+                      <td data-label="Acteur">
+                        <a class="pnlf-table__link" [routerLink]="producteurRoute(p)">{{ p.prenoms }} {{ p.nom }}</a>
+                      </td>
+                      <td data-label="Profil">{{ typeActeur(p) }}</td>
+                      <td data-label="Province">{{ p.province_nom || 'Non renseignée' }}</td>
+                      <td data-label="Coopérative">
+                        @if (p.cooperative_nom) {
+                          {{ p.cooperative_nom }}
+                        } @else {
+                          <span class="pnlf-table__muted">Aucune</span>
+                        }
+                      </td>
+                      <td data-label="Produits">
+                        @if (produits(p)) {
+                          {{ produits(p) }}
+                        } @else {
+                          <span class="pnlf-table__muted">Non renseignés</span>
+                        }
+                      </td>
+                      <td data-label="Messagerie" class="annuaire-table__actions">
+                        @if (peutEcrire(p.utilisateur_id)) {
+                          <a
+                            class="annuaire-list__chat annuaire-list__chat--compact"
+                            routerLink="/app/messagerie"
+                            [queryParams]="{ producteur: p.id }"
+                            [attr.aria-label]="'Écrire à ' + p.prenoms + ' ' + p.nom + ' dans la messagerie'"
+                            title="Écrire dans la messagerie"
+                          >
+                            <pnlf-icon name="message" [size]="16" />
+                          </a>
+                        }
+                      </td>
+                    </tr>
                   }
-                </span>
-                <div class="annuaire-list__info">
-                  <p class="annuaire-list__name">{{ p.prenoms }} {{ p.nom }}</p>
-                  <p class="annuaire-list__meta">{{ metaProducteur(p) }}</p>
-                </div>
-                <pnlf-icon name="chevron-right" [size]="16" />
-              </a>
-              @if (peutEcrire(p.utilisateur_id)) {
-                <a
-                  class="annuaire-list__chat"
-                  routerLink="/app/messagerie"
-                  [queryParams]="{ producteur: p.id }"
-                  [attr.aria-label]="'Écrire à ' + p.prenoms + ' ' + p.nom + ' dans la messagerie'"
-                  title="Écrire dans la messagerie"
-                >
-                  <pnlf-icon name="message" [size]="18" />
-                </a>
-              }
-            </li>
+                </tbody>
+              </table>
+            </div>
           }
-        </ul>
+          @case ('grille') {
+            <ul class="annuaire-tuiles">
+              @for (p of producteurs(); track p.id) {
+                <li class="annuaire-tuile">
+                  <a [routerLink]="producteurRoute(p)" class="annuaire-tuile__link">
+                    <span class="annuaire-tuile__avatar">
+                      @if (p.photo_url) {
+                        <img [src]="p.photo_url" alt="" loading="lazy" />
+                      } @else {
+                        {{ initials(p.nom, p.prenoms) }}
+                      }
+                    </span>
+                    <span class="annuaire-tuile__name">{{ p.prenoms }} {{ p.nom }}</span>
+                    <span class="annuaire-tuile__meta">{{ metaProducteur(p) }}</span>
+                    @if (produits(p, 2)) {
+                      <span class="annuaire-tuile__extra">{{ produits(p, 2) }}</span>
+                    }
+                  </a>
+                  @if (peutEcrire(p.utilisateur_id)) {
+                    <a
+                      class="annuaire-tuile__chat"
+                      routerLink="/app/messagerie"
+                      [queryParams]="{ producteur: p.id }"
+                      [attr.aria-label]="'Écrire à ' + p.prenoms + ' ' + p.nom + ' dans la messagerie'"
+                    >
+                      <pnlf-icon name="message" [size]="16" /> Écrire
+                    </a>
+                  }
+                </li>
+              }
+            </ul>
+          }
+          @default {
+            <ul class="annuaire-list">
+              @for (p of producteurs(); track p.id) {
+                <li class="annuaire-list__row">
+                  <a [routerLink]="producteurRoute(p)" class="annuaire-list__link">
+                    <span class="annuaire-list__avatar">
+                      @if (p.photo_url) {
+                        <img [src]="p.photo_url" alt="" />
+                      } @else {
+                        {{ initials(p.nom, p.prenoms) }}
+                      }
+                    </span>
+                    <div class="annuaire-list__info">
+                      <p class="annuaire-list__name">{{ p.prenoms }} {{ p.nom }}</p>
+                      <p class="annuaire-list__meta">{{ metaProducteur(p) }}</p>
+                    </div>
+                    <pnlf-icon name="chevron-right" [size]="16" />
+                  </a>
+                  @if (peutEcrire(p.utilisateur_id)) {
+                    <a
+                      class="annuaire-list__chat"
+                      routerLink="/app/messagerie"
+                      [queryParams]="{ producteur: p.id }"
+                      [attr.aria-label]="'Écrire à ' + p.prenoms + ' ' + p.nom + ' dans la messagerie'"
+                      title="Écrire dans la messagerie"
+                    >
+                      <pnlf-icon name="message" [size]="18" />
+                    </a>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        }
       }
-      @if (totalProd() > pageSize) {
+      @if (!loadingProd() && totalProd() > 0) {
         <pnlf-pagination
           label="Pagination des producteurs et collecteurs"
           [page]="pageProd()"
-          [pageSize]="pageSize"
+          [pageSize]="pageSize()"
           [total]="totalProd()"
+          [pageSizeOptions]="tailles"
           (pageChange)="goToProdPage($event)"
+          (pageSizeChange)="changerTaille($event)"
         />
       }
     </pnlf-card>

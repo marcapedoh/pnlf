@@ -15,7 +15,10 @@ export class PaginationComponent {
   readonly total = input.required<number>();
   /** Nom accessible de la navigation (utile si plusieurs listes paginées sur la page). */
   readonly label = input('Pagination');
+  /** Tailles proposées à l'utilisateur ; sélecteur masqué si la liste est vide. */
+  readonly pageSizeOptions = input<number[]>([]);
   readonly pageChange = output<number>();
+  readonly pageSizeChange = output<number>();
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
   readonly rangeStart = computed(() => (this.total() === 0 ? 0 : (this.page() - 1) * this.pageSize() + 1));
@@ -40,5 +43,12 @@ export class PaginationComponent {
   goTo(p: number): void {
     if (p < 1 || p > this.totalPages() || p === this.page()) return;
     this.pageChange.emit(p);
+  }
+
+  choisirTaille(event: Event): void {
+    const taille = Number((event.target as HTMLSelectElement).value);
+    if (Number.isInteger(taille) && taille > 0 && taille !== this.pageSize()) {
+      this.pageSizeChange.emit(taille);
+    }
   }
 }

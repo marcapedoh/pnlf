@@ -7,6 +7,16 @@
       Aucun résultat
     }
   </p>
+  @if (pageSizeOptions().length) {
+    <label class="pnlf-pagination__size">
+      <span>Par page</span>
+      <select [value]="pageSize()" (change)="choisirTaille($event)" [attr.aria-label]="'Nombre d’éléments par page (' + label() + ')'">
+        @for (t of pageSizeOptions(); track t) {
+          <option [value]="t" [selected]="t === pageSize()">{{ t }}</option>
+        }
+      </select>
+    </label>
+  }
   @if (totalPages() > 1) {
     <ul class="pnlf-pagination__controls">
       <li>

@@ -34,6 +34,133 @@
   }
 }
 
+.annuaire-sections {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.annuaire-tuiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.annuaire-tuile {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  overflow: hidden;
+  transition: box-shadow var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+
+  &:hover {
+    border-color: var(--pnlf-green-200);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+.annuaire-tuile__link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-4) var(--space-3);
+  text-align: center;
+  color: inherit;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset var(--shadow-focus);
+  }
+}
+
+.annuaire-tuile__avatar {
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-2);
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--pnlf-green-100);
+  color: var(--pnlf-green-700);
+  font-weight: 700;
+  font-size: var(--fs-md);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.annuaire-tuile__name {
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.annuaire-tuile__meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.annuaire-tuile__extra {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--pnlf-green-800);
+}
+
+.annuaire-tuile__chat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--gray-50);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--pnlf-green-700);
+  text-decoration: none;
+
+  &:hover {
+    background: var(--pnlf-green-50);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset var(--shadow-focus);
+  }
+}
+
+.annuaire-table__actions {
+  width: 1%;
+  white-space: nowrap;
+
+  @media (max-width: 640px) {
+    width: auto;
+    align-items: center !important;
+
+    &:empty {
+      display: none !important;
+    }
+  }
+}
+
+.annuaire-list__chat--compact {
+  width: 36px;
+  height: 36px;
+}
+
 .annuaire-list {
   display: flex;
   flex-direction: column;

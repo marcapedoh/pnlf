@@ -18,8 +18,19 @@ import { IconComponent } from '../../../design-system/icon/icon.component';
 import { PaginationComponent } from '../../../design-system/pagination/pagination.component';
 import { SelectOption } from '../../../design-system/select-field/select-field.component';
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
+import {
+  ViewSwitcherComponent,
+  VueAffichage,
+  lireTailleMemorisee,
+  lireVueMemorisee,
+  memoriser,
+} from '../../../design-system/view-switcher/view-switcher.component';
 
 type ListeAnnuaire = 'producteurs' | 'cooperatives';
+
+const CLE_VUE = 'pfnl.annuaire.vue';
+const CLE_TAILLE = 'pfnl.annuaire.taille';
+const TAILLES = [5, 10, 20, 50];
 
 const TYPE_ACTEUR_LIBELLES: Record<string, string> = {
   PRODUCTEUR: 'Producteur',
@@ -43,6 +54,7 @@ function pageDepuis(valeur: string | null): number {
     IconComponent,
     PaginationComponent,
     SkeletonComponent,
+    ViewSwitcherComponent,
   ],
   templateUrl: './annuaire.component.html',
   styleUrl: './annuaire.component.scss',
@@ -57,7 +69,9 @@ export class AnnuaireComponent {
   private readonly search$ = new Subject<void>();
   private readonly requetes: Record<ListeAnnuaire, number> = { producteurs: 0, cooperatives: 0 };
 
-  readonly pageSize = 10;
+  readonly tailles = TAILLES;
+  readonly pageSize = signal(lireTailleMemorisee(CLE_TAILLE, TAILLES, 10));
+  readonly vue = signal<VueAffichage>(lireVueMemorisee(CLE_VUE, 'liste'));
   readonly producteurs = signal<Producteur[]>([]);
   readonly cooperatives = signal<Cooperative[]>([]);
   readonly loadingProd = signal(true);
@@ -103,6 +117,17 @@ export class AnnuaireComponent {
     this.load('cooperatives');
   }
 
+  changerTaille(taille: number): void {
+    this.pageSize.set(taille);
+    memoriser(CLE_TAILLE, taille);
+    this.reinitialiser();
+  }
+
+  changerVue(vue: VueAffichage): void {
+    this.vue.set(vue);
+    memoriser(CLE_VUE, vue);
+  }
+
   /** Recharge une liste (ou les deux) et reflète l'état des filtres dans l'URL. */
   load(liste?: ListeAnnuaire): void {
     this.syncUrl();
@@ -111,7 +136,7 @@ export class AnnuaireComponent {
     const base: AnnuaireParams = {
       q: this.recherche().trim(),
       province: this.provinceFilter(),
-      page_size: this.pageSize,
+      page_size: this.pageSize(),
     };
     for (const cible of listes) {
       const req = ++this.requetes[cible];
@@ -216,6 +241,16 @@ export class AnnuaireComponent {
   metaProducteur(p: Producteur): string {
     const type = TYPE_ACTEUR_LIBELLES[String(p.type_acteur)] ?? 'Producteur';
     return [p.province_nom || 'Province non renseignée', type].join(' · ');
+  }
+
+  typeActeur(p: Producteur): string {
+    return TYPE_ACTEUR_LIBELLES[String(p.type_acteur)] ?? 'Producteur';
+  }
+
+  produits(p: Producteur, max = 3): string {
+    const noms = (p.produits ?? []).map((x) => x.nom).filter(Boolean);
+    if (!noms.length) return '';
+    return noms.slice(0, max).join(', ') + (noms.length > max ? ` +${noms.length - max}` : '');
   }
 
   initials(nom: string, prenoms = ''): string {
