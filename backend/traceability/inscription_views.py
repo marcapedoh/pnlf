@@ -29,6 +29,7 @@ from config.validators import CoordonneesGabonMixin, TelephoneField
 
 from .db_utils import set_optional_column
 from .models import Cooperative, Departement, DocumentInscription, Producteur, Province, Village
+from .numerotation import numero_agrement
 from .services import enregistrer_document, enregistrer_photo
 
 DOCUMENT_MAX_SIZE_BYTES = 8 * 1024 * 1024
@@ -87,7 +88,6 @@ class InscriptionPubliqueSerializer(CoordonneesGabonMixin, serializers.Serialize
     )
     communaute = serializers.CharField(max_length=120, required=False, allow_blank=True)
     adresse = serializers.CharField(max_length=255, required=False, allow_blank=True)
-    numero_agrement = serializers.CharField(max_length=80, required=False, allow_blank=True)
     message = serializers.CharField(required=False, allow_blank=True, max_length=2000)
     accepte_conditions = serializers.BooleanField()
     # Honeypot anti-bot : champ invisible côté formulaire, jamais rempli par un humain.
@@ -245,7 +245,7 @@ class PublicInscriptionView(generics.CreateAPIView):
                 fiche = Cooperative(
                     id=entite_id,
                     code=f'COOP-{entite_id.hex[:8].upper()}',
-                    nom=nom, numero_agrement=data.get('numero_agrement') or None,
+                    nom=nom, numero_agrement=numero_agrement(data['province']),
                     telephone=data['telephone'], email=data['email'],
                     adresse=data.get('adresse') or None,
                     province=data['province'], utilisateur_id=user.id, actif=False,

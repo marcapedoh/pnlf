@@ -164,11 +164,8 @@
 <pnlf-confirm-dialog
   [open]="dialog()?.kind === 'valider'"
   title="Valider la certification"
-  message="Un e-mail et un SMS seront envoyés au demandeur. Vous pouvez indiquer un numéro de certificat."
+  message="Un numéro de certificat (ex. BIO-GA-2026-0143) sera attribué automatiquement. Un e-mail et un SMS seront envoyés au demandeur."
   confirmLabel="Valider"
-  inputLabel="Numéro de certificat (facultatif)"
-  inputPlaceholder="ex : CERT-2026-014"
-  inputHint="Laissez vide si le numéro n’est pas encore attribué."
   [loading]="dialogLoading()"
   (confirmed)="onDialogConfirm($event)"
   (cancelled)="dialog.set(null)"

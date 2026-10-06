@@ -91,7 +91,6 @@ export class ZonesCollecteListComponent {
   ];
 
   readonly form = this.fb.nonNullable.group({
-    code: [''],
     libelle: ['', Validators.required],
     province: ['', Validators.required],
     description: [''],
@@ -99,7 +98,7 @@ export class ZonesCollecteListComponent {
     longitude: ['', longitudeGabonValidator],
   });
 
-  readonly err = (name: 'code' | 'libelle' | 'province' | 'latitude' | 'longitude', required?: string) =>
+  readonly err = (name: 'libelle' | 'province' | 'latitude' | 'longitude', required?: string) =>
     controlError(this.form.controls[name], required);
 
   constructor() {
@@ -175,16 +174,15 @@ export class ZonesCollecteListComponent {
     const nombre = (v: string) => (v.trim() ? Number(v.trim().replace(',', '.')) : null);
     const payload = {
       ...raw,
-      code: raw.code.trim(),
       latitude: nombre(raw.latitude),
       longitude: nombre(raw.longitude),
     };
     this.referenceService.creerZoneCollecte(payload).subscribe({
-      next: () => {
+      next: (zone) => {
         this.saving.set(false);
         this.showForm.set(false);
         this.form.reset();
-        this.toast.success('Zone de collecte créée');
+        this.toast.success('Zone de collecte créée', zone.code);
         this.load();
       },
       error: (err) => {

@@ -132,6 +132,19 @@
   color: var(--text-muted);
 }
 
+.onglet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.onglet__ip {
+  font-family: var(--font-mono, ui-monospace, 'Cascadia Mono', Consolas, monospace);
+  font-size: var(--fs-xs);
+  word-break: break-all;
+}
+
 .onglet__segments {
   display: inline-flex;
   border: 1.5px solid var(--border-default);
@@ -176,6 +189,29 @@
     font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text-secondary);
+  }
+}
+
+.onglet__recherche {
+  flex: 1 1 220px;
+}
+
+.onglet__recherche-champ {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  pnlf-icon {
+    position: absolute;
+    left: 0.65rem;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  input {
+    width: 100%;
+    min-width: 200px;
+    padding-left: 2rem;
   }
 }
 

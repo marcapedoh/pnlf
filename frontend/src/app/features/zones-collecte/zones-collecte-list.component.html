@@ -13,7 +13,7 @@
       <pnlf-alert tone="error" style="display:block; margin-bottom:1rem;" role="alert">{{ errorMessage() }}</pnlf-alert>
     }
     <form [formGroup]="form" (ngSubmit)="submit()" class="zone-form" novalidate>
-      <pnlf-text-field label="Code" formControlName="code" hint="Laissez vide pour générer un code automatiquement." [errorMessage]="err('code')" />
+      <p class="zone-form__auto" role="note">Le code de la zone (ZC-…) est attribué automatiquement à l’enregistrement.</p>
       <pnlf-text-field label="Libellé" formControlName="libelle" [required]="true" [errorMessage]="err('libelle', 'Le libellé est requis.')" />
       <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" [required]="true" [errorMessage]="err('province', 'Sélectionnez la province.')" />
       <pnlf-text-field label="Description" formControlName="description" />

@@ -44,7 +44,7 @@ def tableau_connexions(request) -> Tableau:
                 date_fr(l['date']), l['utilisateur'], l['role_libelle'],
                 'Réussie' if l['succes'] else f"Échec : {l['motif_echec'] or 'motif inconnu'}",
                 l['appareil_libelle'], l['systeme'] or 'Non identifié', l['navigateur'] or 'Non identifié',
-                l['ip_masquee'] or 'Non renseignée',
+                l['ip_adresse'] or 'Non renseignée',
             ]
             for l in lignes
         ],
@@ -64,6 +64,42 @@ def tableau_connexions(request) -> Tableau:
     )
 
 
+def tableau_dernieres_connexions(request) -> Tableau:
+    from pnlf_platform.views_rapports import param_succes, recherche
+
+    periode = statistiques.lire_periode(request.query_params)
+    q = recherche(request)
+    succes = param_succes(request)
+    total, lignes = statistiques.liste_connexions(periode, q, succes, limit=5000, offset=0)
+    reussies = sum(1 for l in lignes if l['succes'])
+    return Tableau(
+        titre='Dernières connexions à la plateforme',
+        nom_fichier=_nom_fichier('dernieres-connexions'),
+        colonnes=['Date et heure', 'Utilisateur', 'E-mail saisi', 'Rôle', 'Résultat', 'Appareil', 'Adresse IP'],
+        lignes=[
+            [
+                date_fr(l['date']), l['utilisateur'], l['email'] or '', l['role_libelle'],
+                'Réussie' if l['succes'] else f"Échec : {l['motif_echec'] or 'motif inconnu'}",
+                ' · '.join(x for x in (l['appareil_libelle'], l['systeme'], l['navigateur']) if x),
+                l['ip_adresse'] or 'Non renseignée',
+            ]
+            for l in lignes
+        ],
+        periode=periode.libelle(),
+        filtres=[
+            ('Recherche', q or ''),
+            ('Résultat', '' if succes is None else ('Connexions réussies' if succes else 'Tentatives échouées')),
+        ],
+        indicateurs=[
+            ('Connexions listées', _nombre(total)),
+            ('Réussies', _nombre(reussies)),
+            ('Échouées', _nombre(len(lignes) - reussies)),
+        ],
+        poids=[26, 38, 44, 24, 36, 40, 30],
+        colonnes_centrees=(0, 6),
+    )
+
+
 def tableau_en_ligne(request) -> Tableau:
     donnees = statistiques.presence_en_ligne()
     return Tableau(
@@ -74,7 +110,7 @@ def tableau_en_ligne(request) -> Tableau:
             [
                 l['utilisateur'], l['role_libelle'], l['appareil_libelle'], l['systeme'] or 'Non identifié',
                 l['navigateur'] or 'Non identifié', date_fr(l['connecte_depuis']), date_fr(l['derniere_activite']),
-                l['ip_masquee'] or 'Non renseignée',
+                l['ip_adresse'] or 'Non renseignée',
             ]
             for l in donnees['liste']
         ],
@@ -179,6 +215,7 @@ def tableau_visites(request) -> Tableau:
 
 CONSTRUCTEURS = {
     'connexions': tableau_connexions,
+    'dernieres-connexions': tableau_dernieres_connexions,
     'en-ligne': tableau_en_ligne,
     'inscriptions': tableau_inscriptions,
     'filiere': tableau_filiere,

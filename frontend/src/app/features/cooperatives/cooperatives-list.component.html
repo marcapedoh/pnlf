@@ -27,9 +27,10 @@
       <pnlf-alert tone="error" class="pnlf-mb-4" role="alert">{{ errorMessage() }}</pnlf-alert>
     }
     <form [formGroup]="form" (ngSubmit)="submit()" class="coop-form" novalidate>
-      <pnlf-text-field label="Code" formControlName="code" hint="Laissez vide pour générer un code automatiquement." [errorMessage]="err('code')" />
+      <p class="coop-form__auto" role="note">
+        Le code (COOP-…) et le numéro d’agrément (AGR-province-année-rang) sont attribués automatiquement à l’enregistrement.
+      </p>
       <pnlf-text-field label="Nom" formControlName="nom" [required]="true" autocomplete="organization" [errorMessage]="err('nom', 'Le nom est requis.')" />
-      <pnlf-text-field label="Numéro d'agrément" formControlName="numero_agrement" />
       <pnlf-select-field label="Province" formControlName="province" [options]="provinces()" placeholder="Sélectionner une province" />
       <pnlf-text-field
         label="Téléphone"

@@ -64,7 +64,7 @@ export interface LigneConnexion {
   appareil_libelle: string;
   systeme: string | null;
   navigateur: string | null;
-  ip_masquee: string | null;
+  ip_adresse: string | null;
 }
 
 export interface PageResultats<T> {
@@ -90,7 +90,7 @@ export interface PresenceEnLigne {
     appareil_libelle: string;
     systeme: string | null;
     navigateur: string | null;
-    ip_masquee: string | null;
+    ip_adresse: string | null;
     connecte_depuis: string | null;
     derniere_activite: string | null;
   }[];
@@ -156,7 +156,7 @@ export interface StatistiquesFiliere {
   par_province: { province: string; lots: number }[];
 }
 
-export type RapportExportable = 'connexions' | 'en-ligne' | 'inscriptions' | 'filiere' | 'visites';
+export type RapportExportable = 'connexions' | 'dernieres-connexions' | 'en-ligne' | 'inscriptions' | 'filiere' | 'visites';
 
 export type SectionATraiter = 'producteurs' | 'cooperatives' | 'certifications' | 'lots' | 'offres' | 'acheteurs' | 'images';
 

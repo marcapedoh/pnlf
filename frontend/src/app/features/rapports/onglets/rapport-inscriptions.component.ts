@@ -4,12 +4,14 @@ import { Subscription } from 'rxjs';
 
 import { toApiError } from '../../../core/http/api-error.util';
 import { DemandeInscription, FiltresRapport, StatistiquesInscriptions } from '../../../core/models/rapports.model';
+import { PdfPreviewService } from '../../../core/services/pdf-preview.service';
 import { RapportsService } from '../../../core/services/rapports.service';
 import { AlertBannerComponent } from '../../../design-system/alert/alert-banner.component';
 import { BadgeTone, StatusBadgeComponent } from '../../../design-system/badge/status-badge.component';
 import { ButtonComponent } from '../../../design-system/button/button.component';
 import { CardComponent } from '../../../design-system/card/card.component';
 import { EmptyStateComponent } from '../../../design-system/empty-state/empty-state.component';
+import { IconComponent } from '../../../design-system/icon/icon.component';
 import { KpiCardComponent } from '../../../design-system/kpi-card/kpi-card.component';
 import { PaginationComponent } from '../../../design-system/pagination/pagination.component';
 import { SkeletonComponent } from '../../../design-system/skeleton/skeleton.component';
@@ -47,6 +49,7 @@ export function formaterDelai(heures: number | null | undefined): string {
     ButtonComponent,
     CardComponent,
     EmptyStateComponent,
+    IconComponent,
     KpiCardComponent,
     PaginationComponent,
     SkeletonComponent,
@@ -61,6 +64,7 @@ export function formaterDelai(heures: number | null | undefined): string {
 })
 export class RapportInscriptionsComponent {
   private readonly rapports = inject(RapportsService);
+  private readonly pdf = inject(PdfPreviewService);
 
   readonly filtres = input.required<FiltresRapport>();
 
@@ -69,6 +73,7 @@ export class RapportInscriptionsComponent {
   readonly erreur = signal('');
   readonly typeDemande = signal('');
   readonly statut = signal('');
+  readonly recherche = signal('');
   readonly page = signal(1);
   readonly pageSize = 20;
 
@@ -77,8 +82,16 @@ export class RapportInscriptionsComponent {
   readonly delai = formaterDelai;
 
   private requete?: Subscription;
+  private minuterieRecherche: ReturnType<typeof setTimeout> | null = null;
+  private readonly rechercheAppliquee = signal('');
 
-  readonly filtresExport = computed(() => ({ ...this.filtres(), type_demande: this.typeDemande(), statut: this.statut() }));
+  /** La recherche de la liste prime sur la recherche générale de la barre de période. */
+  readonly filtresExport = computed(() => ({
+    ...this.filtres(),
+    q: this.rechercheAppliquee() || this.filtres().q || '',
+    type_demande: this.typeDemande(),
+    statut: this.statut(),
+  }));
 
   readonly graphEvolution = computed(() => {
     const d = this.donnees();
@@ -118,7 +131,37 @@ export class RapportInscriptionsComponent {
         this.charger();
       });
     });
-    inject(DestroyRef).onDestroy(() => this.requete?.unsubscribe());
+    inject(DestroyRef).onDestroy(() => {
+      this.requete?.unsubscribe();
+      if (this.minuterieRecherche) clearTimeout(this.minuterieRecherche);
+    });
+  }
+
+  imprimerListe(): void {
+    this.appliquerRecherche();
+    const filtres = this.filtresExport();
+    this.pdf.open('Liste des demandes d’inscription (PDF)', 'pfnl-liste-demandes.pdf', () => this.rapports.pdf('inscriptions', filtres));
+  }
+
+  rechercher(event: Event): void {
+    this.recherche.set((event.target as HTMLInputElement).value);
+    if (this.minuterieRecherche) clearTimeout(this.minuterieRecherche);
+    this.minuterieRecherche = setTimeout(() => this.appliquerRecherche(), 350);
+  }
+
+  effacerRecherche(): void {
+    this.recherche.set('');
+    this.appliquerRecherche();
+  }
+
+  private appliquerRecherche(): void {
+    if (this.minuterieRecherche) clearTimeout(this.minuterieRecherche);
+    this.minuterieRecherche = null;
+    const valeur = this.recherche().trim().slice(0, 100);
+    if (valeur === this.rechercheAppliquee()) return;
+    this.rechercheAppliquee.set(valeur);
+    this.page.set(1);
+    this.charger();
   }
 
   charger(): void {

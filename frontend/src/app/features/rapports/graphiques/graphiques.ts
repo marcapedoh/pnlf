@@ -74,7 +74,8 @@ export function evolution(
       min: 0,
       forceNiceScale: true,
       labels: { formatter: nombreFr },
-      title: options.titreY ? { text: options.titreY, style: { fontSize: '12px', fontWeight: 600, color: '#5b6670' } } : undefined,
+      // ApexCharts lit yaxis.title.text sans garde : une clé title à undefined bloque tout le rendu.
+      ...(options.titreY ? { title: { text: options.titreY, style: { fontSize: '12px', fontWeight: 600, color: '#5b6670' } } } : {}),
     },
     stroke: type === 'area' ? { curve: 'smooth', width: 2 } : { width: 0 },
     fill: type === 'area' ? { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0.05 } } : { opacity: 1 },

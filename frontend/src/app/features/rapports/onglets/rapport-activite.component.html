@@ -120,7 +120,7 @@
               <td data-label="Appareil">{{ u.appareil_libelle }}{{ u.systeme ? ' · ' + u.systeme : '' }}{{ u.navigateur ? ' · ' + u.navigateur : '' }}</td>
               <td data-label="Connecté depuis">{{ u.connecte_depuis | pnlfDate: 'datetime' }}</td>
               <td data-label="Dernière activité">{{ u.derniere_activite | pnlfDate: 'time' }}</td>
-              <td class="pnlf-table__muted" data-label="Adresse IP">{{ u.ip_masquee || 'Non disponible' }}</td>
+              <td class="onglet__ip" data-label="Adresse IP">{{ u.ip_adresse || 'Non disponible' }}</td>
             </tr>
           }
         </tbody>
@@ -129,8 +129,9 @@
   }
 </pnlf-card>
 
-<pnlf-card title="Dernières connexions" subtitle="Adresses IP partiellement masquées">
-  <div card-actions>
+<pnlf-card title="Dernières connexions" subtitle="Adresses IP complètes, visibles des seuls administrateurs et agents du ministère">
+  <div card-actions class="onglet__actions">
+    <app-export-rapport rapport="dernieres-connexions" titre="Dernières connexions" nomFichier="pfnl-dernieres-connexions" [filtres]="filtresListe()" />
     <div class="onglet__segments" role="group" aria-label="Filtrer les connexions">
       <button type="button" [class.is-active]="succes() === ''" [attr.aria-pressed]="succes() === ''" (click)="filtrerSucces('')">Toutes</button>
       <button type="button" [class.is-active]="succes() === '1'" [attr.aria-pressed]="succes() === '1'" (click)="filtrerSucces('1')">Réussies</button>
@@ -182,7 +183,7 @@
                 }
               </td>
               <td data-label="Appareil">{{ c.appareil_libelle }}{{ c.systeme ? ' · ' + c.systeme : '' }}{{ c.navigateur ? ' · ' + c.navigateur : '' }}</td>
-              <td class="pnlf-table__muted" data-label="Adresse IP">{{ c.ip_masquee || 'Non disponible' }}</td>
+              <td class="onglet__ip" data-label="Adresse IP">{{ c.ip_adresse || 'Non disponible' }}</td>
             </tr>
           }
         </tbody>

@@ -39,7 +39,7 @@ const DIALOG_MESSAGES: Record<DialogKind, { ok: string; ko: string }> = {
   adhesion: { ok: 'Demande d’adhésion envoyée', ko: 'Demande d’adhésion impossible' },
 };
 
-type FormKey = 'code' | 'nom' | 'telephone' | 'email' | 'province';
+type FormKey = 'nom' | 'telephone' | 'email' | 'province';
 
 @Component({
   selector: 'app-cooperatives-list',
@@ -102,9 +102,7 @@ export class CooperativesListComponent {
   readonly dialogLoading = signal(false);
 
   readonly form = this.fb.nonNullable.group({
-    code: [''],
     nom: ['', Validators.required],
-    numero_agrement: [''],
     province: [''],
     telephone: ['', telephoneValidator],
     email: ['', Validators.email],
@@ -183,7 +181,6 @@ export class CooperativesListComponent {
     this.service
       .create({
         ...raw,
-        code: raw.code.trim(),
         province: raw.province || null,
         telephone: raw.telephone ? normaliserTelephone(raw.telephone) : null,
         email: raw.email.trim() || null,
@@ -193,7 +190,7 @@ export class CooperativesListComponent {
           this.saving.set(false);
           this.showForm.set(false);
           this.form.reset();
-          this.toast.success('Coopérative créée', coop.nom);
+          this.toast.success('Coopérative créée', [coop.nom, coop.code, coop.numero_agrement].filter(Boolean).join(' · '));
           this.load();
         },
         error: (err) => {

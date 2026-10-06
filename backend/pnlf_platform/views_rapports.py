@@ -21,7 +21,7 @@ from traceability.models import Lot
 
 logger = logging.getLogger(__name__)
 
-RAPPORTS_EXPORTABLES = ('connexions', 'en-ligne', 'inscriptions', 'filiere', 'visites')
+RAPPORTS_EXPORTABLES = ('connexions', 'dernieres-connexions', 'en-ligne', 'inscriptions', 'filiere', 'visites')
 
 
 def recherche(request) -> str | None:
@@ -143,7 +143,7 @@ class ExportRapportView(ExportFileView):
         from pnlf_platform.rapports_tableaux import construire
 
         if rapport not in RAPPORTS_EXPORTABLES:
-            raise ValidationError({'rapport': 'Rapport inconnu : connexions, en-ligne, inscriptions, filiere ou visites.'})
+            raise ValidationError({'rapport': 'Rapport inconnu : ' + ', '.join(RAPPORTS_EXPORTABLES) + '.'})
         tableau = construire(rapport, request)
         ip, ua = request_meta(request)
         write_audit(

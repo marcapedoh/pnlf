@@ -122,7 +122,9 @@
                 [errorMessage]="err('prenoms')"
               />
             } @else {
-              <pnlf-text-field label="Numéro d'agrément (facultatif)" formControlName="numero_agrement" hint="À compléter si déjà attribué, sinon laissez vide." [errorMessage]="err('numero_agrement')" />
+              <p class="inscription-auto" role="note">
+                Le numéro d’agrément de la coopérative est attribué automatiquement par la plateforme.
+              </p>
             }
 
             <pnlf-text-field

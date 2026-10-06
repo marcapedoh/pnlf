@@ -41,6 +41,7 @@ from accounts.permissions import (
     user_can_access_producteur,
 )
 
+from .numerotation import numero_agrement, numero_certificat
 from .filters import (
     CertificationFilter,
     CooperativeFilter,
@@ -452,19 +453,16 @@ class CooperativeViewSet(viewsets.ModelViewSet):
         user = self.request.user
         now = timezone.now()
         extra = {'created_at': now, 'updated_at': now}
-        code = (serializer.validated_data.get('code') or '').strip()
         if user.role == Utilisateur.Role.COOPERATIVE:
             if _cooperatives_du_compte(user).exclude(statut='REJETE').exists():
                 raise ValidationError({
                     'detail': 'Votre compte est déjà rattaché à une coopérative : une seule fiche par compte.',
                 })
-            extra.update({
-                'utilisateur_id': user.id, 'actif': False, 'statut': 'EN_VALIDATION',
-                'code': _code_unique('COOP', Cooperative, 'code'),
-            })
-        elif not code:
+            extra.update({'utilisateur_id': user.id, 'actif': False, 'statut': 'EN_VALIDATION'})
+        with transaction.atomic():
             extra['code'] = _code_unique('COOP', Cooperative, 'code')
-        coop = serializer.save(**extra)
+            extra['numero_agrement'] = numero_agrement(serializer.validated_data.get('province'))
+            coop = serializer.save(**extra)
         _journaliser(self.request, 'CREATE', 'cooperatives', coop.id,
                      nouvelles={'code': coop.code, 'statut': coop.statut})
         if coop.statut == 'EN_VALIDATION':
@@ -1129,10 +1127,7 @@ class ZoneCollecteViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         now = timezone.now()
-        extra = {}
-        if not serializer.validated_data.get('code'):
-            extra['code'] = _code_unique('ZC', ZoneCollecte, 'code')
-        zone = serializer.save(created_at=now, updated_at=now, **extra)
+        zone = serializer.save(created_at=now, updated_at=now, code=_code_unique('ZC', ZoneCollecte, 'code'))
         ip, ua = request_meta(self.request)
         write_audit(
             utilisateur_id=self.request.user.id, action='CREATE', table_cible='zones_collecte',
@@ -2238,9 +2233,6 @@ class CertificationViewSet(viewsets.ModelViewSet):
         cert = self.get_object()
         if cert.statut not in ('DEMANDEE', 'EN_COURS'):
             raise ValidationError({'detail': 'Cette demande a déjà été traitée.'})
-        numero = (request.data.get('numero_certificat') or '').strip()
-        if len(numero) > 80:
-            raise ValidationError({'numero_certificat': 'Le numéro de certificat ne doit pas dépasser 80 caractères.'})
         now = timezone.now()
         aujourd_hui = timezone.localdate()
         cert.statut = 'OBTENUE'
@@ -2249,9 +2241,10 @@ class CertificationViewSet(viewsets.ModelViewSet):
         cert.date_expiration = _ajouter_mois(cert.date_obtention, duree) if duree and duree > 0 else None
         cert.valide_par_id = request.user.id
         cert.updated_at = now
-        if numero:
-            cert.numero_certificat = numero
-        cert.save()
+        with transaction.atomic():
+            if not cert.numero_certificat:
+                cert.numero_certificat = numero_certificat(cert.type_certification)
+            cert.save()
         _journaliser(request, 'VALIDATE', 'certifications', cert.id, nouvelles={
             'statut': cert.statut, 'numero_certificat': cert.numero_certificat,
             'date_expiration': cert.date_expiration.isoformat() if cert.date_expiration else None,

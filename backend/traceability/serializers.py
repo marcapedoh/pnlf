@@ -173,8 +173,11 @@ class CooperativeSerializer(serializers.ModelSerializer):
         attrs = super().validate(attrs)
         request = self.context.get('request')
         role = getattr(getattr(request, 'user', None), 'role', None)
-        if self.instance is not None and role not in ('ADMINISTRATEUR', 'AGENT_MINISTERE'):
+        # Code et numéro d'agrément sont attribués par la plateforme ; seule une correction
+        # ultérieure par l'administration ou le ministère est acceptée.
+        if self.instance is None or role not in ('ADMINISTRATEUR', 'AGENT_MINISTERE'):
             attrs.pop('code', None)
+            attrs.pop('numero_agrement', None)
         return attrs
 
     def precharger(self, cooperatives) -> None:
@@ -342,6 +345,7 @@ class ZoneCollecteSerializer(CoordonneesGabonMixin, serializers.ModelSerializer)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        attrs.pop('code', None)  # attribué par la plateforme à la création, puis figé
         libelle = (attrs.get('libelle') or getattr(self.instance, 'libelle', '') or '').strip()
         province = attrs.get('province') or getattr(self.instance, 'province', None)
         if 'libelle' in attrs:

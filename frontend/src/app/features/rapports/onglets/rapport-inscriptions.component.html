@@ -89,6 +89,23 @@
 
 <pnlf-card title="Liste des demandes" [subtitle]="donnees() ? donnees()!.count + ' demande(s) selon les filtres' : ''">
   <div card-actions class="onglet__filtres">
+    <label class="onglet__recherche">
+      Rechercher
+      <span class="onglet__recherche-champ">
+        <pnlf-icon name="search" [size]="14" />
+        <input
+          type="search"
+          class="pnlf-select"
+          placeholder="Nom, e-mail, type, motif…"
+          maxlength="100"
+          autocomplete="off"
+          [value]="recherche()"
+          (input)="rechercher($event)"
+          (keydown.escape)="effacerRecherche()"
+          aria-label="Rechercher dans la liste des demandes"
+        />
+      </span>
+    </label>
     <label>
       Type
       <select class="pnlf-select" [value]="typeDemande()" (change)="filtrer('typeDemande', $event)">
@@ -107,11 +124,26 @@
         }
       </select>
     </label>
+    <button
+      pnlfButton
+      type="button"
+      variant="primary"
+      size="sm"
+      [disabled]="!donnees()?.count"
+      (click)="imprimerListe()"
+      title="Imprime la liste telle qu’elle est filtrée (recherche, type, décision, période)"
+    >
+      <pnlf-icon name="file-text" [size]="14" /> Imprimer la liste (PDF)
+    </button>
   </div>
   @if (chargement() && !donnees()) {
     <pnlf-skeleton height="240px" radius="12px" />
   } @else if (!donnees()?.results?.length) {
-    <pnlf-empty-state icon="mail" title="Aucune demande" description="Aucune demande d’inscription ne correspond à la période et aux filtres choisis." />
+    <pnlf-empty-state icon="mail" title="Aucune demande" description="Aucune demande d’inscription ne correspond à la période et aux filtres choisis.">
+      @if (recherche()) {
+        <button pnlfButton type="button" variant="outline" size="sm" (click)="effacerRecherche()">Effacer la recherche</button>
+      }
+    </pnlf-empty-state>
   } @else {
     <div class="pnlf-table-wrapper pnlf-table-wrapper--responsive">
       <table class="pnlf-table">

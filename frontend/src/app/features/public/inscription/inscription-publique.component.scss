@@ -312,3 +312,14 @@
     }
   }
 }
+
+.inscription-auto {
+  align-self: end;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--pnlf-green-50);
+  border: 1px solid var(--pnlf-green-200);
+  font-size: var(--fs-sm);
+  color: var(--pnlf-green-800);
+}

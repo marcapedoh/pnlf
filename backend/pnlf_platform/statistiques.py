@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 
-from accounts.appareils import LIBELLES_APPAREIL, masquer_ip
+from accounts.appareils import LIBELLES_APPAREIL
 from accounts.connexions import MOTIFS_ECHEC, seuil_en_ligne
 from accounts.models import Utilisateur
 
@@ -266,7 +266,7 @@ def liste_connexions(periode: Periode, q: str | None = None, succes: bool | None
             'appareil_libelle': LIBELLES_APPAREIL.get(ligne['appareil'], 'Inconnu'),
             'systeme': ligne['systeme'],
             'navigateur': ligne['navigateur'],
-            'ip_masquee': masquer_ip(ligne['ip']),
+            'ip_adresse': ligne['ip'],
         }
         for ligne in lignes
     ]
@@ -313,7 +313,7 @@ def presence_en_ligne() -> dict:
                 'appareil_libelle': LIBELLES_APPAREIL.get(ligne['appareil'], 'Inconnu'),
                 'systeme': ligne['systeme'],
                 'navigateur': ligne['navigateur'],
-                'ip_masquee': masquer_ip(ligne['ip']),
+                'ip_adresse': ligne['ip'],
                 'connecte_depuis': _iso(ligne['debut_at']),
                 'derniere_activite': _iso(ligne['derniere_activite']),
             }
