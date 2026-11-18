@@ -13,13 +13,12 @@
 def PFNL_ENV_CONTENT = '''
 DJANGO_DEBUG=False
 DJANGO_SECRET_KEY=g13KbEVubD03iaDYPvCUPeEgscXfiEGLi6TbBkAW9rWi7-wSh2GNaaSLzRulzJLReVukCRvtPu_zn5Cp8l-ljw
-DJANGO_ALLOWED_HOSTS=api-pfnl.votre-domaine.com,localhost
-CSRF_TRUSTED_ORIGINS=https://api-pfnl.votre-domaine.com
+DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=https://*.trycloudflare.com
 CORS_ALLOWED_ORIGINS=https://plateformedetracabilite-pnlf.netlify.app
 DJANGO_SECURE_SSL_REDIRECT=False
 DJANGO_ADMIN_ENABLED=False
 DRF_NUM_PROXIES=1
-PNLF_PUBLIC_VERIFY_URL=https://api-pfnl.votre-domaine.com/api/verify/
 PNLF_FRONTEND_URL=https://plateformedetracabilite-pnlf.netlify.app
 
 DB_NAME=pnlf
@@ -124,9 +123,7 @@ pipeline {
                     for v in DJANGO_SECRET_KEY DJANGO_ALLOWED_HOSTS DB_PASSWORD POSTGRES_PASSWORD TUNNEL_TOKEN; do
                         grep -qE "^${v}=.+" "$PFNL_ENV" || { echo "Variable manquante dans PFNL_ENV_CONTENT : $v"; exit 1; }
                     done
-                    if grep -qE 'COLLER_LE_TOKEN|votre-domaine' "$PFNL_ENV"; then
-                        echo "Remplacez TUNNEL_TOKEN et votre-domaine dans PFNL_ENV_CONTENT"; exit 1
-                    fi
+                    
                     db_user="$(grep -E '^DB_USER=' "$PFNL_ENV" | tail -n 1 | cut -d= -f2-)"
                     if [ -n "$db_user" ] && [ "$db_user" != "pnlf_app" ]; then
                         echo "DB_USER doit valoir pnlf_app (rôle créé par le dump)"; exit 1
@@ -235,26 +232,43 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    if docker ps --format '{{.Names}}' | grep -qx "$TUNNEL_CONTAINER"; then
-                        echo ">>> Tunnel déjà actif (supprimez $TUNNEL_CONTAINER pour appliquer un nouveau token)"
-                        exit 0
-                    fi
+
                     docker rm -f "$TUNNEL_CONTAINER" >/dev/null 2>&1 || true
-                    TUNNEL_TOKEN="$(grep -E '^TUNNEL_TOKEN=' "$PFNL_ENV" | tail -n 1 | cut -d= -f2-)" \
-                    docker run -d --name "$TUNNEL_CONTAINER" \
+
+                    docker run -d \
+                        --name "$TUNNEL_CONTAINER" \
                         --network "$NET" \
                         --restart unless-stopped \
-                        -e TUNNEL_TOKEN \
-                        --log-opt max-size=10m --log-opt max-file=3 \
-                        "$CLOUDFLARED_IMAGE" tunnel --no-autoupdate run
+                        --log-opt max-size=10m \
+                        --log-opt max-file=3 \
+                        "$CLOUDFLARED_IMAGE" \
+                        tunnel --no-autoupdate \
+                        --url http://pfnl-backend:8000
 
-                    for i in $(seq 1 20); do
-                        if docker logs "$TUNNEL_CONTAINER" 2>&1 | grep -q "Registered tunnel connection"; then
-                            echo ">>> Tunnel Cloudflare connecté"; exit 0
+                    echo ">>> Démarrage du Cloudflare Quick Tunnel"
+
+                    for i in $(seq 1 40); do
+                        URL=$(docker logs "$TUNNEL_CONTAINER" 2>&1 \
+                            | grep -Eo 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' \
+                            | head -n 1 || true)
+
+                        if [ -n "$URL" ]; then
+                            echo ">>> Tunnel disponible : $URL"
+                            printf '%s\\n' "$URL" > pfnl-url.txt
+                            exit 0
                         fi
+
+                        if [ "$(docker inspect -f '{{.State.Running}}' "$TUNNEL_CONTAINER")" != "true" ]; then
+                            docker logs "$TUNNEL_CONTAINER"
+                            exit 1
+                        fi
+
                         sleep 3
                     done
-                    echo ">>> Le tunnel ne s'est pas connecté"; docker logs --tail 50 "$TUNNEL_CONTAINER"; exit 1
+
+                    echo ">>> Impossible de récupérer l'adresse Quick Tunnel"
+                    docker logs --tail 100 "$TUNNEL_CONTAINER"
+                    exit 1
                 '''
             }
         }
