@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://pfnl.onrender.com/api',
-  mediaUrl: 'https://pfnl.onrender.com/api/media/public',
+  apiUrl: 'https://chassis-candle-promote-revolutionary.trycloudflare.com/api',
+  mediaUrl: 'https://chassis-candle-promote-revolutionary.trycloudflare.com/api/media/public',
   appName: 'PFNL',
 };

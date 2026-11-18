@@ -15,11 +15,11 @@ DJANGO_DEBUG=False
 DJANGO_SECRET_KEY=g13KbEVubD03iaDYPvCUPeEgscXfiEGLi6TbBkAW9rWi7-wSh2GNaaSLzRulzJLReVukCRvtPu_zn5Cp8l-ljw
 DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://*.trycloudflare.com
-CORS_ALLOWED_ORIGINS=https://plateformedetracabilite-pnlf.netlify.app
+CORS_ALLOWED_ORIGINS=https://pfnl-ndjila.netlify.app/
 DJANGO_SECURE_SSL_REDIRECT=False
 DJANGO_ADMIN_ENABLED=False
 DRF_NUM_PROXIES=1
-PNLF_FRONTEND_URL=https://plateformedetracabilite-pnlf.netlify.app
+PNLF_FRONTEND_URL=https://pfnl-ndjila.netlify.app/
 
 DB_NAME=pnlf
 DB_USER=pnlf_app

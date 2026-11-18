@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
-  apiUrl: '/api',
-  mediaUrl: '/api/media/public',
+  apiUrl: 'https://chassis-candle-promote-revolutionary.trycloudflare.com/api',
+  mediaUrl: 'https://chassis-candle-promote-revolutionary.trycloudflare.com/api/media/public',
   appName: 'PFNL',
 };
