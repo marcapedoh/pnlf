@@ -135,7 +135,7 @@ pipeline {
         stage('Build image backend') {
             steps {
                 sh '''
-                    docker build -f backend/Dockerfile-jenkins \
+                    docker build -f backend/Dockerfile-jenkinsfile \
                         -t "$BACKEND_IMAGE:$BUILD_NUMBER" \
                         -t "$BACKEND_IMAGE:latest" \
                         backend
