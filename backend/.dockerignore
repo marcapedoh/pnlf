@@ -1,0 +1,24 @@
+# Secrets locaux : NE JAMAIS les embarquer (settings.py charge .env.local avec override=True)
+.env
+.env.*
+
+# Dump de la base et fichiers de déploiement (servent uniquement à l'image PostgreSQL)
+db_pfnl.sql
+*.dump
+deploy/
+
+# Divers
+.git
+.gitignore
+Dockerfile*
+Jenkinsfile
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+media/
+staticfiles/
+*.log

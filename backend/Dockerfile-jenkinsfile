@@ -1,0 +1,80 @@
+# =============================================================================
+# PFNL — Image backend Django pour le déploiement Jenkins (multi-stage)
+# Contexte de build = dossier backend/
+#   docker build -f backend/Dockerfile-jenkins -t pfnl-backend backend
+# Compatible avec le builder classique ET BuildKit (aucune syntaxe BuildKit).
+# =============================================================================
+ARG PYTHON_VERSION=3.12
+
+# -----------------------------------------------------------------------------
+# Étape 1 : builder — compilation des dépendances + téléchargement du modèle IA
+# -----------------------------------------------------------------------------
+FROM python:${PYTHON_VERSION}-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Environnement virtuel isolé : seul /opt/venv est copié dans l'image finale
+RUN python -m venv /opt/venv
+
+WORKDIR /app
+
+# Couche dépendances (mise en cache tant que requirements.txt ne change pas)
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt gunicorn
+
+# Modèle IA de modération (URL figée + SHA-256 vérifié), couche mise en cache.
+# Non bloquant : sans modèle, les images passent en vérification administrateur.
+COPY scripts/telecharger_modele_nsfw.py scripts/
+RUN mkdir -p modeles \
+    && (python scripts/telecharger_modele_nsfw.py \
+        || echo "WARN: modele NSFW non installe, moderation en mode verification")
+
+# -----------------------------------------------------------------------------
+# Étape 2 : runtime — image finale légère, sans compilateur, utilisateur non-root
+# -----------------------------------------------------------------------------
+FROM python:${PYTHON_VERSION}-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    DJANGO_DEBUG=False \
+    TZ=Africa/Libreville
+
+# Bibliothèques d'exécution uniquement (libpq5 au lieu de libpq-dev + build-essential)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 libgomp1 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY . .
+COPY --from=builder /app/modeles ./modeles
+
+# Bytecode précompilé (démarrage et premières requêtes plus rapides),
+# code en lecture seule pour l'application, seuls media/ et staticfiles/ sont inscriptibles.
+RUN python -m compileall -q -j 0 /app \
+    && mkdir -p /app/media /app/staticfiles \
+    && chown -R app:app /app/media /app/staticfiles \
+    && chmod +x /app/entrypoint-jenkins.sh
+
+USER app
+
+EXPOSE 8000
+
+# Sain dès que Gunicorn répond (un 400/401/404 = serveur vivant ; seul un 5xx ou un échec est malsain)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD python -c "import http.client as h; c=h.HTTPConnection('127.0.0.1',8000,timeout=4); c.request('GET','/',headers={'Host':'localhost'}); raise SystemExit(c.getresponse().status>=500)"
+
+CMD ["/app/entrypoint-jenkins.sh"]
