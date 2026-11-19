@@ -13,9 +13,9 @@
 def PFNL_ENV_CONTENT = '''
 DJANGO_DEBUG=False
 DJANGO_SECRET_KEY=g13KbEVubD03iaDYPvCUPeEgscXfiEGLi6TbBkAW9rWi7-wSh2GNaaSLzRulzJLReVukCRvtPu_zn5Cp8l-ljw
-DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1,https://pfnl-ndjila.netlify.app/
-CSRF_TRUSTED_ORIGINS=https://*.trycloudflare.com
-CORS_ALLOWED_ORIGINS=https://pfnl-ndjila.netlify.app/
+DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1,pfnl-ndjila.netlify.app
+CORS_ALLOWED_ORIGINS=https://pfnl-ndjila.netlify.app
+CSRF_TRUSTED_ORIGINS=https://*.trycloudflare.com,https://pfnl-ndjila.netlify.app
 DJANGO_SECURE_SSL_REDIRECT=False
 DJANGO_ADMIN_ENABLED=False
 DRF_NUM_PROXIES=1

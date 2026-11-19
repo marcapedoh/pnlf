@@ -1,4 +1,5 @@
-# Netlify : déploiement frontend Angular (publish = sortie browser)
+
+# Netlify : déploiement frontend Angular
 [build]
   base = "frontend"
   command = "npm ci && npm run build -- --configuration=production"
@@ -13,11 +14,11 @@
   to = "/index.html"
   status = 200
 
-# Headers (complète public/_headers) : CSP explicite pour l'aperçu PDF (blob:/object/worker)
+# Headers de sécurité
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob: https://pfnl.onrender.com; connect-src 'self' https://pfnl.onrender.com; frame-src 'self' blob:; object-src 'self' blob:; worker-src 'self' blob:; child-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob:  https://merchants-rpg-warming-forecasts.trycloudflare.com; connect-src 'self' https://merchants-rpg-warming-forecasts.trycloudflare.com; frame-src 'self' blob:; object-src 'self' blob:; worker-src 'self' blob:; child-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 [[headers]]
   for = "/index.html"
